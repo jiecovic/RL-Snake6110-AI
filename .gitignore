@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# Ignore most of .idea
+.idea/*
+!/.idea/runConfigurations/
+!/.idea/codeStyles/
+
+# Ignore JetBrains project files (safe default)
+.idea/
+*.iml
