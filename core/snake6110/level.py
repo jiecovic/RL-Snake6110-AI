@@ -21,6 +21,7 @@ from core.snake6110.tile_types import (
 # Tile group sets
 from core.snake6110.tile_types import WALL_TILES
 
+
 def neighbor_positions(p: Point) -> List[Point]:
     return [
         Point(p.x + 1, p.y),
@@ -29,9 +30,9 @@ def neighbor_positions(p: Point) -> List[Point]:
         Point(p.x, p.y - 1)
     ]
 
+
 def is_adjacent(a: Point, b: Point) -> bool:
     return abs(a.x - b.x) + abs(a.y - b.y) == 1
-
 
 
 class BaseLevel:
@@ -127,7 +128,6 @@ class BaseLevel:
                     continue
         raise ValueError("No snake head found in grid")
 
-
     def get_food_positions(self) -> List[Point]:
         return [
             Point(x, y)
@@ -136,7 +136,15 @@ class BaseLevel:
             if tile == TileType.FOOD
         ]
 
-    def get_wall_positions(self) -> List[Point]:
+    def get_wall_tiles(self) -> List[Tuple[Point, TileType]]:
+        return [
+            (Point(x, y), tile)
+            for y, row in enumerate(self.grid)
+            for x, tile in enumerate(row)
+            if tile in WALL_TILES
+        ]
+
+    def get_wall_positions(self) -> List[Tuple[Point, TileType]]:
         return [
             Point(x, y)
             for y, row in enumerate(self.grid)
@@ -169,11 +177,11 @@ class LevelFromTemplate(BaseLevel):
 
 class EmptyLevel(BaseLevel):
     def __init__(
-        self,
-        width: int,
-        height: int,
-        head_pos: Optional[Point] = None,
-        snake_length: int = 3
+            self,
+            height: int,
+            width: int,
+            head_pos: Optional[Point] = None,
+            snake_length: int = 3
     ):
         # Default head in center
         if head_pos is None:
@@ -203,4 +211,3 @@ class EmptyLevel(BaseLevel):
         for i in range(1, snake_length):
             grid[hy][hx - i] = TileType.SNAKE_BODY_HORIZONTAL
         grid[hy][hx - snake_length] = TileType.SNAKE_TAIL_LEFT
-

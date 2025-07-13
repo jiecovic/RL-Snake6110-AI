@@ -3,8 +3,9 @@ import sys
 from typing import Optional
 
 from core.snake6110.geometry import RelativeDirection
-from core.snake6110.level import LevelFromTemplate
-from core.snake6110.snakegame import SnakeGame  # Updated to match your current class
+from core.snake6110.level import LevelFromTemplate, EmptyLevel
+from core.snake6110.snakegame import SnakeGame
+from core.snake6110.snakegame import MoveResult  # <-- Import this for result checking
 
 
 def handle_turn_input(key: int) -> Optional[RelativeDirection]:
@@ -18,31 +19,61 @@ def handle_turn_input(key: int) -> Optional[RelativeDirection]:
 def main():
     pygame.init()
 
-    # Replace this with your actual level loading logic
-    level = LevelFromTemplate()
-    game = SnakeGame(level, food_count=1, fps=10, tile_size=32)
+    level = EmptyLevel(11, 20)
+    game = SnakeGame(level, food_count=1, fps=10)
+    paused = False
 
-    print(f"Initial snake: {game.snake}")
-    print(f"Initial direction: {game.direction}")
-    print(f"Initial food: {game.food}")
+    # --- FPS tracking ---
+    frame_count = 0
+    last_fps_time = pygame.time.get_ticks()
 
-    while game.running:
+    while True:
         relative_dir = RelativeDirection.FORWARD
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+
             elif event.type == pygame.KEYDOWN:
-                in_dir = handle_turn_input(event.key)
-                if in_dir is not None:
-                    relative_dir = in_dir
+                if event.key == pygame.K_p:
+                    paused = not paused
+                    print("Paused" if paused else "Unpaused")
 
-        game.move(relative_dir)
-        game.render()
+                elif event.key == pygame.K_r:
+                    game.reset()
+                    paused = False
+                    print("Manual reset.")
 
-    pygame.quit()
-    print("Game Over!")
+                elif not paused:
+                    in_dir = handle_turn_input(event.key)
+                    if in_dir is not None:
+                        relative_dir = in_dir
+
+        if not paused:
+            if game.running:
+                result = game.move(relative_dir)
+                game.render()
+
+                # --- Count frame ---
+                frame_count += 1
+                now = pygame.time.get_ticks()
+                elapsed_ms = now - last_fps_time
+                if elapsed_ms >= 1000:
+                    fps = frame_count / (elapsed_ms / 1000.0)
+                    print(f"[FPS] {fps:.2f}")
+                    frame_count = 0
+                    last_fps_time = now
+
+                if result == MoveResult.HIT_WALL:
+                    print("Game over: hit wall.")
+                elif result == MoveResult.HIT_SELF:
+                    print("Game over: hit itself.")
+                elif result == MoveResult.HIT_BOUNDARY:
+                    print("Game over: hit boundary.")
+            else:
+                game.render()
+                game.reset()
 
 
 if __name__ == "__main__":

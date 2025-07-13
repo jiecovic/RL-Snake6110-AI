@@ -12,8 +12,10 @@ def print_level_info(level, name: str):
     except ValueError as e:
         print(f"No valid snake found: {e}")
 
-    walls = level.get_wall_positions()
-    print(f"Wall tiles: {walls}")
+    walls = level.get_wall_tiles()
+    print(f"Wall tiles:")
+    for tile in walls:
+        print(tile)
 
     food = level.get_food_positions()
     print(f"Food positions: {food}")
