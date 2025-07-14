@@ -22,7 +22,7 @@ def print_level_info(level, name: str):
 
 
 def main():
-    level1 = LevelFromTemplate("assets/levels/empty-11x20.json")
+    level1 = LevelFromTemplate("assets/levels/test_level.json")
     level2 = EmptyLevel(width=20, height=11)
 
     print_level_info(level1, "Loaded Level")

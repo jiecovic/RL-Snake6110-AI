@@ -1,6 +1,7 @@
 # train.py
 import os
 from stable_baselines3 import PPO
+from stable_baselines3.common.policies import MultiInputActorCriticPolicy
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, DummyVecEnv
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback, CallbackList
@@ -11,7 +12,8 @@ from typing import List
 from core.envs.snake_envs import SnakePixelDirectionObsEnv
 from core.snake6110.snakegame import SnakeGame
 from core.snake6110.level import EmptyLevel
-from core.policies.custom_policies import CustomMultiInputActorCriticPolicy
+from core.policies.custom_policies import CustomCombinedExtractor
+from core.custom_cnns.custom_cnn import SnakeCNN_3Layers
 from core.custom_callbacks import TerminationCauseLogger
 
 # === Config ===
@@ -36,7 +38,7 @@ os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 def make_env(rank: int, seed: int = 0):
     def _init():
-        level = EmptyLevel(height=11, width=20)
+        level = EmptyLevel(height=13, width=22)
         game = SnakeGame(level, food_count=1, fps=0)
         env = SnakePixelDirectionObsEnv(game, render_mode="none")
         env.reset(seed=seed + rank)
@@ -68,8 +70,9 @@ if __name__ == "__main__":
 
     # Create PPO model with progress bar enabled
     model = PPO(
-        policy=CustomMultiInputActorCriticPolicy,
-        ent_coef=0.02,
+        # policy=CustomMultiInputActorCriticPolicy,
+        policy=MultiInputActorCriticPolicy,
+        ent_coef=0.03,
         env=vec_env,
         n_steps=8 * 2048 // NUM_ENVS,
         batch_size=128,
@@ -80,7 +83,13 @@ if __name__ == "__main__":
         verbose=0,
         seed=SEED,
         policy_kwargs=dict(
-            net_arch=[256, 128],
+            # net_arch=[256, 128],
+            net_arch=[128, 64],
+            features_extractor_class=CustomCombinedExtractor,
+            features_extractor_kwargs=dict(
+                cnn_constructor=SnakeCNN_3Layers,
+                cnn_output_dim=128
+            )
         )
     )
     # model.set_logger(logger)

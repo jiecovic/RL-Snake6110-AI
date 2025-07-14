@@ -3,6 +3,8 @@ import random
 import numpy as np
 from typing import Optional, List, Union, Dict
 from enum import Enum, auto
+from collections import deque
+import networkx as nx
 from core.snake6110.level import BaseLevel
 from core.snake6110.geometry import Point, Direction, DIRECTION_TO_POINT, RelativeDirection
 from core.snake6110.tile_types import is_wall, is_food, is_tail, TileType
@@ -19,6 +21,7 @@ class MoveResult(Enum):
     HIT_SELF = auto()         # Ran into its own body
     GAME_NOT_RUNNING = auto() # Called move() after game over
     TIMEOUT = auto()          # Max steps reached (episode truncated)
+    CYCLE_DETECTED = auto()
 
 
 
@@ -39,7 +42,7 @@ class SnakeGame:
 
         # === Tile rendering size ===
         self.tile_dim = self.tileset.tile_size * self.pixel_size
-        print(f"[INIT] TILE_SIZE={self.tileset.tile_size}, PIXEL_SIZE={self.pixel_size}, TILE_DIM={self.tile_dim}")
+        # print(f"[INIT] TILE_SIZE={self.tileset.tile_size}, PIXEL_SIZE={self.pixel_size}, TILE_DIM={self.tile_dim}")
 
         # === Pixel buffer (1-channel grayscale) ===
         self.pixel_buffer = np.zeros((self.height * self.tileset.tile_size, self.width * self.tileset.tile_size), dtype=np.uint8)
@@ -73,10 +76,95 @@ class SnakeGame:
         else:
             raise ValueError("No food defined in level and no food_count specified.")
 
+        # === Visited tracker ===
+        self.visited = set()
+        self.recent_heads = []  # or deque for fixed length
+
+
         # print(f"[INIT] TARGET_FOOD_COUNT={self.target_food_count}")
 
         # === Initialize game state ===
         self.reset()
+
+    def find_path_to_closest_food_dijkstra(self) -> Optional[List[Point]]:
+        """
+        Uses Dijkstra's algorithm via networkx to find the shortest path from the head to the closest food.
+        Ignores moving tail, does not anticipate future snake growth.
+
+        Returns:
+            A list of Points representing the shortest path from head to food (including head), or None if no path exists.
+        """
+        head = self.get_head_position()
+        food_set = set(self.food)
+
+        # 1. Build graph of walkable tiles
+        G = nx.Graph()
+        for y in range(self.height):
+            for x in range(self.width):
+                p = Point(x, y)
+
+                # Allow the head to be part of the graph, but exclude other snake segments
+                if p in self.wall_positions or (p in self.snake and p != head):
+                    continue
+
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    nx_, ny_ = x + dx, y + dy
+                    if 0 <= nx_ < self.width and 0 <= ny_ < self.height:
+                        neighbor = Point(nx_, ny_)
+                        if neighbor in self.wall_positions:
+                            continue
+                        if neighbor in self.snake and neighbor != head:
+                            continue
+                        G.add_edge(p, neighbor)
+
+        # 2. Find shortest path to the closest food (if any reachable)
+        paths = []
+        for food in self.food:
+            try:
+                path = nx.shortest_path(G, source=head, target=food)
+                paths.append(path)
+            except nx.NetworkXNoPath:
+                continue
+            except nx.NodeNotFound:
+                continue
+
+        if not paths:
+            return None
+
+        # 3. Return the shortest path among all
+        return min(paths, key=len)
+
+    def has_head_cycle(self) -> bool:
+        """
+        Detects if the snake has entered a repeating cycle.
+        Uses Floyd's Tortoise and Hare algorithm to detect repetition,
+        then verifies the actual movement pattern.
+        """
+        path = self.recent_heads
+        n = len(path)
+
+        if n < 8:  # need at least 2 * min_cycle_len
+            return False
+
+        # === 1. Fast scan with Floyd's cycle detection ===
+        tortoise = 0
+        hare = 1
+        while hare < n:
+            if path[tortoise] == path[hare]:
+                cycle_len = hare - tortoise
+                if cycle_len < 4 or hare + cycle_len > n:
+                    return False  # too short or not enough data to verify
+
+                # === 2. Confirm cycle by comparing the repeated segments ===
+                segment1 = path[hare - cycle_len:hare]
+                segment2 = path[hare:hare + cycle_len]
+                if segment1 == segment2:
+                    return True  # confirmed cycle
+
+            tortoise += 1
+            hare += 2
+
+        return False
 
     def set_seed(self, seed: Optional[int]) -> None:
         """Set or reset the RNG for reproducibility."""
@@ -107,6 +195,12 @@ class SnakeGame:
         self._update_snake_layers()
         self._update_food_layer()
 
+        # self.path_to_food = self.find_path_to_closest_food_dijkstra()
+
+        # === Visited tracker ===
+        self.visited.clear()
+        self.recent_heads.clear()
+
     def get_head_position(self) -> Point:
         """
         Returns the current position of the snake's head.
@@ -131,17 +225,19 @@ class SnakeGame:
                 self.food.append(p)
                 return
 
-    def move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> MoveResult:
+    def move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> List[MoveResult]:
         result = self._move(rel_dir)
         self._update_snake_layers()
         self._update_pixel_buffer()
         return result
 
-    def _move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> MoveResult:
+    def _move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> List[MoveResult]:
         if not self.running:
-            return MoveResult.GAME_NOT_RUNNING
+            return [MoveResult.GAME_NOT_RUNNING]
 
-        # Compute tentative new direction (but don't apply it yet)
+        results = []
+
+        # === 1. Determine intended direction ===
         new_direction = self.direction
         if rel_dir == RelativeDirection.LEFT:
             new_direction = self.direction.turn_left()
@@ -151,33 +247,47 @@ class SnakeGame:
         vec = DIRECTION_TO_POINT[new_direction]
         new_head = Point(self.snake[0].x + vec.x, self.snake[0].y + vec.y)
 
-        # Collision checks
+        # === 2. Collision checks ===
         if not (0 <= new_head.x < self.width and 0 <= new_head.y < self.height):
             self.running = False
-            return MoveResult.HIT_BOUNDARY
+            return [MoveResult.HIT_BOUNDARY]
 
         if new_head in self.wall_positions:
             self.running = False
-            return MoveResult.HIT_WALL
+            return [MoveResult.HIT_WALL]
 
         if new_head in self.snake:
             self.running = False
-            return MoveResult.HIT_SELF
+            return [MoveResult.HIT_SELF]
 
-        # All clear: apply direction
+        # === 3. Apply direction and insert head ===
         self.direction = new_direction
-
-        # Move
         self.snake.insert(0, new_head)
+        self.recent_heads.append(new_head)  # Track for cycle detection
+        self.visited.add(new_head)
+
+        # === 4. Food consumption ===
         if new_head in self.food:
             self.food.remove(new_head)
-            self.score += 1  # <-- Add this line
+            self.score += 1
             while len(self.food) < self.target_food_count:
                 self._spawn_food()
-            return MoveResult.FOOD_EATEN
+            self.recent_heads.clear()  # Reset cycle tracking on food
+            self.visited.clear()
+            results.append(MoveResult.FOOD_EATEN)
         else:
             self.snake.pop()
-            return MoveResult.OK
+
+        # === 5. Cycle detection ===
+        if self.has_head_cycle():
+            results.append(MoveResult.CYCLE_DETECTED)
+
+        # === 6. Always include OK if no fatal error
+        results.insert(0, MoveResult.OK)
+
+        # self.path_to_food = self.find_path_to_closest_food_dijkstra()
+
+        return results
 
     def _update_wall_layer(self) -> None:
         """Update the binary wall layer based on static wall positions."""
@@ -300,6 +410,22 @@ class SnakeGame:
                 py, px = point.y * tile_dim, point.x * tile_dim
                 self.pixel_buffer[py:py + tile_dim, px:px + tile_dim] = tile
 
+
+        # === Draw trail ===
+        # if TileType.TRACKER_VISITED in self.tileset:
+        #     tile = np.array(self.tileset[TileType.TRACKER_VISITED], dtype=np.uint8)
+        #     for point in self.visited:
+        #         py, px = point.y * tile_dim, point.x * tile_dim
+        #         self.pixel_buffer[py:py + tile_dim, px:px + tile_dim] = tile
+        #
+
+        # === Draw path to food ===
+        # if self.path_to_food and TileType.TRACKER_PATH in self.tileset:
+        #     path_tile = np.array(self.tileset[TileType.TRACKER_PATH], dtype=np.uint8)
+        #     for point in self.path_to_food[1:]:  # Skip head (already drawn)
+        #         py, px = point.y * tile_dim, point.x * tile_dim
+        #         self.pixel_buffer[py:py + tile_dim, px:px + tile_dim] = path_tile
+
         # === Draw food ===
         if TileType.FOOD in self.tileset:
             tile = np.array(self.tileset[TileType.FOOD], dtype=np.uint8)
@@ -315,6 +441,8 @@ class SnakeGame:
                 for y, x in yxs:
                     py, px = y * tile_dim, x * tile_dim
                     self.pixel_buffer[py:py + tile_dim, px:px + tile_dim] = tile
+
+
 
     def _init_renderer(self):
         if self.pygame_initialized:

@@ -36,10 +36,11 @@ def is_adjacent(a: Point, b: Point) -> bool:
 
 
 class BaseLevel:
-    def __init__(self, width: int, height: int, grid: List[List[TileType]]):
+    def __init__(self, width: int, height: int, grid: List[List[TileType]], init_snake_length: int):
         self.width = width
         self.height = height
         self.grid = grid  # 2D list of TileType
+        self.init_snake_length = init_snake_length
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -154,7 +155,7 @@ class BaseLevel:
 
 
 class LevelFromTemplate(BaseLevel):
-    def __init__(self, filepath: str = "assets/levels/empty-11x20.json"):
+    def __init__(self, filepath: str = "assets/levels/test_level.json"):
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -172,7 +173,10 @@ class LevelFromTemplate(BaseLevel):
             for row in ascii_grid
         ]
 
-        super().__init__(width, height, grid)
+        # Count snake parts
+        snake_length = len(self.get_snake_segments())
+
+        super().__init__(width, height, grid, snake_length)
 
 
 class EmptyLevel(BaseLevel):
@@ -202,7 +206,7 @@ class EmptyLevel(BaseLevel):
         grid[height - 1][0] = TileType.WALL_BL
         grid[height - 1][width - 1] = TileType.WALL_BR
 
-        super().__init__(width, height, grid)
+        super().__init__(width, height, grid, snake_length)
         self.validate_snake_placement(head_pos, snake_length)
 
         # Place snake
