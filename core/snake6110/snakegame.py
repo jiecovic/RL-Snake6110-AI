@@ -14,15 +14,14 @@ np.set_printoptions(threshold=np.inf, linewidth=100000)  # No truncation of larg
 
 
 class MoveResult(Enum):
-    OK = auto()               # Normal move, nothing special
-    FOOD_EATEN = auto()       # Snake ate food
-    HIT_BOUNDARY = auto()     # Moved outside grid
-    HIT_WALL = auto()         # Hit a wall tile
-    HIT_SELF = auto()         # Ran into its own body
-    GAME_NOT_RUNNING = auto() # Called move() after game over
-    TIMEOUT = auto()          # Max steps reached (episode truncated)
+    OK = auto()  # Normal move, nothing special
+    FOOD_EATEN = auto()  # Snake ate food
+    HIT_BOUNDARY = auto()  # Moved outside grid
+    HIT_WALL = auto()  # Hit a wall tile
+    HIT_SELF = auto()  # Ran into its own body
+    GAME_NOT_RUNNING = auto()  # Called move() after game over
+    TIMEOUT = auto()  # Max steps reached (episode truncated)
     CYCLE_DETECTED = auto()
-
 
 
 class SnakeGame:
@@ -78,10 +77,8 @@ class SnakeGame:
 
         # === Visited tracker ===
         self.visited = set()
-        self.recent_heads = []  # or deque for fixed length
+        self.recent_heads = deque(maxlen=(self.level.width - 2) * (self.level.height - 2))
 
-
-        # print(f"[INIT] TARGET_FOOD_COUNT={self.target_food_count}")
 
         # === Initialize game state ===
         self.reset()
@@ -140,7 +137,7 @@ class SnakeGame:
         Uses Floyd's Tortoise and Hare algorithm to detect repetition,
         then verifies the actual movement pattern.
         """
-        path = self.recent_heads
+        path = list(self.recent_heads)
         n = len(path)
 
         if n < 8:  # need at least 2 * min_cycle_len
@@ -212,7 +209,6 @@ class SnakeGame:
         Returns the current list of food positions.
         """
         return self.food.copy()
-
 
     def _spawn_food(self):
         max_attempts = 1000
@@ -410,7 +406,6 @@ class SnakeGame:
                 py, px = point.y * tile_dim, point.x * tile_dim
                 self.pixel_buffer[py:py + tile_dim, px:px + tile_dim] = tile
 
-
         # === Draw trail ===
         # if TileType.TRACKER_VISITED in self.tileset:
         #     tile = np.array(self.tileset[TileType.TRACKER_VISITED], dtype=np.uint8)
@@ -441,8 +436,6 @@ class SnakeGame:
                 for y, x in yxs:
                     py, px = y * tile_dim, x * tile_dim
                     self.pixel_buffer[py:py + tile_dim, px:px + tile_dim] = tile
-
-
 
     def _init_renderer(self):
         if self.pygame_initialized:
@@ -476,10 +469,6 @@ class SnakeGame:
         self.clock.tick(self.fps)
 
     def _draw(self) -> None:
-        """
-        Internal method that performs the actual drawing logic.
-        Assumes pygame is initialized and pixel_buffer is available.
-        """
         if self.pixel_buffer is None:
             return
 
@@ -496,9 +485,12 @@ class SnakeGame:
         surface = pygame.surfarray.make_surface(rgb_buffer.swapaxes(0, 1))
         self.screen.blit(surface, (0, 0))
 
-        # 4. Draw score text
-        score_surf = self.font.render(f"Score: {self.score}", True, (255, 255, 255))
-        self.screen.blit(score_surf, (10, 10))  # position fixed since tile_dim no longer used
+        # 4. Draw score and FPS
+        score_text = f"Score: {self.score}"
+        fps_text = f"FPS: {self.clock.get_fps():.2f}"
+        combined_text = f"{score_text}   {fps_text}"
+        info_surf = self.font.render(combined_text, True, (255, 255, 255))
+        self.screen.blit(info_surf, (10, 10))
 
     def handle_events(self):
         for event in pygame.event.get():

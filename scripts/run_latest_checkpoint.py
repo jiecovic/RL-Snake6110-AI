@@ -122,8 +122,8 @@ def run_loop(env, checkpoint_dir: str, selection_method: str):
             show_feature_map_opencv(act, name=f"Conv Layer {idx}")
 
         move_results = info[0].get("move_results", [])
-        if MoveResult.CYCLE_DETECTED in move_results:
-            print("\n🔄 Cycle detected — resetting episode.")
+        # if MoveResult.CYCLE_DETECTED in move_results:
+        #     print("\n🔄 Cycle detected — resetting episode.")
 
         episode_reward += reward[0]
         print(f"🎮 Episode {episode_id + 1} | Reward: {episode_reward:.2f} | FPS: {global_fps[0]}", end="\r")

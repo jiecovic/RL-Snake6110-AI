@@ -80,8 +80,8 @@ class BaseSnakeEnv(gym.Env, ABC):
         # n_visited_nodes_after = len(self.visited_nodes)
         # if n_visited_nodes_after > n_visited_nodes_before:
         #     reward += 0.01
-        if len(self.game.snake) <= (self.game.level.init_snake_length + 5):
-            reward -= self.tiny_reward
+        # if len(self.game.snake) <= (self.game.level.init_snake_length + 5):
+        reward -= self.tiny_reward
 
         obs = self.get_obs()
         self.current_step_since_last_food += 1
@@ -103,7 +103,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         is_cycle = MoveResult.CYCLE_DETECTED in results
         is_fatal = any(r in fatal_results for r in results)
 
-        terminated = is_cycle or is_fatal
+        terminated = is_fatal #is_cycle or is_fatal
         truncated = self.current_step_since_last_food >= self.max_steps
 
         # === 5. Compute total reward ===
@@ -116,7 +116,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         if is_fatal:
             reward -= 5.0
         elif is_cycle:
-            reward -= 2.5  # Custom penalty for cycle detection
+            reward -= 0.5  # Custom penalty for cycle detection
 
         # === 6. Construct info dict ===
         info = {
