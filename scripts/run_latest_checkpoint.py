@@ -4,11 +4,12 @@ import argparse
 import torch
 import numpy as np
 import cv2
+from typing import Literal, Union
 
 from collections import defaultdict
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
-from core.envs.snake_envs import SnakePixelDirectionObsEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack
+from core.envs.snake_envs import SnakePixelDirectionObsEnv, SnakePixelObsEnv, SnakePixelStackedEnv, SnakeFirstPersonEnv
 from core.snake6110.snakegame import SnakeGame, MoveResult
 from core.snake6110.level import EmptyLevel
 
@@ -59,6 +60,74 @@ def show_feature_map_opencv(tensor, name="CNN Activations"):
         print(f"\n⏬ Decreased FPS to {global_fps[0]}")
 
 
+def show_obs_opencv(
+    obs: Union[np.ndarray, dict],
+    name: str = "Observation",
+    mode: Literal["channel", "vertical", "horizontal"] = "horizontal",
+) -> None:
+    overlay_text = ""
+    if isinstance(obs, dict):
+        if "pixel" not in obs:
+            raise ValueError("Missing 'pixel' key in observation dict.")
+        raw_obs = obs["pixel"]
+        # Extract useful metadata (if available)
+        keys_of_interest = ["snake_length", "score", "step", "episode", "food_count"]
+        lines = []
+        for k in keys_of_interest:
+            if k in obs:
+                lines.append(f"{k.replace('_', ' ').capitalize()}: {obs[k]}")
+        overlay_text = "\n".join(lines)
+    else:
+        raw_obs = obs
+
+    raw_obs = raw_obs.squeeze(0) if raw_obs.ndim == 4 else raw_obs  # (C, H, W)
+    c, h, w = raw_obs.shape
+    raw_obs = raw_obs.astype(np.float32)
+    raw_obs = (raw_obs - raw_obs.min()) / (raw_obs.max() - raw_obs.min() + 1e-5)
+
+    if mode == "channel":
+        if c == 1:
+            rgb = np.stack([raw_obs[0]] * 3, axis=-1)
+        elif c == 2:
+            rgb = np.stack([raw_obs[0], raw_obs[1], np.zeros_like(raw_obs[0])], axis=-1)
+        else:
+            rgb = np.stack([raw_obs[0], raw_obs[c // 2], raw_obs[-1]], axis=-1)
+
+        rgb = (rgb * 255).astype(np.uint8)
+        rgb = cv2.resize(rgb, (w * 8, h * 8), interpolation=cv2.INTER_NEAREST)
+        output_img = rgb
+
+    elif mode in ("vertical", "horizontal"):
+        images = []
+        for i in range(c):
+            img = raw_obs[i]
+            img = (img * 255).astype(np.uint8)
+            img = cv2.resize(img, (w * 8, h * 8), interpolation=cv2.INTER_NEAREST)
+            img = cv2.applyColorMap(img, cv2.COLORMAP_MAGMA)
+            images.append(img)
+
+        output_img = cv2.vconcat(images) if mode == "vertical" else cv2.hconcat(images)
+
+    else:
+        raise ValueError(f"Unknown mode: {mode}")
+
+    # === Overlay text (if available) ===
+    if overlay_text:
+        for i, line in enumerate(overlay_text.splitlines()):
+            cv2.putText(
+                output_img,
+                line,
+                (10, 25 + i * 30),
+                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                fontScale=0.8,
+                color=(255, 255, 255),
+                thickness=2,
+                lineType=cv2.LINE_AA,
+            )
+
+    cv2.imshow(name, output_img)
+
+
 # === Argument parsing ===
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -83,9 +152,11 @@ def find_latest_checkpoint(directory: str, method: str) -> str:
 
 def make_env():
     def _init():
-        level = EmptyLevel(height=11+2, width=20+2)
+        level = EmptyLevel(height=11 + 2, width=20 + 2)
         game = SnakeGame(level, food_count=1, fps=global_fps[0])
-        return SnakePixelDirectionObsEnv(game, render_mode="human")
+        # return SnakePixelStackedEnv(game, render_mode="human")
+        return SnakeFirstPersonEnv(game, render_mode="human", view_radius=10)
+
     return _init
 
 
@@ -118,13 +189,14 @@ def run_loop(env, checkpoint_dir: str, selection_method: str):
         # === Update env's FPS live
         env.envs[0].game.fps = global_fps[0]
 
+        # === Visualize observation
+        show_obs_opencv(obs)
+
+        # === Visualize CNN activations
         for idx, act in enumerate(activations):
             show_feature_map_opencv(act, name=f"Conv Layer {idx}")
 
         move_results = info[0].get("move_results", [])
-        # if MoveResult.CYCLE_DETECTED in move_results:
-        #     print("\n🔄 Cycle detected — resetting episode.")
-
         episode_reward += reward[0]
         print(f"🎮 Episode {episode_id + 1} | Reward: {episode_reward:.2f} | FPS: {global_fps[0]}", end="\r")
 

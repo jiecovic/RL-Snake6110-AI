@@ -2,18 +2,18 @@
 import os
 from stable_baselines3 import PPO
 from stable_baselines3.common.policies import MultiInputActorCriticPolicy
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, DummyVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, DummyVecEnv, VecFrameStack
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback, CallbackList
 
 from collections import defaultdict
 from typing import List
 
-from core.envs.snake_envs import SnakePixelDirectionObsEnv
+from core.envs.snake_envs import SnakePixelDirectionObsEnv, SnakePixelObsEnv, SnakePixelStackedEnv, SnakeFirstPersonEnv
 from core.snake6110.snakegame import SnakeGame
 from core.snake6110.level import EmptyLevel
 from core.policies.custom_policies import CustomCombinedExtractor
-from core.custom_cnns.custom_cnn import SnakeCNN_3Layers
+from core.custom_cnns.custom_cnn import SnakeCNN_3Layers, SnakeCNN_Deep
 from core.custom_callbacks import TerminationCauseLogger
 
 # === Config ===
@@ -21,6 +21,8 @@ RUN_NAME = "snake_pixel_dir_ppo"
 NUM_ENVS = 8
 TOTAL_TIMESTEPS = 100_000_000
 SEED = 42
+CHECKPOINT_FREQ = 500_000 // NUM_ENVS
+
 LOG_ROOT = "logs"
 MODEL_ROOT = "models"
 CHECKPOINT_ROOT = "checkpoints"
@@ -40,7 +42,10 @@ def make_env(rank: int, seed: int = 0):
     def _init():
         level = EmptyLevel(height=13, width=22)
         game = SnakeGame(level, food_count=1, fps=0)
-        env = SnakePixelDirectionObsEnv(game, render_mode="none")
+        # env = SnakePixelDirectionObsEnv(game, render_mode="none")
+        # env = SnakePixelObsEnv(game, render_mode="none")
+        # env = SnakePixelStackedEnv(game, render_mode="none", n_stack=2)
+        env = SnakeFirstPersonEnv(game, render_mode="none", n_stack=2, view_radius=10)
         env.reset(seed=seed + rank)
         return env
 
@@ -58,6 +63,8 @@ if __name__ == "__main__":
     env_fns = [make_env(rank=i, seed=SEED) for i in range(NUM_ENVS)]
     vec_env = SubprocVecEnv(env_fns)
     # vec_env = DummyVecEnv(env_fns)
+
+    # vec_env = VecFrameStack(vec_env, n_stack=2, channels_order='first')
     vec_env = VecMonitor(vec_env)
 
     # Print environment info
@@ -70,25 +77,31 @@ if __name__ == "__main__":
 
     # Create PPO model with progress bar enabled
     model = PPO(
-        # policy=CustomMultiInputActorCriticPolicy,
         policy=MultiInputActorCriticPolicy,
+        # policy="CnnPolicy",
         ent_coef=0.03,
         env=vec_env,
         n_steps=8 * 2048 // NUM_ENVS,
         batch_size=128,
-        n_epochs=3,
+        n_epochs=2,
         gamma=0.999,
         learning_rate=3e-4,
         tensorboard_log=TENSORBOARD_LOG_DIR,
         verbose=0,
         seed=SEED,
+        # policy_kwargs=dict(
+        #     features_extractor_class=SnakeCNN_3Layers,
+        #     features_extractor_kwargs=dict(features_dim=512),
+        #     net_arch=[256, 128],
+        # )
         policy_kwargs=dict(
-            # net_arch=[256, 128],
-            net_arch=[128, 64],
+            net_arch=[256, 128],
+            # net_arch=[128, 64],
             features_extractor_class=CustomCombinedExtractor,
             features_extractor_kwargs=dict(
                 cnn_constructor=SnakeCNN_3Layers,
-                cnn_output_dim=128
+                # cnn_constructor=SnakeCNN_Deep,
+                cnn_output_dim=512
             )
         )
     )
@@ -111,7 +124,6 @@ if __name__ == "__main__":
 
     print(model.policy)
 
-    CHECKPOINT_FREQ = 100_000 // NUM_ENVS
 
     checkpoint_callback = CheckpointCallback(
         save_freq=CHECKPOINT_FREQ,

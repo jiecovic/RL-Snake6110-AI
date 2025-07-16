@@ -1,5 +1,6 @@
 # base_snake_env.py
 import gymnasium as gym
+import numpy as np
 from gymnasium import spaces
 from abc import ABC, abstractmethod
 from typing import Literal, Optional
@@ -21,11 +22,13 @@ class BaseSnakeEnv(gym.Env, ABC):
         self.game = game
         self.action_space = spaces.Discrete(3)
 
-        self.max_steps = (self.game.width-2) * (self.game.height-2) + 2
+        self.max_steps = (self.game.width - 2) * (self.game.height - 2) + 2
         self.current_step_since_last_food = 0
         self.visited_nodes = set()
 
         self.tiny_reward = 1.0 / self.max_steps
+        self.initial_snake_length = self.game.level.init_snake_length
+        self.max_snake_length = (self.game.level.width - 2) * (self.game.level.height - 2)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -103,7 +106,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         is_cycle = MoveResult.CYCLE_DETECTED in results
         is_fatal = any(r in fatal_results for r in results)
 
-        terminated = is_fatal #is_cycle or is_fatal
+        terminated = is_fatal  # is_cycle or is_fatal
         truncated = self.current_step_since_last_food >= self.max_steps
 
         # === 5. Compute total reward ===

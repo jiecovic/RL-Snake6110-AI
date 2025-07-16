@@ -9,12 +9,14 @@ class SnakeCNN_3Layers(BaseCNNExtractor):
     """
 
     def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
+        n_input_channels = observation_space.shape[0]
+        C = 32
         return nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=8, stride=4, padding=0),
+            nn.Conv2d(n_input_channels, C, kernel_size=8, stride=4, padding=0),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(C, 2*C, kernel_size=4, stride=2, padding=0),
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+            nn.Conv2d(2*C, 2*C, kernel_size=3, stride=1, padding=0),
             nn.ReLU(),
             nn.Flatten()
         )
@@ -25,8 +27,10 @@ class SnakeCNN_Deep(BaseCNNExtractor):
     """
 
     def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
+        n_input_channels = observation_space.shape[0]
+        C = 32
         return nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=8, stride=4, padding=0),
+            nn.Conv2d(n_input_channels, 32, kernel_size=8, stride=4, padding=0),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
             nn.ReLU(),
@@ -34,7 +38,7 @@ class SnakeCNN_Deep(BaseCNNExtractor):
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=2, stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(128, 128, kernel_size=2, stride=1, padding=0),
             nn.ReLU(),
             nn.Flatten()
         )

@@ -1,11 +1,11 @@
 import pygame
 import sys
+import argparse
 from typing import Optional
 
 from core.snake6110.geometry import RelativeDirection
-from core.snake6110.level import LevelFromTemplate, EmptyLevel
-from core.snake6110.snakegame import SnakeGame
-from core.snake6110.snakegame import MoveResult  # <-- Import this for result checking
+from core.snake6110.level import EmptyLevel
+from core.snake6110.snakegame import SnakeGame, MoveResult
 
 
 def handle_turn_input(key: int) -> Optional[RelativeDirection]:
@@ -16,16 +16,22 @@ def handle_turn_input(key: int) -> Optional[RelativeDirection]:
     return None
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="SnakeGame interactive runner")
+    parser.add_argument("--fps", type=int, default=10, help="Frames per second")
+    parser.add_argument("--width", type=int, default=13, help="Grid width")
+    parser.add_argument("--height", type=int, default=22, help="Grid height")
+    parser.add_argument("--food", type=int, default=1, help="Number of food items on the board")
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     pygame.init()
 
-    level = EmptyLevel(11, 20)
-    game = SnakeGame(level, food_count=1, fps=10)
+    level = EmptyLevel(args.height, args.width)
+    game = SnakeGame(level, food_count=args.food, fps=args.fps)
     paused = False
-
-    # --- FPS tracking ---
-    frame_count = 0
-    last_fps_time = pygame.time.get_ticks()
 
     while True:
         relative_dir = RelativeDirection.FORWARD
@@ -55,22 +61,17 @@ def main():
                 result = game.move(relative_dir)
                 game.render()
 
-                # --- Count frame ---
-                frame_count += 1
-                now = pygame.time.get_ticks()
-                elapsed_ms = now - last_fps_time
-                if elapsed_ms >= 1000:
-                    fps = frame_count / (elapsed_ms / 1000.0)
-                    print(f"[FPS] {fps:.2f}")
-                    frame_count = 0
-                    last_fps_time = now
-
-                if result == MoveResult.HIT_WALL:
-                    print("Game over: hit wall.")
-                elif result == MoveResult.HIT_SELF:
-                    print("Game over: hit itself.")
-                elif result == MoveResult.HIT_BOUNDARY:
-                    print("Game over: hit boundary.")
+                for res in result:
+                    if res in (
+                        MoveResult.HIT_WALL,
+                        MoveResult.HIT_SELF,
+                        MoveResult.HIT_BOUNDARY,
+                        MoveResult.GAME_NOT_RUNNING,
+                        MoveResult.TIMEOUT,
+                        MoveResult.WIN,
+                    ):
+                        print(f"[END] {res.name}")
+                        break
             else:
                 game.render()
                 game.reset()
