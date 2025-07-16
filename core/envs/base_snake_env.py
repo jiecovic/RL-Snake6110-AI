@@ -16,19 +16,57 @@ class BaseSnakeEnv(gym.Env, ABC):
 
     RenderMode = Literal["human", "none"]
 
+    FATAL_RESULTS = {
+        MoveResult.HIT_SELF,
+        MoveResult.HIT_WALL,
+        MoveResult.HIT_BOUNDARY,
+        MoveResult.GAME_NOT_RUNNING,
+        MoveResult.CYCLE_DETECTED,
+        MoveResult.WIN,
+    }
+
+    TERMINATION_PRIORITY = [
+        MoveResult.WIN,
+        MoveResult.HIT_WALL,
+        MoveResult.HIT_SELF,
+        MoveResult.HIT_BOUNDARY,
+        MoveResult.CYCLE_DETECTED,
+        MoveResult.TIMEOUT,
+        MoveResult.GAME_NOT_RUNNING,
+    ]
+
+    TERMINATION_CAUSES = {
+        MoveResult.WIN: "win",
+        MoveResult.HIT_WALL: "hit_wall",
+        MoveResult.HIT_SELF: "hit_self",
+        MoveResult.HIT_BOUNDARY: "hit_boundary",
+        MoveResult.CYCLE_DETECTED: "cycle",
+        MoveResult.GAME_NOT_RUNNING: "not_running",
+        MoveResult.TIMEOUT: "timeout"
+    }
+
     def __init__(self, game: SnakeGame, render_mode: RenderMode = "none"):
-        self.render_mode = render_mode
+        """
+        Initializes the base Snake RL environment.
+
+        Args:
+            game (SnakeGame): The game instance.
+            render_mode (RenderMode): "human" or "none".
+        """
+        self.render_mode: BaseSnakeEnv.RenderMode = render_mode
         super().__init__()
-        self.game = game
-        self.action_space = spaces.Discrete(3)
 
-        self.max_steps = (self.game.width - 2) * (self.game.height - 2) + 2
-        self.current_step_since_last_food = 0
-        self.visited_nodes = set()
+        self.game: SnakeGame = game
+        self.action_space: spaces.Discrete = spaces.Discrete(3)  # 0 = forward, 1 = left, 2 = right
 
-        self.tiny_reward = 1.0 / self.max_steps
-        self.initial_snake_length = self.game.level.init_snake_length
-        self.max_snake_length = (self.game.level.width - 2) * (self.game.level.height - 2)
+        # Limits and rewards based on level dimensions
+        self.max_steps: int = int(self.game.max_playable_tiles * 1.5)
+        self.max_snake_length: int = self.game.max_playable_tiles
+        self.initial_snake_length: int = self.game.level.init_snake_length
+        self.tiny_reward: float = 1.0 / self.max_steps
+
+        self.current_step_since_last_food: int = 0
+        self.visited_nodes: set = set()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -36,7 +74,6 @@ class BaseSnakeEnv(gym.Env, ABC):
         self.current_step_since_last_food = 0
         self.visited_nodes.clear()
         obs = self.get_obs()
-
         return obs, {}
 
     def _get_min_food_distance(self) -> Optional[int]:
@@ -58,103 +95,67 @@ class BaseSnakeEnv(gym.Env, ABC):
         return 0.0
 
     def step(self, action: int):
-        # === 1. Compute pre-move distance to nearest food ===
-
-        # dist_before = self._get_min_food_distance()
-        # head_before = self.game.get_head_position()
-        # dijkstra_path = self.game.find_path_to_closest_food_dijkstra()
-
         reward = 0.0
-
-        # === 2. Perform action and update environment ===
         direction = RelativeDirection(action)
-        results = self.game.move(direction)  # now a list of MoveResult
-
-        # head_after = self.game.get_head_position()
-        # if len(self.game.snake) <= (self.game.level.init_snake_length + 5) and dijkstra_path and len(dijkstra_path) > 1:
-        # if dijkstra_path and len(dijkstra_path) > 1:
-        #     if head_after in dijkstra_path:
-        #         reward += 0 #self.tiny_reward  # tiny reward for being on path
-        #     else:
-        #         reward -= self.tiny_reward  # penalty for being off-path
-
-        # n_visited_nodes_before = len(self.visited_nodes)
-        # self.visited_nodes.add(self.game.get_head_position())
-        # n_visited_nodes_after = len(self.visited_nodes)
-        # if n_visited_nodes_after > n_visited_nodes_before:
-        #     reward += 0.01
-        # if len(self.game.snake) <= (self.game.level.init_snake_length + 5):
-        reward -= self.tiny_reward
-
+        results = self.game.move(direction)
         obs = self.get_obs()
+
         self.current_step_since_last_food += 1
 
-        # === 3. Compute post-move distance and shaping reward ===
-        # dist_after = self._get_min_food_distance()
-        # shaping_reward = self._compute_shaping_reward(dist_before, dist_after)
-        # reward += shaping_reward
+        # Flags for various result types
+        is_win = MoveResult.WIN in results
+        is_fatal = any(r in self.FATAL_RESULTS for r in results)
+        is_food = MoveResult.FOOD_EATEN in results
+        is_truncated = self.current_step_since_last_food >= self.max_steps
 
-        # === 4. Determine episode end conditions ===
-        fatal_results = {
-            MoveResult.HIT_SELF,
-            MoveResult.HIT_WALL,
-            MoveResult.HIT_BOUNDARY,
-            MoveResult.GAME_NOT_RUNNING,
-            # CYCLE_DETECTED handled separately
-        }
+        if is_win:
+            # Win condition: no penalties, high reward
+            reward += 10.0
+            terminated = True
+            truncated = False
 
-        is_cycle = MoveResult.CYCLE_DETECTED in results
-        is_fatal = any(r in fatal_results for r in results)
+            # Optional: clear food-related state even on win
+            if is_food:
+                self.visited_nodes.clear()
+                self.current_step_since_last_food = 0
+        else:
+            # Small step penalty to encourage efficiency
+            reward -= self.tiny_reward
 
-        terminated = is_fatal  # is_cycle or is_fatal
-        truncated = self.current_step_since_last_food >= self.max_steps
+            if is_food:
+                # Food eaten:
+                # +1.0 base reward
+                # +bonus scaled by how quickly it was found (up to +2.0)
+                reward += 1.0
+                reward += 2 * (1.0 - (self.current_step_since_last_food / self.max_steps))
+                self.visited_nodes.clear()
+                self.current_step_since_last_food = 0
 
-        # === 5. Compute total reward ===
-        if MoveResult.FOOD_EATEN in results:
-            reward += 1.0
-            reward += (1.0 - (self.current_step_since_last_food / self.max_steps))  # bonus for shorter paths
-            self.visited_nodes.clear()
-            self.current_step_since_last_food = 0
+            if is_fatal:
+                # Major penalty for hitting wall, self, etc.
+                reward -= 5.0
 
-        if is_fatal:
-            reward -= 5.0
-        elif is_cycle:
-            reward -= 0.5  # Custom penalty for cycle detection
+            # Terminate if fatal; truncate if max steps reached
+            terminated = is_fatal
+            truncated = not terminated and is_truncated
 
-        # === 6. Construct info dict ===
         info = {
             "move_results": results,
         }
 
+        # Include termination cause and final score if episode ends
         if terminated or truncated:
-            # Determine most severe cause
-            priority = [
-                MoveResult.HIT_WALL,
-                MoveResult.HIT_SELF,
-                MoveResult.HIT_BOUNDARY,
-                MoveResult.CYCLE_DETECTED,
-                MoveResult.GAME_NOT_RUNNING,
-                MoveResult.TIMEOUT
-            ]
-            result_for_cause = next((r for r in priority if r in results), MoveResult.TIMEOUT if truncated else None)
-            cause = {
-                MoveResult.HIT_WALL: "hit_wall",
-                MoveResult.HIT_SELF: "hit_self",
-                MoveResult.HIT_BOUNDARY: "hit_boundary",
-                MoveResult.CYCLE_DETECTED: "cycle",
-                MoveResult.GAME_NOT_RUNNING: "not_running",
-                MoveResult.TIMEOUT: "timeout"
-            }.get(result_for_cause, "unknown")
-
+            result_for_cause = next(
+                (r for r in self.TERMINATION_PRIORITY if r in results),
+                MoveResult.TIMEOUT if truncated else None
+            )
+            cause = self.TERMINATION_CAUSES.get(result_for_cause, "unknown")
             info.update({
                 "final_score": self.game.score,
                 "termination_cause": cause
             })
 
-        # === 7. Optional rendering ===
         self.render()
-
-        # === 8. Return step result ===
         return obs, reward, terminated, truncated, info
 
     def render(self):

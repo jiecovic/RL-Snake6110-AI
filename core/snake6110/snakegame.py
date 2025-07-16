@@ -134,6 +134,10 @@ class SnakeGame:
         """
         return self.width * self.height - len(self.wall_positions)
 
+    @property
+    def won(self) -> bool:
+        return len(self.snake) >= self.max_playable_tiles
+
     def get_head_position(self) -> Point:
         """
         Returns the current position of the snake's head.
@@ -216,7 +220,7 @@ class SnakeGame:
             self._spawn_food()
 
             # === Win check ===
-            if len(self.food) == 0 and len(self.snake) == self.max_playable_tiles:
+            if len(self.food) == 0 and self.won:
                 self.running = False
                 results.append(MoveResult.WIN)
         else:
