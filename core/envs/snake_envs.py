@@ -5,7 +5,9 @@ from .base_snake_env import BaseSnakeEnv
 from collections import deque
 from typing import Dict, Optional, Tuple
 from gymnasium.core import ObsType
+from core.snake6110.geometry import Direction
 
+import cv2
 from core.snake6110.snakegame import SnakeGame, Point
 
 
@@ -135,29 +137,47 @@ class SnakeFirstPersonEnv(DiscreteLengthSnakeEnv):
         })
 
     def _get_centered_rotated_view(self) -> np.ndarray:
-        pixel = self.game.pixel_buffer
-        head = self.game.snake[0]
-
-        # Compute grid-space crop bounds (square of view_size x view_size)
+        head_x, head_y = self.game.snake[0].x, self.game.snake[0].y
         radius = self.view_radius
-        grid_min = Point(head.x - radius, head.y - radius)
-        grid_max = Point(head.x + radius + 1, head.y + radius + 1)  # +1 because slicing is exclusive
+        tilesize = self.tilesize
+        pixel_grid = self.game.pixel_buffer
 
-        # Convert to pixel coordinates
-        px_min = Point(grid_min.x * self.tilesize, grid_min.y * self.tilesize)
-        px_max = Point(grid_max.x * self.tilesize, grid_max.y * self.tilesize)
+        # Compute the full vision window in pixel coordinates
+        col_start = (head_x - radius) * tilesize
+        col_end = (head_x + radius + 1) * tilesize
+        row_start = (head_y - radius) * tilesize
+        row_end = (head_y + radius + 1) * tilesize
 
-        # Compute necessary padding (in pixels)
-        pad = max(0, -min(px_min.x, px_min.y))  # In case the crop goes off top/left
-        padded = np.pad(pixel, pad, mode='constant', constant_values=0)
+        view_size = (2 * radius + 1) * tilesize
+        vision = np.zeros((view_size, view_size), dtype=pixel_grid.dtype)
 
-        # Shift coords because of padding
-        px_min = Point(px_min.x + pad, px_min.y + pad)
-        px_max = Point(px_max.x + pad, px_max.y + pad)
+        # Compute overlapping bounds (clipping to pixel_grid)
+        grid_row_start = max(0, row_start)
+        grid_row_end = min(pixel_grid.shape[0], row_end)
+        grid_col_start = max(0, col_start)
+        grid_col_end = min(pixel_grid.shape[1], col_end)
 
-        # Extract and rotate
-        view = padded[px_min.y:px_max.y, px_min.x:px_max.x]
-        return np.rot90(view, k=self.game.direction.value)
+        # Compute where to place in the vision buffer
+        vision_row_start = grid_row_start - row_start
+        vision_row_end = vision_row_start + (grid_row_end - grid_row_start)
+        vision_col_start = grid_col_start - col_start
+        vision_col_end = vision_col_start + (grid_col_end - grid_col_start)
+
+        # Copy pixels into centered vision
+        vision[vision_row_start:vision_row_end, vision_col_start:vision_col_end] = \
+            pixel_grid[grid_row_start:grid_row_end, grid_col_start:grid_col_end]
+
+        # Rotate if needed (head should face UP)
+        direction = self.game.direction
+        if direction == Direction.RIGHT:
+            vision = np.rot90(vision, k=1)
+        elif direction == Direction.DOWN:
+            vision = np.rot90(vision, k=2)
+        elif direction == Direction.LEFT:
+            vision = np.rot90(vision, k=3)
+
+        assert vision.shape == (view_size, view_size), f"Wrong view shape: {vision.shape}"
+        return vision
 
     def reset(self, **kwargs) -> Tuple[Dict[str, np.ndarray], Dict]:
         _, info = super().reset(**kwargs)
@@ -170,6 +190,11 @@ class SnakeFirstPersonEnv(DiscreteLengthSnakeEnv):
     def get_obs(self) -> Dict[str, np.ndarray]:
         frame = self._get_centered_rotated_view()
         self.frames.append(frame)
+
+        # for i, frame in enumerate(self.frames):
+        #     print(f"Frame {i}: {frame.shape}")
+        #     print(frame)
+
         stacked = np.stack(self.frames, axis=0).astype(np.uint8)
 
         return {

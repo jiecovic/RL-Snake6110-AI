@@ -155,17 +155,19 @@ class SnakeGame:
         Attempts to spawn food until reaching the target_food_count.
         Returns the number of food tiles successfully placed.
         """
-        available = list(self.spawnable_tiles)
-        self.rng.shuffle(available)
+        need = self.target_food_count - len(self.food)
+        if need <= 0 or not self.spawnable_tiles:
+            return 0
 
-        placed = 0
-        while len(self.food) < self.target_food_count and available:
-            p = available.pop()
+        candidates = self.rng.sample(list(self.spawnable_tiles), k=min(need, len(self.spawnable_tiles)))
+
+        for p in candidates:
             self.food.append(p)
             self.spawnable_tiles.remove(p)
-            placed += 1
 
-        return placed
+        return len(candidates)
+
+
 
     def move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> List[MoveResult]:
         result = self._move(rel_dir)

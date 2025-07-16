@@ -19,8 +19,8 @@ def handle_turn_input(key: int) -> Optional[RelativeDirection]:
 def parse_args():
     parser = argparse.ArgumentParser(description="SnakeGame interactive runner")
     parser.add_argument("--fps", type=int, default=10, help="Frames per second")
-    parser.add_argument("--width", type=int, default=13, help="Grid width")
-    parser.add_argument("--height", type=int, default=22, help="Grid height")
+    parser.add_argument("--width", type=int, default=22, help="Grid width")
+    parser.add_argument("--height", type=int, default=13, help="Grid height")
     parser.add_argument("--food", type=int, default=1, help="Number of food items on the board")
     return parser.parse_args()
 
@@ -63,12 +63,12 @@ def main():
 
                 for res in result:
                     if res in (
-                        MoveResult.HIT_WALL,
-                        MoveResult.HIT_SELF,
-                        MoveResult.HIT_BOUNDARY,
-                        MoveResult.GAME_NOT_RUNNING,
-                        MoveResult.TIMEOUT,
-                        MoveResult.WIN,
+                            MoveResult.HIT_WALL,
+                            MoveResult.HIT_SELF,
+                            MoveResult.HIT_BOUNDARY,
+                            MoveResult.GAME_NOT_RUNNING,
+                            MoveResult.TIMEOUT,
+                            MoveResult.WIN,
                     ):
                         print(f"[END] {res.name}")
                         break

@@ -20,7 +20,7 @@ class RelativeDirection(Enum):
     LEFT = 1
     RIGHT = 2
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Point:
     x: int
     y: int

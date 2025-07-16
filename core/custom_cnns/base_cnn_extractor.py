@@ -1,4 +1,3 @@
-import gym
 import torch as th
 import torch.nn as nn
 from typing import Optional

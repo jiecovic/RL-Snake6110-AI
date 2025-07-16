@@ -131,8 +131,18 @@ def show_obs_opencv(
 # === Argument parsing ===
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--by", choices=["time", "number"], default="time",
-                        help="How to select the latest checkpoint: by 'time' or 'number'")
+    parser.add_argument(
+        "--subdir",
+        type=str,
+        required=True,
+        help="Subdirectory name inside 'models/' to look for checkpoints (e.g. snake_pixel_dir_ppo)"
+    )
+    parser.add_argument(
+        "--by",
+        choices=["time", "number"],
+        default="time",
+        help="How to select the latest checkpoint: by 'time' or 'number'"
+    )
     parser.add_argument("--fps", type=int, default=30, help="Initial FPS for human render mode")
     return parser.parse_args()
 
@@ -225,7 +235,8 @@ def main():
     args = parse_args()
     global_fps[0] = args.fps
 
-    checkpoint_dir = "models/snake_pixel_dir_ppo/checkpoints"
+    # === NEW: Use subfolder argument ===
+    checkpoint_dir = os.path.join("models", args.subdir, "checkpoints")
     assert os.path.exists(checkpoint_dir), f"Checkpoint not found: {checkpoint_dir}"
 
     env = DummyVecEnv([make_env()])
