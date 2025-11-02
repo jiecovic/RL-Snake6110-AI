@@ -3,6 +3,7 @@ from torch import nn
 
 from .base_cnn_extractor import BaseCNNExtractor
 
+
 class SnakeCNN_3Layers(BaseCNNExtractor):
     """
     Classic Nature-DQN style CNN.
@@ -14,9 +15,49 @@ class SnakeCNN_3Layers(BaseCNNExtractor):
         return nn.Sequential(
             nn.Conv2d(n_input_channels, C, kernel_size=8, stride=4, padding=0),
             nn.ReLU(),
-            nn.Conv2d(C, 2*C, kernel_size=4, stride=2, padding=0),
+            nn.Conv2d(C, 2 * C, kernel_size=4, stride=2, padding=0),
             nn.ReLU(),
-            nn.Conv2d(2*C, 2*C, kernel_size=3, stride=1, padding=0),
+            nn.Conv2d(2 * C, 2 * C, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Flatten()
+        )
+
+
+class SnakeCNN_4Layers(BaseCNNExtractor):
+    """
+    Classic Nature-DQN style CNN.
+    """
+
+    def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
+        n_input_channels = observation_space.shape[0]
+        C = 32
+        return nn.Sequential(
+            nn.Conv2d(n_input_channels, C, kernel_size=4, stride=4, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(C, 2 * C, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(2 * C, 2 * C, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(2 * C, C, kernel_size=3, stride=2, padding=0),
+            nn.ReLU(),
+            nn.Flatten()
+        )
+
+
+class SnakeCNN_Simple(BaseCNNExtractor):
+    """
+    Classic Nature-DQN style CNN.
+    """
+
+    def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
+        n_input_channels = observation_space.shape[0]
+        C = 4
+        return nn.Sequential(
+            nn.Conv2d(n_input_channels, C, kernel_size=4, stride=4, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(C, 2 * C, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(2 * C, 2 * C, kernel_size=3, stride=1, padding=0),
             nn.ReLU(),
             nn.Flatten()
         )
@@ -42,4 +83,3 @@ class SnakeCNN_Deep(BaseCNNExtractor):
             nn.ReLU(),
             nn.Flatten()
         )
-
