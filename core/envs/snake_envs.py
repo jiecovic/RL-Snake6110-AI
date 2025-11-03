@@ -191,10 +191,6 @@ class SnakeFirstPersonEnv(DiscreteLengthSnakeEnv):
         frame = self._get_centered_rotated_view()
         self.frames.append(frame)
 
-        # for i, frame in enumerate(self.frames):
-        #     print(f"Frame {i}: {frame.shape}")
-        #     print(frame)
-
         stacked = np.stack(self.frames, axis=0).astype(np.uint8)
 
         return {
