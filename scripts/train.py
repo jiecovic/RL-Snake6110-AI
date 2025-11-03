@@ -22,10 +22,10 @@ from core.custom_callbacks import TerminationCauseLogger
 # === Config dict (single source of truth) ===
 config = {
     "base_run_name": "snake_ppo",
-    "num_envs": 8,
+    "num_envs": 16,
     "total_timesteps": 100_000_000,
     "seed": 42,
-    "checkpoint_freq": 500_000,
+    "checkpoint_freq": 1_000_000,
     "resume_checkpoint": None,  # Optional override via CLI
 
     "env_params": {
