@@ -65,7 +65,13 @@ This will load the existing checkpoint from snake_test/ and start a rendering se
 
 ---
 
-## 🎮 Demo
+### 🎮 Demo Video
+
+Demonstration of a fully trained agent performing a complete successful run.
+
+[▶️ Watch Demo Video](demo-videos/FullRun-Demo-Win.mp4)
+
+## 🎮 Demo Gif
 ![Snake RL Demo](snake_demo.gif)
 
 
