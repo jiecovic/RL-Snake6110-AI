@@ -1,4 +1,4 @@
-# src/snake_rl/game/rendering/renderer.py
+# src/snake_rl/game/rendering/pygame/renderer.py
 from __future__ import annotations
 
 import numpy as np

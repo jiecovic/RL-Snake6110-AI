@@ -1,4 +1,4 @@
-# src/snake_rl/game/rendering/window.py
+# src/snake_rl/game/rendering/pygame/window.py
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -10,6 +10,7 @@ from typing import Any, Optional, cast
 import numpy as np
 from gymnasium import spaces
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack, VecMonitor
 
 from snake_rl.envs.registry import ENV_REGISTRY
 from snake_rl.game.level import EmptyLevel
@@ -17,17 +18,10 @@ from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snakegame import SnakeGame
 from snake_rl.training.eval_utils import sanitize_observation
 
-# IMPORTANT: Watch must drive the pygame loop with the SAME action semantics as training:
-# 0=forward, 1=left, 2=right (RelativeDirection).
-try:
-    from snake_rl.game.geometry import RelativeDirection
-except Exception:  # pragma: no cover
-    RelativeDirection = None  # type: ignore[assignment]
-
-
-# -----------------------------------------------------------------------------#
-# Helpers
-# -----------------------------------------------------------------------------#
+# Reuse the SAME dict frame stack wrapper as training (VecEnv wrapper).
+# This name assumes your training code defines it in env_factory.py.
+# If it's located elsewhere, adjust the import path accordingly.
+from snake_rl.training.env_factory import DictPixelVecFrameStack  # type: ignore
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -125,126 +119,16 @@ def _get_n_stack_from_cfg_d(cfg_d: dict[str, Any]) -> int:
     return max(1, n)
 
 
-def _get_current_obs_from_env(env: Any) -> Any:
-    """
-    pygame loop steps SnakeGame directly; we only read env's current obs.
-    """
-    if hasattr(env, "get_obs"):
-        return env.get_obs()
-    if hasattr(env, "_get_obs"):
-        return env._get_obs()  # noqa: SLF001
-    if hasattr(env, "observe"):
-        return env.observe()
-    raise AttributeError(
-        "Env does not expose an observation getter. Expected one of: get_obs(), _get_obs(), observe()."
-    )
-
-
-# -----------------------------------------------------------------------------#
-# Frame stacking wrappers for WATCH (single-env, non-VecEnv)
-# -----------------------------------------------------------------------------#
-
-
-class BoxFrameStackWrapper:
-    """
-    Single-env wrapper: stack Box obs shaped (C,H,W) along channel axis -> (C*n_stack,H,W).
-    """
-
-    def __init__(self, env: Any, *, n_stack: int):
-        self.env = env
-        self.n_stack = int(n_stack)
-
-        obs_space = getattr(env, "observation_space", None)
-        if not isinstance(obs_space, spaces.Box):
-            raise TypeError("BoxFrameStackWrapper requires Box observation_space")
-        if obs_space.shape is None or len(obs_space.shape) != 3:
-            raise TypeError(f"Expected Box shape (C,H,W), got {obs_space.shape}")
-
-        c, h, w = map(int, obs_space.shape)
-        self._c = c
-        self._h = h
-        self._w = w
-
-        def _stack_bounds(x):
-            if np.isscalar(x):
-                return x
-            arr = np.asarray(x)  # (C,H,W)
-            return np.tile(arr, (self.n_stack, 1, 1))  # (C*n_stack,H,W)
-
-        self.observation_space = spaces.Box(
-            low=_stack_bounds(obs_space.low),
-            high=_stack_bounds(obs_space.high),
-            shape=(c * self.n_stack, h, w),
-            dtype=obs_space.dtype,
-        )
-        self.action_space = getattr(env, "action_space", None)
-
-        self._buf: Optional[np.ndarray] = None  # (C*n_stack,H,W)
-
-    def reset(self, *args, **kwargs):
-        if hasattr(self.env, "reset"):
-            out = self.env.reset(*args, **kwargs)
-        else:
-            out = None
-        obs = _get_current_obs_from_env(self.env)
-        _ = self._reset_buf(obs)
-        return out if out is not None else obs
-
-    def close(self):
-        if hasattr(self.env, "close"):
-            return self.env.close()
-        return None
-
-    def _reset_buf(self, obs: Any):
-        pix = np.asarray(obs)
-        if pix.shape != (self._c, self._h, self._w):
-            raise ValueError(f"Expected obs shape {(self._c, self._h, self._w)}, got {pix.shape}")
-
-        stacked = np.concatenate([pix] * self.n_stack, axis=0)
-        if self._buf is None or self._buf.shape != stacked.shape or self._buf.dtype != stacked.dtype:
-            self._buf = np.zeros_like(stacked)
-        self._buf[...] = stacked
-        return self._buf.copy()
-
-    def _update_buf(self, obs: Any):
-        pix = np.asarray(obs)
-        if self._buf is None:
-            return self._reset_buf(pix)
-
-        c = self._c
-        self._buf[:-c, :, :] = self._buf[c:, :, :]
-        self._buf[-c:, :, :] = pix
-        return self._buf.copy()
-
-    def get_obs(self):
-        obs = _get_current_obs_from_env(self.env)
-        return self._update_buf(obs)
-
-    def __getattr__(self, name: str):
-        return getattr(self.env, name)
-
-
-# -----------------------------------------------------------------------------#
-# CLI
-# -----------------------------------------------------------------------------#
-
-
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Watch a trained PPO agent play Snake (pygame).")
     p.add_argument("--run", type=str, required=True)
-    p.add_argument("--which", type=str, default="auto", choices=["auto", "latest", "best", "final"])
+    p.add_argument("--which", type=str, default="best", choices=["auto", "latest", "best", "final"])
     p.add_argument("--reload", type=float, default=0.0, help="If >0, poll for newer checkpoint every N seconds.")
     p.add_argument("--fps", type=int, default=12)
-    p.add_argument("--pixel-size", type=int, default=16)
+    p.add_argument("--pixel-size", type=int, default=8)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="auto")
-    p.add_argument("--debug-steps", type=int, default=60, help="Print per-step debug for first N steps.")
     return p.parse_args()
-
-
-# -----------------------------------------------------------------------------#
-# Main
-# -----------------------------------------------------------------------------#
 
 
 def main() -> None:
@@ -254,96 +138,76 @@ def main() -> None:
 
     cfg_d = _load_run_cfg_minimal(run_dir)
 
+    # --- load model (and allow hot reload) ---
     current_ckpt = _pick_checkpoint(run_dir=run_dir, which=args.which)
     current_mtime = current_ckpt.stat().st_mtime
     model = _load_model(current_ckpt, device=str(args.device))
+    print(f"[watch] loaded checkpoint: {current_ckpt}", flush=True)
 
+    # --- build the EXACT same env object (game instance is what pygame renders) ---
     game = _make_game_from_cfg_d(cfg_d, seed=int(args.seed))
     env_cls = _get_env_cls_from_cfg_d(cfg_d)
-
     env_params = dict(cast(dict[str, Any], cfg_d["env"]).get("params", {}))
-    env = env_cls(game, **env_params)
-    env.reset(seed=int(args.seed))
 
-    # ---- frame stacking (watch mirrors training config) ----
+    base_env = env_cls(game, **env_params)
+
+    # --- make it a 1-env VecEnv so we can reuse the SAME wrappers as training ---
+    vec_env = DummyVecEnv([lambda: base_env])
+    vec_env = VecMonitor(vec_env)
+
     n_stack = _get_n_stack_from_cfg_d(cfg_d)
     if n_stack > 1:
-        obs_space = env.observation_space
+        obs_space = vec_env.observation_space
         if isinstance(obs_space, spaces.Box):
-            env = BoxFrameStackWrapper(env, n_stack=n_stack)
-
-    # ---- startup debug ----
-    print("[watch][dbg] run_dir:", run_dir, flush=True)
-    print("[watch][dbg] checkpoint:", current_ckpt, flush=True)
-    print("[watch][dbg] env cfg:", cfg_d.get("env"), flush=True)
-    print("[watch][dbg] observation cfg:", cfg_d.get("observation"), flush=True)
-    print("[watch][dbg] n_stack:", n_stack, flush=True)
-    print("[watch][dbg] env.observation_space:", getattr(env, "observation_space", None), flush=True)
-    print("[watch][dbg] policy obs_space:", getattr(model.policy, "observation_space", None), flush=True)
-    print("[watch][dbg] RelativeDirection import:", "OK" if RelativeDirection is not None else "MISSING", flush=True)
-
-    step_counter = {"n": 0}
-
-    def action_fn(_game: SnakeGame):
-        nonlocal model, current_ckpt, current_mtime
-
-        # Reload can happen mid-episode (intentionally).
-        if args.reload and args.reload > 0:
-            try:
-                chosen = _pick_checkpoint(run_dir=run_dir, which=args.which)
-                mtime = chosen.stat().st_mtime
-                if chosen != current_ckpt or mtime > current_mtime:
-                    model = _load_model(chosen, device=str(args.device))
-                    current_ckpt = chosen
-                    current_mtime = mtime
-                    print(f"[watch] reloaded: {chosen}", flush=True)
-            except Exception as e:
-                print("[watch][dbg] reload error:", repr(e), flush=True)
-            time.sleep(float(args.reload))
-
-        obs = _get_current_obs_from_env(env)
-        obs_for_model = sanitize_observation(obs)
-
-        action, _ = model.predict(obs_for_model, deterministic=True)
-        a = int(np.asarray(action).item())
-
-        # Convert to SAME semantic as training (RelativeDirection)
-        if RelativeDirection is None:
-            rel = a  # fallback, but this is likely wrong for pygame loop
+            vec_env = VecFrameStack(vec_env, n_stack=n_stack)
+        elif isinstance(obs_space, spaces.Dict):
+            vec_env = DictPixelVecFrameStack(vec_env, n_stack=n_stack, pixel_key="pixel")
         else:
-            rel = RelativeDirection(a)
+            raise TypeError(f"Unsupported observation_space type for stacking: {type(obs_space)}")
 
-        if step_counter["n"] < int(args.debug_steps):
-            try:
-                head = getattr(game, "snake")[0]
-                head_xy = (int(getattr(head, "x")), int(getattr(head, "y")))
-            except Exception:
-                head_xy = None
+    # Initial reset gives us the correct stacked vec observation (shape has leading batch dim = 1)
+    obs = vec_env.reset()
 
-            try:
-                d = getattr(game, "direction", None)
-                d_val = getattr(d, "value", d)
-            except Exception:
-                d_val = None
+    reload_state = {"last_check": 0.0}
 
-            try:
-                score = int(getattr(game, "score", -1))
-            except Exception:
-                score = -1
+    def step_fn() -> None:
+        nonlocal model, current_ckpt, current_mtime, obs
 
-            if isinstance(obs, np.ndarray):
-                obs_shape = obs.shape
-            else:
-                obs_shape = {k: np.asarray(v).shape for k, v in cast(dict, obs).items()}
+        # Non-blocking checkpoint polling (never sleep inside pygame loop)
+        if args.reload and args.reload > 0:
+            now = time.time()
+            if (now - reload_state["last_check"]) >= float(args.reload):
+                reload_state["last_check"] = now
+                try:
+                    chosen = _pick_checkpoint(run_dir=run_dir, which=args.which)
+                    mtime = chosen.stat().st_mtime
+                    if chosen != current_ckpt or mtime > current_mtime:
+                        model = _load_model(chosen, device=str(args.device))
+                        current_ckpt = chosen
+                        current_mtime = mtime
+                        print(f"[watch] reloaded checkpoint: {chosen}", flush=True)
+                except Exception as e:
+                    print("[watch] reload error:", repr(e), flush=True)
 
-            print(
-                f"[watch][dbg] step={step_counter['n']:04d} "
-                f"action={a} rel={rel} dir={d_val} head={head_xy} score={score} obs={obs_shape}",
-                flush=True,
-            )
+        # VecObs -> model
+        obs_for_model = sanitize_observation(obs)
+        action, _ = model.predict(obs_for_model, deterministic=True)
 
-        step_counter["n"] += 1
-        return rel
+        # VecEnv step expects batched action for n_envs=1
+        if np.isscalar(action):
+            act = np.array([int(action)], dtype=np.int64)
+        else:
+            act = np.asarray(action, dtype=np.int64).reshape((1,))
+
+        obs_next, _reward, dones, _infos = vec_env.step(act)
+
+        # Gymnasium VecEnv returns dones as array-like of shape (n_envs,)
+        done0 = bool(np.asarray(dones).reshape((-1,))[0])
+
+        if done0:
+            obs = vec_env.reset()
+        else:
+            obs = obs_next
 
     run_pygame_app(
         game=game,
@@ -353,11 +217,10 @@ def main() -> None:
             caption=f"Snake (watch: {run_dir.name} / {args.which})",
             enable_human_input=False,
         ),
-        action_fn=action_fn,
+        step_fn=step_fn,
     )
 
-    if hasattr(env, "close"):
-        env.close()
+    vec_env.close()
 
 
 if __name__ == "__main__":
