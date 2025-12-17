@@ -18,11 +18,7 @@ from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snakegame import SnakeGame
 from snake_rl.training.eval_utils import sanitize_observation
 
-# Reuse the SAME dict frame stack wrapper as training (VecEnv wrapper).
-# This name assumes your training code defines it in env_factory.py.
-# If it's located elsewhere, adjust the import path accordingly.
 from snake_rl.training.env_factory import DictPixelVecFrameStack  # type: ignore
-
 
 def _find_repo_root(start: Path) -> Path:
     for p in [start, *start.parents]:
