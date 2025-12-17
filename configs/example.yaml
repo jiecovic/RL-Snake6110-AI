@@ -38,6 +38,18 @@ ppo:
   gamma: 0.999
   ent_coef: 0.03
   learning_rate: 3e-4
+
+  gae_lambda: 0.95        # bias/variance tradeoff for advantage estimation
+  clip_range: 0.1         # PPO clipping; 0.1 is often more stable for Atari-like CNNs
+  vf_coef: 0.5            # value loss weight (default is fine, but make it explicit)
+  max_grad_norm: 0.5      # gradient clipping (default is fine, but make it explicit)
+
+  # stability / early-warning:
+  target_kl: 0.03         # optional: stops updates when KL gets too large (prevents collapse)
+
+  # normalization / reward scale:
+  normalize_advantage: true  # usually good; SB3 default is True in recent versions but pin it
+
   verbose: 0
 
 eval:

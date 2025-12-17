@@ -103,7 +103,6 @@ pip install .  # to install the current package and its dependencies
 2. **To install dependencies from `pyproject.toml`:**
 ```bash
 pip install --upgrade setuptools pip
-pip install -r requirements.txt  # If you are using a requirements file.
 ```
 
 ### Install PyTorch with CUDA (GPU Support):

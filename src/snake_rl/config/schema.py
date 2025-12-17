@@ -25,7 +25,7 @@ class LevelConfig:
 @dataclass(frozen=True)
 class EnvConfig:
     id: str
-    # Parameters passed to the selected env constructor (e.g. view_radius for pov envs).
+    # Parameters passed to the selected env constructor (e.g. view_radius for POV envs).
     params: dict[str, Any] = field(default_factory=dict)
 
 
@@ -36,7 +36,6 @@ class FrameStackConfig:
 
     n_frames = 1 means no stacking.
     """
-
     n_frames: int = 1
 
 
@@ -62,13 +61,13 @@ class ModelConfig:
 
 @dataclass(frozen=True)
 class PPOConfig:
-    n_steps: int
-    batch_size: int
-    n_epochs: int
-    gamma: float
-    ent_coef: float
-    learning_rate: float
-    verbose: int
+    """
+    Pass-through Stable-Baselines3 PPO kwargs.
+
+    Users can add any SB3 PPO kwargs in YAML without changing Python code.
+    Missing keys are fine: SB3 defaults apply.
+    """
+    params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

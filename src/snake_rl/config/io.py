@@ -31,14 +31,14 @@ def _require(d: dict[str, Any], key: str, ctx: str) -> Any:
 def _as_int(v: Any, ctx: str) -> int:
     try:
         return int(v)
-    except Exception as e:
+    except (TypeError, ValueError) as e:
         raise TypeError(f"Expected int in {ctx}, got {type(v).__name__}: {v!r}") from e
 
 
 def _as_float(v: Any, ctx: str) -> float:
     try:
         return float(v)
-    except Exception as e:
+    except (TypeError, ValueError) as e:
         raise TypeError(f"Expected float in {ctx}, got {type(v).__name__}: {v!r}") from e
 
 
@@ -92,7 +92,9 @@ def _parse_eval_phase(d: Any, ctx: str, defaults: EvalPhaseConfig) -> EvalPhaseC
         else _as_bool(d["deterministic"], f"{ctx}.deterministic")
     )
     seed_offset = (
-        defaults.seed_offset if "seed_offset" not in d else _as_int(d["seed_offset"], f"{ctx}.seed_offset")
+        defaults.seed_offset
+        if "seed_offset" not in d
+        else _as_int(d["seed_offset"], f"{ctx}.seed_offset")
     )
 
     return EvalPhaseConfig(
@@ -118,15 +120,23 @@ def _parse_frame_stack(d: Any, ctx: str) -> FrameStackConfig:
 
 
 def _parse_env_params(env_d: dict[str, Any]) -> dict[str, Any]:
-    """
-    Parse env.params (new), allow missing.
-    """
     params_v = env_d.get("params", {})
     if params_v is None:
         return {}
     if not isinstance(params_v, dict):
         raise TypeError("Expected 'env.params' to be a dict")
     return cast(dict[str, Any], params_v)
+
+
+def _parse_ppo_params(ppo_d: dict[str, Any]) -> dict[str, Any]:
+    """
+    Pass-through PPO kwargs.
+
+    We intentionally do NOT validate keys here, because SB3 kwargs evolve and we
+    want configs to be forward-compatible. SB3 will raise a clear TypeError if
+    an unknown kwarg is provided.
+    """
+    return dict(ppo_d)
 
 
 def parse_config(data: dict[str, Any]) -> TrainConfig:
@@ -178,7 +188,6 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
     frame_stack = _parse_frame_stack(obs_d.get("frame_stack", None), "observation.frame_stack")
 
     # Merge back-compat env kwargs into env.params, without overwriting explicit env.params.
-    # This lets old configs keep working while we move everything env-specific into env.params.
     merged_env_params = dict(cast(dict[str, Any], obs_params_v))
     merged_env_params.update(env_params)
 
@@ -224,20 +233,11 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
         net_arch=net_arch,
     )
 
-    # --- ppo ---
-    ppo_d = _require(data, "ppo", "root")
-    if not isinstance(ppo_d, dict):
+    # --- ppo (pass-through) ---
+    ppo_v = _require(data, "ppo", "root")
+    if not isinstance(ppo_v, dict):
         raise TypeError("Expected 'ppo' to be a dict")
-
-    ppo = PPOConfig(
-        n_steps=_as_int(_require(ppo_d, "n_steps", "ppo"), "ppo.n_steps"),
-        batch_size=_as_int(_require(ppo_d, "batch_size", "ppo"), "ppo.batch_size"),
-        n_epochs=_as_int(_require(ppo_d, "n_epochs", "ppo"), "ppo.n_epochs"),
-        gamma=_as_float(_require(ppo_d, "gamma", "ppo"), "ppo.gamma"),
-        ent_coef=_as_float(_require(ppo_d, "ent_coef", "ppo"), "ppo.ent_coef"),
-        learning_rate=_as_float(_require(ppo_d, "learning_rate", "ppo"), "ppo.learning_rate"),
-        verbose=_as_int(_require(ppo_d, "verbose", "ppo"), "ppo.verbose"),
-    )
+    ppo = PPOConfig(params=_parse_ppo_params(ppo_v))
 
     # --- eval (optional) ---
     eval_defaults = EvalConfig()
@@ -286,13 +286,13 @@ def load_config(path: str | Path) -> TrainConfig:
 
 
 def apply_overrides(
-        cfg: TrainConfig,
-        *,
-        seed: Optional[int] = None,
-        num_envs: Optional[int] = None,
-        total_timesteps: Optional[int] = None,
-        checkpoint_freq: Optional[int] = None,
-        resume_checkpoint: Optional[str] = None,
+    cfg: TrainConfig,
+    *,
+    seed: Optional[int] = None,
+    num_envs: Optional[int] = None,
+    total_timesteps: Optional[int] = None,
+    checkpoint_freq: Optional[int] = None,
+    resume_checkpoint: Optional[str] = None,
 ) -> TrainConfig:
     run = cfg.run
     if seed is not None:

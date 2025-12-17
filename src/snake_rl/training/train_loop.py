@@ -1,6 +1,7 @@
 # src/snake_rl/training/train_loop.py
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any, Optional
 
 import torch
 import yaml
+from rich.console import Console
 from stable_baselines3 import PPO
 from stable_baselines3.common.utils import set_random_seed
 
@@ -18,6 +20,107 @@ from snake_rl.training.eval_utils import evaluate_model
 from snake_rl.training.model_factory import make_or_load_model
 from snake_rl.training.resume import resolve_resume_arg
 from snake_rl.training.run_paths import RunPaths, make_run_paths
+
+
+def _fmt_int(x: int) -> str:
+    return f"{x:,}"
+
+
+def _fmt_float(x: float) -> str:
+    if x == 0.0:
+        return "0"
+    if 1e-3 <= abs(x) < 1e4:
+        return f"{x:.6g}"
+    return f"{x:.3e}"
+
+
+def _fmt_path(value: Any, *, repo_root: Path) -> str:
+    # Pretty-print paths relative to repo_root when possible.
+    if isinstance(value, Path):
+        p = value
+    elif isinstance(value, str):
+        try:
+            p = Path(value)
+        except Exception:
+            return str(value)
+    else:
+        return str(value)
+
+    try:
+        rp = p.resolve()
+        rr = repo_root.resolve()
+        rel = rp.relative_to(rr)
+        return str(rel)
+    except Exception:
+        return str(p)
+
+
+def _effective_ppo_init_kwargs(model: PPO) -> dict[str, Any]:
+    """
+    Return effective values for all PPO.__init__ parameters, as exposed by the model.
+
+    Note: not every ctor arg is necessarily stored as an attribute in SB3.
+    Those show as "<not_exposed>".
+    """
+    sig = inspect.signature(PPO.__init__)
+    keys = [k for k in sig.parameters.keys() if k != "self"]
+
+    out: dict[str, Any] = {}
+    for k in keys:
+        if k in {"policy", "env"}:
+            continue
+        if hasattr(model, k):
+            out[k] = getattr(model, k)
+        else:
+            out[k] = "<not_exposed>"
+    return out
+
+
+def log_ppo_params(
+        model: PPO,
+        cfg: TrainConfig,
+        *,
+        paths: RunPaths,
+        show_policy_network: bool = True,
+) -> None:
+    console = Console()
+    repo_root = paths.repo_root
+
+    console.print("[bold magenta]PPO Effective Params (SB3):[/bold magenta]")
+    eff = _effective_ppo_init_kwargs(model)
+
+    for k in sorted(eff.keys()):
+        v = eff[k]
+        if isinstance(v, float):
+            vs = _fmt_float(v)
+        elif isinstance(v, int):
+            vs = _fmt_int(v)
+        elif isinstance(v, (str, Path)) and (("log" in k) or ("path" in k) or k.endswith("_dir")):
+            vs = _fmt_path(v, repo_root=repo_root)
+        else:
+            vs = str(v)
+        console.print(f"  [green]{k}:[/green] {vs}")
+
+    if show_policy_network:
+        policy = model.policy
+        console.print("[bold magenta]Policy Network (detailed):[/bold magenta]")
+        console.print(f"  [green]policy_class:[/green] {policy.__class__.__name__}")
+
+        if hasattr(policy, "features_extractor"):
+            console.print("  [green]features_extractor:[/green]")
+            console.print(policy.features_extractor)
+
+        if hasattr(policy, "mlp_extractor"):
+            console.print("  [green]mlp_extractor:[/green]")
+            console.print(policy.mlp_extractor)
+
+        if hasattr(policy, "action_net"):
+            console.print("  [green]action_net:[/green]")
+            console.print(policy.action_net)
+
+        if hasattr(policy, "value_net"):
+            console.print("  [green]value_net:[/green]")
+            console.print(policy.value_net)
 
 
 def _to_effective_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
@@ -43,9 +146,13 @@ def _to_effective_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
         },
         "env": {
             "id": str(cfg.env.id),
+            "params": dict(cfg.env.params),
         },
         "observation": {
             "params": dict(cfg.observation.params),
+            "frame_stack": {
+                "n_frames": int(cfg.observation.frame_stack.n_frames),
+            },
         },
         "model": {
             "features_extractor": {
@@ -56,21 +163,12 @@ def _to_effective_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             },
             "net_arch": [int(x) for x in cfg.model.net_arch],
         },
-        "ppo": {
-            "n_steps": int(cfg.ppo.n_steps),
-            "batch_size": int(cfg.ppo.batch_size),
-            "n_epochs": int(cfg.ppo.n_epochs),
-            "gamma": float(cfg.ppo.gamma),
-            "ent_coef": float(cfg.ppo.ent_coef),
-            "learning_rate": float(cfg.ppo.learning_rate),
-            "verbose": int(cfg.ppo.verbose),
-        },
+        "ppo": dict(cfg.ppo.params),
     }
 
     if cfg.run.resume_checkpoint is not None:
         d["run"]["resume_checkpoint"] = str(cfg.run.resume_checkpoint)
 
-    # Always write eval (even if defaults) so the run artifact is explicit/reproducible.
     d["eval"] = {
         "intermediate": {
             "enabled": bool(cfg.eval.intermediate.enabled),
@@ -92,13 +190,11 @@ def _to_effective_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
 def save_manifest(*, run_dir: Path, cfg: TrainConfig) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # Machine-friendly normalized dump (dataclass schema).
     (run_dir / "config_resolved.json").write_text(
         json.dumps(asdict(cfg), indent=2, sort_keys=True),
         encoding="utf-8",
     )
 
-    # Human-friendly rerunnable config (input YAML schema).
     (run_dir / "config_effective.yaml").write_text(
         yaml.safe_dump(
             _to_effective_yaml_dict(cfg),
@@ -136,6 +232,9 @@ def train(*, cfg: TrainConfig, resume_override: Optional[str] = None) -> RunPath
         resume_path=resume_path,
     )
 
+    # Log effective PPO params + policy network (CNN, heads, etc.)
+    log_ppo_params(model, cfg, paths=paths, show_policy_network=True)
+
     callbacks = make_callbacks(
         cfg=cfg,
         checkpoint_dir=paths.checkpoint_dir,
@@ -156,11 +255,9 @@ def train(*, cfg: TrainConfig, resume_override: Optional[str] = None) -> RunPath
         tb_log_name="ppo",
     )
 
-    # Optional: keep an explicit final artifact, even though latest.zip exists.
     final_path = paths.checkpoint_dir / "final.zip"
     model.save(str(final_path))
 
-    # Final "serious" eval (optional, cfg-driven)
     if bool(cfg.eval.final.enabled):
         seed_base = int(cfg.run.seed) + int(cfg.eval.final.seed_offset)
         metrics = evaluate_model(
@@ -173,7 +270,6 @@ def train(*, cfg: TrainConfig, resume_override: Optional[str] = None) -> RunPath
         metrics["phase"] = "final"
         metrics["timesteps"] = int(cfg.run.total_timesteps)
 
-        # Write a stable JSON summary + also append to history JSONL
         (paths.run_dir / "eval_final.json").write_text(
             json.dumps(metrics, indent=2, sort_keys=True),
             encoding="utf-8",
