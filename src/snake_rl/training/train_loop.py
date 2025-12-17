@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import torch
+import yaml
 from stable_baselines3 import PPO
 from stable_baselines3.common.utils import set_random_seed
 
@@ -19,10 +20,92 @@ from snake_rl.training.resume import resolve_resume_arg
 from snake_rl.training.run_paths import RunPaths, make_run_paths
 
 
+def _to_effective_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
+    """
+    Convert the parsed TrainConfig (dataclass schema) back into the input YAML schema.
+
+    Motivation:
+    - config_resolved.json is a normalized dataclass dump (machine-friendly).
+    - config_effective.yaml should be rerunnable as an input config (human-friendly).
+    """
+    d: dict[str, Any] = {
+        "run": {
+            "name": cfg.run.name,
+            "seed": int(cfg.run.seed),
+            "num_envs": int(cfg.run.num_envs),
+            "total_timesteps": int(cfg.run.total_timesteps),
+            "checkpoint_freq": int(cfg.run.checkpoint_freq),
+        },
+        "level": {
+            "height": int(cfg.level.height),
+            "width": int(cfg.level.width),
+            "food_count": int(cfg.level.food_count),
+        },
+        "env": {
+            "id": str(cfg.env.id),
+        },
+        "observation": {
+            "params": dict(cfg.observation.params),
+        },
+        "model": {
+            "features_extractor": {
+                "cnn": {
+                    "type": str(cfg.model.cnn.type),
+                    "features_dim": int(cfg.model.cnn.features_dim),
+                }
+            },
+            "net_arch": [int(x) for x in cfg.model.net_arch],
+        },
+        "ppo": {
+            "n_steps": int(cfg.ppo.n_steps),
+            "batch_size": int(cfg.ppo.batch_size),
+            "n_epochs": int(cfg.ppo.n_epochs),
+            "gamma": float(cfg.ppo.gamma),
+            "ent_coef": float(cfg.ppo.ent_coef),
+            "learning_rate": float(cfg.ppo.learning_rate),
+            "verbose": int(cfg.ppo.verbose),
+        },
+    }
+
+    if cfg.run.resume_checkpoint is not None:
+        d["run"]["resume_checkpoint"] = str(cfg.run.resume_checkpoint)
+
+    # Always write eval (even if defaults) so the run artifact is explicit/reproducible.
+    d["eval"] = {
+        "intermediate": {
+            "enabled": bool(cfg.eval.intermediate.enabled),
+            "episodes": int(cfg.eval.intermediate.episodes),
+            "deterministic": bool(cfg.eval.intermediate.deterministic),
+            "seed_offset": int(cfg.eval.intermediate.seed_offset),
+        },
+        "final": {
+            "enabled": bool(cfg.eval.final.enabled),
+            "episodes": int(cfg.eval.final.episodes),
+            "deterministic": bool(cfg.eval.final.deterministic),
+            "seed_offset": int(cfg.eval.final.seed_offset),
+        },
+    }
+
+    return d
+
+
 def save_manifest(*, run_dir: Path, cfg: TrainConfig) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Machine-friendly normalized dump (dataclass schema).
     (run_dir / "config_resolved.json").write_text(
         json.dumps(asdict(cfg), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    # Human-friendly rerunnable config (input YAML schema).
+    (run_dir / "config_effective.yaml").write_text(
+        yaml.safe_dump(
+            _to_effective_yaml_dict(cfg),
+            sort_keys=False,
+            default_flow_style=False,
+            allow_unicode=True,
+        ),
         encoding="utf-8",
     )
 

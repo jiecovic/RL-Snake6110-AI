@@ -4,9 +4,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Optional
 
 from stable_baselines3 import PPO
-from tqdm.auto import tqdm
+
+try:
+    from tqdm.rich import tqdm  # type: ignore
+except Exception:  # pragma: no cover
+    from tqdm.auto import tqdm
 
 from snake_rl.config.io import load_config
 from snake_rl.training.eval_utils import evaluate_model
@@ -16,7 +21,15 @@ from snake_rl.utils.paths import repo_root
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Evaluate a trained Snake PPO checkpoint/model.")
-    p.add_argument("--config", type=str, default="configs/example.yaml", help="Path to YAML config.")
+    p.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help=(
+            "Path to YAML config. If omitted and --model points to a run under experiments/, "
+            "we will prefer experiments/<run_id>/config_effective.yaml."
+        ),
+    )
     p.add_argument(
         "--model",
         type=str,
@@ -39,12 +52,39 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _infer_run_dir_from_model_path(model_path: Path) -> Optional[Path]:
+    # If model_path looks like: experiments/<run_id>/checkpoints/<name>.zip
+    # then run_dir is parent of checkpoints.
+    try:
+        if model_path.parent.name == "checkpoints":
+            return model_path.parent.parent
+    except Exception:
+        pass
+    return None
+
+
+def _pick_config_path(args_config: Optional[str], *, model_path: Path) -> Path:
+    if args_config:
+        return Path(args_config)
+
+    run_dir = _infer_run_dir_from_model_path(model_path)
+    if run_dir is not None:
+        eff = run_dir / "config_effective.yaml"
+        if eff.is_file():
+            return eff
+
+    # Safe fallback for standalone eval usage
+    return Path("configs/example.yaml")
+
+
 def main() -> None:
     args = _parse_args()
-    cfg = load_config(Path(args.config))
 
     experiments_root = repo_root() / "experiments"
     model_path = resolve_resume_arg(str(args.model), experiments_root)
+
+    cfg_path = _pick_config_path(args.config, model_path=model_path)
+    cfg = load_config(cfg_path)
 
     model = PPO.load(str(model_path))
 
@@ -90,6 +130,7 @@ def main() -> None:
 
     metrics["phase"] = "manual"
     metrics["model_path"] = str(model_path)
+    metrics["config_path"] = str(cfg_path)
     metrics["best_metric"] = best_metric
     metrics["best_value"] = best_value
 

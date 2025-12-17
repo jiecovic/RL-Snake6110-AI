@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from collections import deque
-from typing import Deque, Optional
+from typing import Optional
 
 import numpy as np
 
@@ -78,32 +77,6 @@ class PixelObsEnvBase(ABC):
             vision = np.rot90(vision, k=3)
 
         return vision.astype(np.uint8, copy=False)
-
-
-class PixelStacker:
-    """
-    Simple env-side frame stacker for dict observations.
-
-    For Box-only pixel envs, prefer SB3's VecFrameStack to avoid extra boilerplate.
-    """
-
-    def __init__(self, *, n_stack: int, frame_shape: tuple[int, int]):
-        self.n_stack = int(n_stack)
-        self._frames: Deque[np.ndarray] = deque(maxlen=self.n_stack)
-
-        h, w = frame_shape
-        zero = np.zeros((h, w), dtype=np.uint8)
-        for _ in range(self.n_stack):
-            self._frames.append(zero)
-
-    def reset_with(self, frame: np.ndarray) -> None:
-        self._frames.clear()
-        for _ in range(self.n_stack):
-            self._frames.append(frame.astype(np.uint8, copy=False))
-
-    def push_and_stack(self, frame: np.ndarray) -> np.ndarray:
-        self._frames.append(frame.astype(np.uint8, copy=False))
-        return np.stack(list(self._frames), axis=0).astype(np.uint8, copy=False)
 
 
 class FillFeature:

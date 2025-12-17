@@ -16,11 +16,13 @@ level:
   food_count: 1
 
 env:
-  id: pov_pixel                 # env class selector (ENV_REGISTRY key)
-
-observation:
+  id: pov_pixel
   params:
     view_radius: 10
+
+observation:
+  frame_stack:
+    n_frames: 2
 
 model:
   features_extractor:

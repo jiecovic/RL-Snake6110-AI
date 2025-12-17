@@ -12,6 +12,7 @@ from snake_rl.config.schema import (
     EnvConfig,
     EvalConfig,
     EvalPhaseConfig,
+    FrameStackConfig,
     LevelConfig,
     ModelConfig,
     ObservationConfig,
@@ -85,8 +86,14 @@ def _parse_eval_phase(d: Any, ctx: str, defaults: EvalPhaseConfig) -> EvalPhaseC
 
     enabled = defaults.enabled if "enabled" not in d else _as_bool(d["enabled"], f"{ctx}.enabled")
     episodes = defaults.episodes if "episodes" not in d else _as_int(d["episodes"], f"{ctx}.episodes")
-    deterministic = defaults.deterministic if "deterministic" not in d else _as_bool(d["deterministic"], f"{ctx}.deterministic")
-    seed_offset = defaults.seed_offset if "seed_offset" not in d else _as_int(d["seed_offset"], f"{ctx}.seed_offset")
+    deterministic = (
+        defaults.deterministic
+        if "deterministic" not in d
+        else _as_bool(d["deterministic"], f"{ctx}.deterministic")
+    )
+    seed_offset = (
+        defaults.seed_offset if "seed_offset" not in d else _as_int(d["seed_offset"], f"{ctx}.seed_offset")
+    )
 
     return EvalPhaseConfig(
         enabled=enabled,
@@ -94,6 +101,32 @@ def _parse_eval_phase(d: Any, ctx: str, defaults: EvalPhaseConfig) -> EvalPhaseC
         deterministic=deterministic,
         seed_offset=seed_offset,
     )
+
+
+def _parse_frame_stack(d: Any, ctx: str) -> FrameStackConfig:
+    if d is None:
+        return FrameStackConfig()
+
+    if not isinstance(d, dict):
+        raise TypeError(f"Expected '{ctx}' to be a dict")
+
+    n_frames = 1 if "n_frames" not in d else _as_int(d["n_frames"], f"{ctx}.n_frames")
+    if n_frames <= 0:
+        raise ValueError(f"{ctx}.n_frames must be >= 1, got {n_frames}")
+
+    return FrameStackConfig(n_frames=n_frames)
+
+
+def _parse_env_params(env_d: dict[str, Any]) -> dict[str, Any]:
+    """
+    Parse env.params (new), allow missing.
+    """
+    params_v = env_d.get("params", {})
+    if params_v is None:
+        return {}
+    if not isinstance(params_v, dict):
+        raise TypeError("Expected 'env.params' to be a dict")
+    return cast(dict[str, Any], params_v)
 
 
 def parse_config(data: dict[str, Any]) -> TrainConfig:
@@ -127,20 +160,38 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
     if not isinstance(env_d, dict):
         raise TypeError("Expected 'env' to be a dict")
 
-    env = EnvConfig(
-        id=str(_require(env_d, "id", "env")),
-    )
+    env_id = str(_require(env_d, "id", "env"))
+    env_params = _parse_env_params(env_d)
 
     # --- observation ---
     obs_d = _require(data, "observation", "root")
     if not isinstance(obs_d, dict):
         raise TypeError("Expected 'observation' to be a dict")
 
-    params_v = obs_d.get("params", {})
-    if not isinstance(params_v, dict):
+    # Back-compat: older configs placed env kwargs under observation.params.
+    obs_params_v = obs_d.get("params", {})
+    if obs_params_v is None:
+        obs_params_v = {}
+    if not isinstance(obs_params_v, dict):
         raise TypeError("Expected 'observation.params' to be a dict")
 
-    observation = ObservationConfig(params=cast(dict[str, Any], params_v))
+    frame_stack = _parse_frame_stack(obs_d.get("frame_stack", None), "observation.frame_stack")
+
+    # Merge back-compat env kwargs into env.params, without overwriting explicit env.params.
+    # This lets old configs keep working while we move everything env-specific into env.params.
+    merged_env_params = dict(cast(dict[str, Any], obs_params_v))
+    merged_env_params.update(env_params)
+
+    env = EnvConfig(
+        id=env_id,
+        params=merged_env_params,
+    )
+
+    # Keep observation.params for now (back-compat), but it should no longer be used as env kwargs.
+    observation = ObservationConfig(
+        params=cast(dict[str, Any], obs_params_v),
+        frame_stack=frame_stack,
+    )
 
     # --- model ---
     model_d = _require(data, "model", "root")
@@ -196,8 +247,16 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
     else:
         if not isinstance(eval_d, dict):
             raise TypeError("Expected 'eval' to be a dict")
-        intermediate = _parse_eval_phase(eval_d.get("intermediate", None), "eval.intermediate", eval_defaults.intermediate)
-        final = _parse_eval_phase(eval_d.get("final", None), "eval.final", eval_defaults.final)
+        intermediate = _parse_eval_phase(
+            eval_d.get("intermediate", None),
+            "eval.intermediate",
+            eval_defaults.intermediate,
+        )
+        final = _parse_eval_phase(
+            eval_d.get("final", None),
+            "eval.final",
+            eval_defaults.final,
+        )
         eval_cfg = EvalConfig(intermediate=intermediate, final=final)
 
     return TrainConfig(
@@ -211,8 +270,19 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
     )
 
 
-def load_config(path: str | Path) -> TrainConfig:
+def load_config_yaml(path: str | Path) -> TrainConfig:
+    """
+    Load a user-facing YAML config (input schema).
+
+    This must NOT be used to read experiments/<run_id>/config_resolved.json.
+    For reruns from a run directory, prefer experiments/<run_id>/config_effective.yaml.
+    """
     return parse_config(load_yaml(path))
+
+
+# Backwards-compatible alias (kept for now). Prefer load_config_yaml() in new code.
+def load_config(path: str | Path) -> TrainConfig:
+    return load_config_yaml(path)
 
 
 def apply_overrides(
