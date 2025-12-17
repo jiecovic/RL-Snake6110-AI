@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional, cast
 
 import yaml
 
@@ -11,15 +11,19 @@ from snake_rl.config.schema import (
     CNNConfig,
     EnvConfig,
     FeaturesExtractorConfig,
+    LevelConfig,
     ModelConfig,
     ObservationConfig,
+    ObservationType,
     PPOConfig,
     RunConfig,
     TrainConfig,
 )
 
+_ALLOWED_OBS_TYPES: set[str] = {"global", "egocentric", "layers"}
 
-def _require(d: Dict[str, Any], key: str, ctx: str) -> Any:
+
+def _require(d: dict[str, Any], key: str, ctx: str) -> Any:
     if key not in d:
         raise KeyError(f"Missing required key '{key}' in {ctx}")
     return d[key]
@@ -39,7 +43,17 @@ def _as_float(v: Any, ctx: str) -> float:
         raise TypeError(f"Expected float in {ctx}, got {type(v).__name__}: {v!r}") from e
 
 
-def load_yaml(path: str | Path) -> Dict[str, Any]:
+def _as_opt_str(v: Any, ctx: str) -> Optional[str]:
+    if v is None:
+        return None
+    # YAML can give numbers/bools/etc. Normalize aggressively.
+    try:
+        return str(v)
+    except Exception as e:
+        raise TypeError(f"Expected str|None in {ctx}, got {type(v).__name__}: {v!r}") from e
+
+
+def load_yaml(path: str | Path) -> dict[str, Any]:
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"Config file not found: {p}")
@@ -47,10 +61,10 @@ def load_yaml(path: str | Path) -> Dict[str, Any]:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):
         raise TypeError(f"Top-level YAML must be a mapping/dict, got: {type(data).__name__}")
-    return data
+    return cast(dict[str, Any], data)
 
 
-def parse_config(data: Dict[str, Any]) -> TrainConfig:
+def parse_config(data: dict[str, Any]) -> TrainConfig:
     # --- run ---
     run_d = _require(data, "run", "root")
     if not isinstance(run_d, dict):
@@ -62,7 +76,18 @@ def parse_config(data: Dict[str, Any]) -> TrainConfig:
         num_envs=_as_int(_require(run_d, "num_envs", "run"), "run.num_envs"),
         total_timesteps=_as_int(_require(run_d, "total_timesteps", "run"), "run.total_timesteps"),
         checkpoint_freq=_as_int(_require(run_d, "checkpoint_freq", "run"), "run.checkpoint_freq"),
-        resume_checkpoint=run_d.get("resume_checkpoint", None),
+        resume_checkpoint=_as_opt_str(run_d.get("resume_checkpoint", None), "run.resume_checkpoint"),
+    )
+
+    # --- level ---
+    level_d = _require(data, "level", "root")
+    if not isinstance(level_d, dict):
+        raise TypeError("Expected 'level' to be a dict")
+
+    level = LevelConfig(
+        height=_as_int(_require(level_d, "height", "level"), "level.height"),
+        width=_as_int(_require(level_d, "width", "level"), "level.width"),
+        food_count=_as_int(_require(level_d, "food_count", "level"), "level.food_count"),
     )
 
     # --- env ---
@@ -71,9 +96,8 @@ def parse_config(data: Dict[str, Any]) -> TrainConfig:
         raise TypeError("Expected 'env' to be a dict")
 
     env = EnvConfig(
-        height=_as_int(_require(env_d, "height", "env"), "env.height"),
-        width=_as_int(_require(env_d, "width", "env"), "env.width"),
-        food_count=_as_int(_require(env_d, "food_count", "env"), "env.food_count"),
+        id=str(_require(env_d, "id", "env")),
+        max_steps=_as_int(_require(env_d, "max_steps", "env"), "env.max_steps"),
     )
 
     # --- observation ---
@@ -81,10 +105,18 @@ def parse_config(data: Dict[str, Any]) -> TrainConfig:
     if not isinstance(obs_d, dict):
         raise TypeError("Expected 'observation' to be a dict")
 
+    obs_type_raw = str(_require(obs_d, "type", "observation"))
+    if obs_type_raw not in _ALLOWED_OBS_TYPES:
+        allowed = ", ".join(sorted(_ALLOWED_OBS_TYPES))
+        raise ValueError(f"Invalid observation.type={obs_type_raw!r}. Allowed: {allowed}")
+
+    params_v = obs_d.get("params", {})
+    if not isinstance(params_v, dict):
+        raise TypeError("Expected 'observation.params' to be a dict")
+
     observation = ObservationConfig(
-        render_mode=str(_require(obs_d, "render_mode", "observation")),
-        n_stack=_as_int(_require(obs_d, "n_stack", "observation"), "observation.n_stack"),
-        view_radius=_as_int(_require(obs_d, "view_radius", "observation"), "observation.view_radius"),
+        type=cast(ObservationType, obs_type_raw),
+        params=cast(dict[str, Any], params_v),
     )
 
     # --- model ---
@@ -102,7 +134,7 @@ def parse_config(data: Dict[str, Any]) -> TrainConfig:
 
     cnn = CNNConfig(
         type=str(_require(cnn_d, "type", "model.features_extractor.cnn")),
-        output_dim=_as_int(_require(cnn_d, "output_dim", "model.features_extractor.cnn"), "cnn.output_dim"),
+        features_dim=_as_int(_require(cnn_d, "features_dim", "model.features_extractor.cnn"), "cnn.features_dim"),
     )
 
     features_extractor = FeaturesExtractorConfig(
@@ -111,8 +143,8 @@ def parse_config(data: Dict[str, Any]) -> TrainConfig:
     )
 
     net_arch_v = _require(model_d, "net_arch", "model")
-    if not isinstance(net_arch_v, list) or not all(isinstance(x, (int, float, str)) for x in net_arch_v):
-        raise TypeError("Expected 'model.net_arch' to be a list of numbers")
+    if not isinstance(net_arch_v, list):
+        raise TypeError("Expected 'model.net_arch' to be a list of ints")
     net_arch = [_as_int(x, "model.net_arch[i]") for x in net_arch_v]
 
     model = ModelConfig(
@@ -137,6 +169,7 @@ def parse_config(data: Dict[str, Any]) -> TrainConfig:
 
     return TrainConfig(
         run=run,
+        level=level,
         env=env,
         observation=observation,
         model=model,
@@ -172,9 +205,3 @@ def apply_overrides(
     if run is cfg.run:
         return cfg
     return replace(cfg, run=run)
-
-
-def save_resolved_config(cfg_text: str, out_path: str | Path) -> None:
-    p = Path(out_path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(cfg_text, encoding="utf-8")

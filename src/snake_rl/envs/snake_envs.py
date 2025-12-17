@@ -1,7 +1,7 @@
 # snake_pixel_dir_obs_env.py
 import numpy as np
 from gymnasium import spaces
-from .base_snake_env import BaseSnakeEnv
+from .base import BaseSnakeEnv
 from collections import deque
 from typing import Dict, Optional, Tuple
 from src.snake_rl.game.geometry import Direction

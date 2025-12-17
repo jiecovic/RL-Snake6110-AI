@@ -11,7 +11,18 @@ description = "Snake game with RL experiments"
 requires-python = ">=3.10"
 
 dependencies = [
-    "pygame",
+    "numpy>=1.23",
+    "gymnasium>=0.29",
+    "stable-baselines3>=2.3",
+    "torch>=2.0",
+    "pygame>=2.5",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# Only needed for your run.py / visualization helpers (opencv, feature maps, etc.)
+viz = [
+    "opencv-python>=4.8",
 ]
 
 [tool.setuptools]
@@ -22,3 +33,4 @@ where = ["src"]
 
 [project.scripts]
 snake-play = "snake_rl.cli.play:main"
+snake-train = "snake_rl.cli.train:main"

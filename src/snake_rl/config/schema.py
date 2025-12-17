@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
+
+# Intentionally small + stable.
+# Type-specific validation (e.g. which observation.params are required) lives in env_factory / registries.
+ObservationType = Literal["global", "egocentric", "layers"]
 
 
 @dataclass(frozen=True)
@@ -16,23 +20,28 @@ class RunConfig:
 
 
 @dataclass(frozen=True)
-class EnvConfig:
+class LevelConfig:
     height: int
     width: int
     food_count: int
 
 
 @dataclass(frozen=True)
+class EnvConfig:
+    id: str
+    max_steps: int
+
+
+@dataclass(frozen=True)
 class ObservationConfig:
-    render_mode: Literal["none", "human", "rgb_array"]
-    n_stack: int
-    view_radius: int
+    type: ObservationType
+    params: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class CNNConfig:
     type: str
-    output_dim: int
+    features_dim: int
 
 
 @dataclass(frozen=True)
@@ -61,6 +70,7 @@ class PPOConfig:
 @dataclass(frozen=True)
 class TrainConfig:
     run: RunConfig
+    level: LevelConfig
     env: EnvConfig
     observation: ObservationConfig
     model: ModelConfig

@@ -1,41 +1,44 @@
+# configs/example.yaml
 # Example configuration for training a PPO agent on Snake
+# Training-only (headless). Human pygame play is handled by snake-play / watch scripts.
 
 run:
-  name: snake_ppo                 # Base name for logs and checkpoints
-  seed: 42                        # Global RNG seed
-  num_envs: 16                    # Parallel environments
-  total_timesteps: 100_000_000    # Total environment steps
-  checkpoint_freq: 1_000_000      # Checkpoint interval (steps)
-  resume_checkpoint: null         # Path or null to start fresh
+  name: snake_ppo
+  seed: 42
+  num_envs: 16
+  total_timesteps: 100_000_000
+  checkpoint_freq: 1_000_000
+  resume_checkpoint: null
 
+level:
+  height: 13
+  width: 22
+  food_count: 1
 
 env:
-  height: 13                      # Board height
-  width: 22                       # Board width
-  food_count: 1                  # Concurrent food items
+  id: pov_pixel                 # env class selector (ENV_REGISTRY key)
+  max_steps: 1_000              # episode truncation (RL wrapper concern)
 
-
+# NOTE: observation.type is currently informational only (not used for dispatch).
+# The actual env variant is selected via env.id, and the kwargs must match that env.
 observation:
-  render_mode: none               # none | human | rgb_array
-  n_stack: 1                      # Number of stacked frames
-  view_radius: 10                 # First-person view radius
-
+  type: egocentric
+  params:
+    view_radius: 10
 
 model:
   features_extractor:
-    type: combined                # Feature extractor (mapped in code)
+    type: combined
     cnn:
-      type: snake_simple          # CNN backbone
-      output_dim: 512             # CNN output feature size
-
-  net_arch: [256, 128]            # Policy/value MLP layers
-
+      type: tile4
+      features_dim: 512
+  net_arch: [256, 128]
 
 ppo:
-  n_steps: 2_048                  # Steps per env per rollout
-  batch_size: 128                 # PPO minibatch size
-  n_epochs: 2                     # PPO optimization epochs
-  gamma: 0.999                    # Discount factor
-  ent_coef: 0.03                  # Entropy bonus
-  learning_rate: 3e-4             # Optimizer learning rate
-  verbose: 0                      # SB3 verbosity
+  n_steps: 2048
+  batch_size: 128
+  n_epochs: 2
+  gamma: 0.999
+  ent_coef: 0.03
+  learning_rate: 3e-4
+  verbose: 0
