@@ -2,36 +2,35 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.policies import MultiInputActorCriticPolicy
 
+from snake_rl.config.schema import TrainConfig
 from snake_rl.models.cnns.registry import CNN_REGISTRY
 from snake_rl.models.sb3.extractors import CustomCombinedExtractor
 
 
-def build_policy_kwargs(*, cfg: Any, observation_space: spaces.Space) -> dict[str, Any]:
-    cnn_key = cfg.model.features_extractor.cnn.type
+def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) -> dict:
+    cnn_key = cfg.model.cnn.type
     if cnn_key not in CNN_REGISTRY:
-        raise KeyError(f"Unknown cnn.type={cnn_key!r}. Known: {sorted(CNN_REGISTRY.keys())}")
+        raise KeyError(f"Unknown model.cnn.type={cnn_key!r}. Known: {sorted(CNN_REGISTRY.keys())}")
 
     cnn_cls = CNN_REGISTRY[cnn_key]
-    features_dim = int(cfg.model.features_extractor.cnn.features_dim)
+    features_dim = int(cfg.model.cnn.features_dim)
 
-    # ---- CASE 1: Dict observation -> combined extractor
     if isinstance(observation_space, spaces.Dict):
         return {
             "net_arch": list(cfg.model.net_arch),
             "features_extractor_class": CustomCombinedExtractor,
             "features_extractor_kwargs": {
-                "cnn_output_dim": features_dim,
+                "cnn_features_dim": features_dim,
                 "cnn_extractor_class": cnn_cls,
             },
         }
 
-    # ---- CASE 2: Box observation -> CNN directly
     if isinstance(observation_space, spaces.Box):
         return {
             "net_arch": list(cfg.model.net_arch),
@@ -45,25 +44,17 @@ def build_policy_kwargs(*, cfg: Any, observation_space: spaces.Space) -> dict[st
 
 
 def make_or_load_model(
-        *,
-        cfg: Any,
-        vec_env: Any,
-        tensorboard_log: Path,
-        resume_path: Optional[Path],
+    *,
+    cfg: TrainConfig,
+    vec_env,
+    tensorboard_log: Path,
+    resume_path: Optional[Path],
 ) -> PPO:
     if resume_path is not None:
         return PPO.load(str(resume_path), env=vec_env)
 
-    policy_kwargs = build_policy_kwargs(
-        cfg=cfg,
-        observation_space=vec_env.observation_space,
-    )
-
-    policy = (
-        MultiInputActorCriticPolicy
-        if isinstance(vec_env.observation_space, spaces.Dict)
-        else "CnnPolicy"
-    )
+    policy_kwargs = build_policy_kwargs(cfg=cfg, observation_space=vec_env.observation_space)
+    policy = MultiInputActorCriticPolicy if isinstance(vec_env.observation_space, spaces.Dict) else "CnnPolicy"
 
     return PPO(
         policy=policy,

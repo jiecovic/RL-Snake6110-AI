@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from gymnasium.wrappers import TimeLimit
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
 
 from snake_rl.envs.registry import ENV_REGISTRY
@@ -27,7 +26,8 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
         env_cls = ENV_REGISTRY[str(cfg.env.id)]
         env = env_cls(game, **dict(cfg.observation.params))
 
-        env = TimeLimit(env, max_episode_steps=int(cfg.env.max_steps))
+        # IMPORTANT: Do not add TimeLimit here.
+        # Our reward design assumes episodes end only by true environment termination.
         env.reset(seed=int(seed))
         return env
 

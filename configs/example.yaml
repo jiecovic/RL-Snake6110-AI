@@ -7,7 +7,7 @@ run:
   seed: 42
   num_envs: 16
   total_timesteps: 100_000_000
-  checkpoint_freq: 1_000_000
+  checkpoint_freq: 100_000
   resume_checkpoint: null
 
 level:
@@ -17,18 +17,13 @@ level:
 
 env:
   id: pov_pixel                 # env class selector (ENV_REGISTRY key)
-  max_steps: 1_000              # episode truncation (RL wrapper concern)
 
-# NOTE: observation.type is currently informational only (not used for dispatch).
-# The actual env variant is selected via env.id, and the kwargs must match that env.
 observation:
-  type: egocentric
   params:
     view_radius: 10
 
 model:
   features_extractor:
-    type: combined
     cnn:
       type: tile4
       features_dim: 512
@@ -42,3 +37,19 @@ ppo:
   ent_coef: 0.03
   learning_rate: 3e-4
   verbose: 0
+
+eval:
+  intermediate:
+    enabled: true
+    episodes: 10
+    best_metric: mean_reward   # or: mean_score
+    deterministic: true
+    seed_offset: 10000
+
+  final:
+    enabled: true
+    episodes: 100
+    best_metric: mean_reward   # or: mean_score
+    deterministic: true
+    seed_offset: 20000
+

@@ -2,11 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
-
-# Intentionally small + stable.
-# Type-specific validation (e.g. which observation.params are required) lives in env_factory / registries.
-ObservationType = Literal["global", "egocentric", "layers"]
+from typing import Any, Optional
 
 
 @dataclass(frozen=True)
@@ -29,12 +25,10 @@ class LevelConfig:
 @dataclass(frozen=True)
 class EnvConfig:
     id: str
-    max_steps: int
 
 
 @dataclass(frozen=True)
 class ObservationConfig:
-    type: ObservationType
     params: dict[str, Any]
 
 
@@ -45,14 +39,8 @@ class CNNConfig:
 
 
 @dataclass(frozen=True)
-class FeaturesExtractorConfig:
-    type: str
-    cnn: CNNConfig
-
-
-@dataclass(frozen=True)
 class ModelConfig:
-    features_extractor: FeaturesExtractorConfig
+    cnn: CNNConfig
     net_arch: list[int]
 
 
@@ -68,6 +56,20 @@ class PPOConfig:
 
 
 @dataclass(frozen=True)
+class EvalPhaseConfig:
+    enabled: bool = False
+    episodes: int = 10
+    deterministic: bool = True
+    seed_offset: int = 10_000
+
+
+@dataclass(frozen=True)
+class EvalConfig:
+    intermediate: EvalPhaseConfig = EvalPhaseConfig()
+    final: EvalPhaseConfig = EvalPhaseConfig(enabled=True, episodes=100, seed_offset=20_000)
+
+
+@dataclass(frozen=True)
 class TrainConfig:
     run: RunConfig
     level: LevelConfig
@@ -75,3 +77,4 @@ class TrainConfig:
     observation: ObservationConfig
     model: ModelConfig
     ppo: PPOConfig
+    eval: EvalConfig = EvalConfig()

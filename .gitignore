@@ -215,3 +215,20 @@ __marimo__/
 # Ignore JetBrains project files (safe default)
 .idea/
 *.iml
+
+
+# snake_rl experiment outputs (never commit run artifacts)
+experiments/
+experiments/**/tb/
+experiments/**/tb/**
+
+# TensorBoard event files (just in case they appear elsewhere too)
+events.out.tfevents*
+
+# Per-run resolved configs + eval summaries (generated artifacts)
+experiments/**/config_resolved.json
+experiments/**/eval_final.json
+
+# Checkpoints / metadata (generated artifacts)
+experiments/**/checkpoints/
+experiments/**/checkpoints/**

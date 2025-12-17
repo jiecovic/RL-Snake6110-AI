@@ -10,17 +10,15 @@ import yaml
 from snake_rl.config.schema import (
     CNNConfig,
     EnvConfig,
-    FeaturesExtractorConfig,
+    EvalConfig,
+    EvalPhaseConfig,
     LevelConfig,
     ModelConfig,
     ObservationConfig,
-    ObservationType,
     PPOConfig,
     RunConfig,
     TrainConfig,
 )
-
-_ALLOWED_OBS_TYPES: set[str] = {"global", "egocentric", "layers"}
 
 
 def _require(d: dict[str, Any], key: str, ctx: str) -> Any:
@@ -43,14 +41,29 @@ def _as_float(v: Any, ctx: str) -> float:
         raise TypeError(f"Expected float in {ctx}, got {type(v).__name__}: {v!r}") from e
 
 
+def _as_bool(v: Any, ctx: str) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)) and v in (0, 1):
+        return bool(v)
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in {"true", "yes", "y", "1", "on"}:
+            return True
+        if s in {"false", "no", "n", "0", "off"}:
+            return False
+    raise TypeError(f"Expected bool in {ctx}, got {type(v).__name__}: {v!r}")
+
+
 def _as_opt_str(v: Any, ctx: str) -> Optional[str]:
     if v is None:
         return None
-    # YAML can give numbers/bools/etc. Normalize aggressively.
     try:
-        return str(v)
+        s = str(v)
     except Exception as e:
         raise TypeError(f"Expected str|None in {ctx}, got {type(v).__name__}: {v!r}") from e
+    s = s.strip()
+    return s or None
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
@@ -62,6 +75,25 @@ def load_yaml(path: str | Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError(f"Top-level YAML must be a mapping/dict, got: {type(data).__name__}")
     return cast(dict[str, Any], data)
+
+
+def _parse_eval_phase(d: Any, ctx: str, defaults: EvalPhaseConfig) -> EvalPhaseConfig:
+    if d is None:
+        return defaults
+    if not isinstance(d, dict):
+        raise TypeError(f"Expected '{ctx}' to be a dict")
+
+    enabled = defaults.enabled if "enabled" not in d else _as_bool(d["enabled"], f"{ctx}.enabled")
+    episodes = defaults.episodes if "episodes" not in d else _as_int(d["episodes"], f"{ctx}.episodes")
+    deterministic = defaults.deterministic if "deterministic" not in d else _as_bool(d["deterministic"], f"{ctx}.deterministic")
+    seed_offset = defaults.seed_offset if "seed_offset" not in d else _as_int(d["seed_offset"], f"{ctx}.seed_offset")
+
+    return EvalPhaseConfig(
+        enabled=enabled,
+        episodes=episodes,
+        deterministic=deterministic,
+        seed_offset=seed_offset,
+    )
 
 
 def parse_config(data: dict[str, Any]) -> TrainConfig:
@@ -97,7 +129,6 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
 
     env = EnvConfig(
         id=str(_require(env_d, "id", "env")),
-        max_steps=_as_int(_require(env_d, "max_steps", "env"), "env.max_steps"),
     )
 
     # --- observation ---
@@ -105,19 +136,11 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
     if not isinstance(obs_d, dict):
         raise TypeError("Expected 'observation' to be a dict")
 
-    obs_type_raw = str(_require(obs_d, "type", "observation"))
-    if obs_type_raw not in _ALLOWED_OBS_TYPES:
-        allowed = ", ".join(sorted(_ALLOWED_OBS_TYPES))
-        raise ValueError(f"Invalid observation.type={obs_type_raw!r}. Allowed: {allowed}")
-
     params_v = obs_d.get("params", {})
     if not isinstance(params_v, dict):
         raise TypeError("Expected 'observation.params' to be a dict")
 
-    observation = ObservationConfig(
-        type=cast(ObservationType, obs_type_raw),
-        params=cast(dict[str, Any], params_v),
-    )
+    observation = ObservationConfig(params=cast(dict[str, Any], params_v))
 
     # --- model ---
     model_d = _require(data, "model", "root")
@@ -134,12 +157,10 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
 
     cnn = CNNConfig(
         type=str(_require(cnn_d, "type", "model.features_extractor.cnn")),
-        features_dim=_as_int(_require(cnn_d, "features_dim", "model.features_extractor.cnn"), "cnn.features_dim"),
-    )
-
-    features_extractor = FeaturesExtractorConfig(
-        type=str(_require(fe_d, "type", "model.features_extractor")),
-        cnn=cnn,
+        features_dim=_as_int(
+            _require(cnn_d, "features_dim", "model.features_extractor.cnn"),
+            "model.features_extractor.cnn.features_dim",
+        ),
     )
 
     net_arch_v = _require(model_d, "net_arch", "model")
@@ -148,7 +169,7 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
     net_arch = [_as_int(x, "model.net_arch[i]") for x in net_arch_v]
 
     model = ModelConfig(
-        features_extractor=features_extractor,
+        cnn=cnn,
         net_arch=net_arch,
     )
 
@@ -167,6 +188,18 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
         verbose=_as_int(_require(ppo_d, "verbose", "ppo"), "ppo.verbose"),
     )
 
+    # --- eval (optional) ---
+    eval_defaults = EvalConfig()
+    eval_d = data.get("eval", None)
+    if eval_d is None:
+        eval_cfg = eval_defaults
+    else:
+        if not isinstance(eval_d, dict):
+            raise TypeError("Expected 'eval' to be a dict")
+        intermediate = _parse_eval_phase(eval_d.get("intermediate", None), "eval.intermediate", eval_defaults.intermediate)
+        final = _parse_eval_phase(eval_d.get("final", None), "eval.final", eval_defaults.final)
+        eval_cfg = EvalConfig(intermediate=intermediate, final=final)
+
     return TrainConfig(
         run=run,
         level=level,
@@ -174,6 +207,7 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
         observation=observation,
         model=model,
         ppo=ppo,
+        eval=eval_cfg,
     )
 
 
@@ -200,7 +234,7 @@ def apply_overrides(
     if checkpoint_freq is not None:
         run = replace(run, checkpoint_freq=int(checkpoint_freq))
     if resume_checkpoint is not None:
-        run = replace(run, resume_checkpoint=resume_checkpoint)
+        run = replace(run, resume_checkpoint=_as_opt_str(resume_checkpoint, "cli.resume"))
 
     if run is cfg.run:
         return cfg
