@@ -1,11 +1,14 @@
-from src.snake_rl.game.tileset import Tileset
-from src.snake_rl.game.tile_types import TileType
+# src/snake_rl/tools/print_tileset.py
+from __future__ import annotations
+
+from snake_rl.game.tileset import Tileset
+from snake_rl.game.tile_types import TileType
 
 
-def main():
+def main() -> None:
     try:
         tileset = Tileset()
-    except Exception as e:
+    except (FileNotFoundError, RuntimeError) as e:
         print(f"❌ Failed to load tileset: {e}")
         return
 
@@ -16,9 +19,10 @@ def main():
     for tile_type in TileType:
         if tile_type in tileset:
             print(f"🧩 Tile: {tile_type.name}")
-            for row in tileset[tile_type]:
+            tile = tileset[tile_type]
+            for row in tile:
                 print("".join(str(x) for x in row))
-            print()  # blank line between tiles
+            print()
         else:
             print(f"⚠️  Tile missing: {tile_type.name}")
 

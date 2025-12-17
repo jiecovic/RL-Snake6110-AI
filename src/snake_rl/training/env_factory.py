@@ -30,7 +30,7 @@ def _get_n_stack_from_cfg(cfg: Any) -> int:
     n = getattr(fs, "n_frames", 1) if fs is not None else 1
     try:
         n = int(n)
-    except Exception:
+    except (TypeError, ValueError):
         n = 1
     return max(1, n)
 
@@ -174,7 +174,9 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
 
         env_cls = ENV_REGISTRY[str(cfg.env.id)]
         env_params = _get_env_params_from_cfg(cfg)
-        env = env_cls(game, **env_params)
+
+        # Registry-driven constructor: env params depend on env id (dynamic kwargs).
+        env = env_cls(game, **env_params)  # type: ignore[call-arg]
 
         # IMPORTANT: Do not add TimeLimit here.
         # Our reward design assumes episodes end only by true environment termination.

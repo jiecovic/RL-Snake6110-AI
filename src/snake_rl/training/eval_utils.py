@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import Any, Callable, Deque, Dict, Optional
+from typing import Any, Callable, Deque, Dict, Optional, TypedDict
 
 import numpy as np
 from gymnasium import spaces
@@ -12,13 +12,25 @@ from snake_rl.game.level import EmptyLevel
 from snake_rl.game.snakegame import SnakeGame
 
 
+class EpisodeEndInfo(TypedDict, total=False):
+    """
+    Subset of info keys we care about for evaluation.
+
+    Note:
+    - env.step() may return additional keys (SB3 wrappers etc.).
+    - We only rely on these fields.
+    """
+    termination_cause: str
+    final_score: float
+
+
 def _validate_env_id(env_id: str) -> None:
     if env_id not in ENV_REGISTRY:
         available = ", ".join(sorted(ENV_REGISTRY.keys()))
         raise ValueError(f"Unknown env.id={env_id!r}. Available: {available}")
 
 
-def _sanitize_np_array(x):
+def _sanitize_np_array(x: Any) -> Any:
     # PyTorch can't tensorize numpy arrays with negative strides (e.g. flips/slices views).
     if isinstance(x, np.ndarray):
         if any(s < 0 for s in x.strides):
@@ -28,7 +40,7 @@ def _sanitize_np_array(x):
     return x
 
 
-def sanitize_observation(obs):
+def sanitize_observation(obs: Any) -> Any:
     if isinstance(obs, dict):
         return {k: _sanitize_np_array(v) for k, v in obs.items()}
     return _sanitize_np_array(obs)
@@ -40,7 +52,7 @@ def _get_n_stack_from_cfg(cfg: Any) -> int:
     n = getattr(fs, "n_frames", 1) if fs is not None else 1
     try:
         n = int(n)
-    except Exception:
+    except (TypeError, ValueError):
         n = 1
     return max(1, n)
 
@@ -147,7 +159,9 @@ def make_eval_env(*, cfg: Any, seed: int):
 
     env_cls = ENV_REGISTRY[env_id]
     env_params = _get_env_params_from_cfg(cfg)
-    env = env_cls(game, **env_params)
+
+    # Dynamic env constructor (registry-driven); kwargs vary by env id.
+    env = env_cls(game, **env_params)  # type: ignore[arg-type]
     env.reset(seed=int(seed))
     return env
 
@@ -183,27 +197,37 @@ def evaluate_model(
 
         # Apply frame stacking for eval too (match train/watch behavior).
         stacker: Optional[DictPixelFrameStack] = None
+        box_stack_buf: Optional[np.ndarray] = None
+        box_c: Optional[int] = None
+
         if n_stack > 1:
             obs_space = getattr(env, "observation_space", None)
             if isinstance(obs_space, spaces.Dict):
                 stacker = DictPixelFrameStack(observation_space=obs_space, n_stack=n_stack, pixel_key="pixel")
                 obs = stacker.stack_obs(obs, is_reset=True)
             else:
-                # Box-only: keep it simple here: stack along channel axis (C,H,W)->(C*n,H,W)
+                # Box-only: explicit rolling buffer (C,H,W)->(C*n_stack,H,W)
                 if not isinstance(obs, np.ndarray) or obs.ndim != 3:
-                    raise TypeError(f"Expected Box obs shaped (C,H,W), got {type(obs).__name__} {getattr(obs, 'shape', None)}")
-                obs = np.concatenate([obs] * n_stack, axis=0)
+                    raise TypeError(
+                        f"Expected Box obs shaped (C,H,W), got {type(obs).__name__} {getattr(obs, 'shape', None)}"
+                    )
+                box_c = int(obs.shape[0])
+                box_stack_buf = np.concatenate([obs] * n_stack, axis=0)
+                obs = box_stack_buf
 
         done = False
         ep_reward = 0.0
         ep_len = 0
-        last_info: Optional[dict] = None
+        last_info: Optional[EpisodeEndInfo] = None
 
         while not done:
             obs_for_model = sanitize_observation(obs)
             action, _state = model.predict(obs_for_model, deterministic=bool(deterministic))
+
             obs, reward, terminated, truncated, info = env.step(action)
-            last_info = info
+            # We only care about a small subset; treat missing keys as normal.
+            last_info = EpisodeEndInfo(**info) if isinstance(info, dict) else None
+
             ep_reward += float(reward)
             ep_len += 1
             done = bool(terminated or truncated)
@@ -211,32 +235,23 @@ def evaluate_model(
             if n_stack > 1:
                 if stacker is not None:
                     obs = stacker.stack_obs(obs, is_reset=bool(done))
-                else:
-                    # Box-only rolling stack: shift-left by C, append current obs.
-                    # obs is (C*n_stack,H,W) at this point, current is (C,H,W).
-                    current = obs if (isinstance(obs, np.ndarray) and obs.ndim == 3 and obs.shape[0] in (1,)) else obs
-                    current = obs if isinstance(obs, np.ndarray) else obs  # safety; overwritten below
-
-                    current = obs  # placeholder (will be overwritten by step's obs)
-                    # We need the *new* single-frame from env.step (which is `obs` right now).
+                elif box_stack_buf is not None and box_c is not None:
                     single = obs
                     if not isinstance(single, np.ndarray) or single.ndim != 3:
-                        raise TypeError(f"Expected Box obs shaped (C,H,W), got {type(single).__name__} {getattr(single, 'shape', None)}")
+                        raise TypeError(
+                            f"Expected Box obs shaped (C,H,W), got {type(single).__name__} {getattr(single, 'shape', None)}"
+                        )
+                    if int(single.shape[0]) != box_c:
+                        raise ValueError(f"Box channel mismatch: expected C={box_c}, got {int(single.shape[0])}")
 
-                    # Initialize/maintain a buffer for box stacking
-                    # Use a local variable in function scope per-episode:
-                    # easiest: store in stacker_buf
-                    # (we can't use stacker because Dict-only)
-                    if "stacker_buf" not in locals():
-                        stacker_buf = np.concatenate([single] * n_stack, axis=0)
-                        c = int(single.shape[0])
-                    else:
-                        stacker_buf[:-c, :, :] = stacker_buf[c:, :, :]
-                        stacker_buf[-c:, :, :] = single
-                        if done:
-                            stacker_buf[:, :, :] = np.concatenate([single] * n_stack, axis=0)
+                    # roll and append
+                    box_stack_buf[:-box_c, :, :] = box_stack_buf[box_c:, :, :]
+                    box_stack_buf[-box_c:, :, :] = single
 
-                    obs = stacker_buf
+                    if done:
+                        box_stack_buf[:, :, :] = np.concatenate([single] * n_stack, axis=0)
+
+                    obs = box_stack_buf
 
         env.close()
 
@@ -246,15 +261,12 @@ def evaluate_model(
         if on_episode is not None:
             on_episode(ep + 1, episodes, float(ep_reward))
 
-        if last_info:
+        if last_info is not None:
             if "termination_cause" in last_info:
                 cause = str(last_info["termination_cause"])
                 termination_counts[cause] = termination_counts.get(cause, 0) + 1
             if "final_score" in last_info:
-                try:
-                    final_scores.append(float(last_info["final_score"]))
-                except Exception:
-                    pass
+                final_scores.append(float(last_info["final_score"]))
 
     r = np.asarray(rewards, dtype=np.float64)
     l = np.asarray(lengths, dtype=np.float64)
@@ -278,11 +290,18 @@ def evaluate_model(
         out["final_score_min"] = float(fs.min())
         out["final_score_max"] = float(fs.max())
 
-    try:
+    # Keep eval robust if cfg is a partial object in ad-hoc scripts.
+    if hasattr(cfg, "env") and hasattr(cfg.env, "id"):
         out["env_id"] = str(cfg.env.id)
-        out["env_params"] = dict(_get_env_params_from_cfg(cfg))
+
+        try:
+            out["env_params"] = dict(_get_env_params_from_cfg(cfg))
+        except TypeError:
+            pass
+
+    try:
         out["n_frames"] = int(_get_n_stack_from_cfg(cfg))
-    except Exception:
+    except (TypeError, ValueError):
         pass
 
     return out

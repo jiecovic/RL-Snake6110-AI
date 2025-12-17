@@ -66,3 +66,23 @@ def asset_path(rel: str) -> Path:
     """
     p = assets_dir() / rel
     return p
+
+
+def resolve_run_dir(repo: Path, run: str) -> Path:
+    """
+    Resolve a run identifier.
+
+    `run` may be:
+      - a run name (resolved as <repo>/experiments/<run>)
+      - a run directory containing checkpoints/
+      - a checkpoints/ directory (parent is the run dir)
+    """
+    p = Path(run)
+    if p.exists():
+        if p.is_dir():
+            if (p / "checkpoints").is_dir():
+                return p
+            if p.name == "checkpoints":
+                return p.parent
+        raise FileNotFoundError(f"--run points to an existing path but not a run dir: {p}")
+    return repo / "experiments" / run

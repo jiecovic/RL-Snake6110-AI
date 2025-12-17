@@ -1,5 +1,3 @@
-# pyproject.toml
-
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -9,9 +7,10 @@ name = "snake-rl"
 version = "0.1.0"
 description = "Snake game with RL experiments"
 requires-python = ">=3.10"
+readme = "README.md"
 
 dependencies = [
-    "numpy>=1.23",
+    "numpy>=1.23,<2.0",
     "gymnasium>=0.29",
     "stable-baselines3>=2.3",
     "torch>=2.0",
@@ -22,7 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 # Only needed for your run.py / visualization helpers (opencv, feature maps, etc.)
 viz = [
-    "opencv-python>=4.8",
+    "opencv-python>=4.8,<5.0",
 ]
 
 [tool.setuptools]
@@ -37,3 +36,6 @@ snake-train = "snake_rl.cli.train:main"
 snake-eval = "snake_rl.cli.eval:main"
 snake-watch = "snake_rl.cli.watch:main"
 
+# New tools for level and tileset printing
+snake-print-level = "snake_rl.tools.print_level:main"
+snake-print-tileset = "snake_rl.tools.print_tileset:main"

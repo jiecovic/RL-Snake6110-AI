@@ -1,3 +1,4 @@
+
 # RL-Snake6110-AI
 
 # 🐍 Snake RL — PPO Agent for Classic Nokia-Style Snake
@@ -12,9 +13,10 @@ same classic grid size and window layout — and to **train a reinforcement lear
 - **Goal:** Learn to efficiently collect food, avoid fatal collisions, and ultimately **win the game** by filling the entire grid with the snake’s body tiles.  
 - **TensorBoard support** included for performance tracking.
 
+### 🎯 Objective
+The primary goal of this project is to **train a reinforcement learning agent purely from game pixels**, without the use of any external world models or tricks. The agent should learn to make decisions and improve its gameplay entirely based on visual input. The model and policy should figure out how to efficiently collect food, avoid collisions, and win the game by itself, relying solely on the raw pixel-based observations provided by the game environment.
 
 ### Reward shaping 
-
 The environment’s `step(action)` returns rewards as follows:
 
 - **Tiny step penalty** every move to encourage efficiency: `reward -= tiny_reward`.
@@ -35,35 +37,34 @@ Rendering is called each step for visual playback.
 ## 🚀 Usage
 
 ### 🏋️‍♂️ Train the Agent
-Start PPO training from scratch:
+Start PPO training from scratch using the `snake-train` script defined in `pyproject.toml`:
 ```bash
-python -m scripts.train
+snake-train
 ```
 Training logs and model checkpoints will be saved automatically under a timestamped subdirectory.
 
 ---
 
 ### 🎮 Run a Trained Checkpoint
-Render or evaluate a saved model:
+Render or evaluate a saved model using the `snake-eval` script defined in `pyproject.toml`:
 ```bash
-python -m scripts.run_checkpoint --subdir snake_ppo_x
+snake-eval --run snake_ppo_x
 ```
 Replace `snake_ppo_x` with the name of your training run folder (e.g. `snake_ppo_3`, `snake_ppo_best`, etc.).
 
 ---
 
-
-### 🐍 Run the Pretrained Model (Included in Repo)
+### 🐍 Watch the Pretrained Model (Included in Repo)
 A pretrained PPO agent is provided under the repository folder `snake_test/`.
 
-Run it directly to watch the trained model play:
-
+Run it directly to watch the trained model play using the `snake-watch` script defined in `pyproject.toml`:
 ```bash
-python -m scripts.run_checkpoint --subdir snake_test
+snake-watch --run snake_test
 ```
-This will load the existing checkpoint from snake_test/ and start a rendering session in the PyGame window.
+This will load the existing checkpoint from `snake_test/` and start a rendering session in the PyGame window.
 
 ---
+
 
 ### 🎮 Demo Video
 
@@ -89,3 +90,31 @@ Demonstration of a fully trained agent performing a complete successful run.
   *(This was already explored in an earlier draft version and yielded promising results — worth revisiting for future iterations.)*  
 
 
+## 📦 Install Dependencies
+
+Make sure to have `pyproject.toml` set up for managing dependencies.
+
+1. **Install required dependencies:**
+
+```bash
+pip install .  # to install the current package and its dependencies
+```
+
+2. **To install dependencies from `pyproject.toml`:**
+```bash
+pip install --upgrade setuptools pip
+pip install -r requirements.txt  # If you are using a requirements file.
+```
+
+### Install PyTorch with CUDA (GPU Support):
+To install PyTorch with CUDA support, follow the official guide:
+```bash
+pip install torch torchvision torchaudio
+# For CUDA support, visit https://pytorch.org/get-started/locally/ and choose the appropriate installation command.
+```
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
