@@ -1,4 +1,4 @@
-from core.snake6110.level import LevelFromTemplate, EmptyLevel
+from src.snake_rl.game.level import LevelFromTemplate, EmptyLevel
 
 
 def print_level_info(level, name: str):
@@ -22,13 +22,13 @@ def print_level_info(level, name: str):
 
 
 def main():
-    level1 = LevelFromTemplate("assets/levels/test_level.json")
+    level1 = LevelFromTemplate("assets/levels/test_level.yaml")
     level2 = EmptyLevel(width=20, height=11)
 
     print_level_info(level1, "Loaded Level")
     print_level_info(level2, "Generated Level")
 
-    level2.to_json("assets/levels/generated_output.json")
+    level2.to_json("assets/levels/generated_output.yaml")
 
 
 if __name__ == "__main__":

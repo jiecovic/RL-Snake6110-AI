@@ -4,11 +4,9 @@ from gymnasium import spaces
 from .base_snake_env import BaseSnakeEnv
 from collections import deque
 from typing import Dict, Optional, Tuple
-from gymnasium.core import ObsType
-from core.snake6110.geometry import Direction
+from src.snake_rl.game.geometry import Direction
 
-import cv2
-from core.snake6110.snakegame import SnakeGame, Point
+from src.snake_rl.game.snakegame import SnakeGame
 
 
 class SnakePixelDirectionObsEnv(BaseSnakeEnv):

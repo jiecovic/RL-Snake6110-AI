@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import Dict, List
-from core.snake6110.geometry import Direction
+from typing import Dict
+from snake_rl.game.geometry import Direction
 
 
 class TileType(Enum):

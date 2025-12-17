@@ -11,12 +11,12 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 
-from core.envs.snake_envs import SnakeFirstPersonEnv
-from core.snake6110.snakegame import SnakeGame
-from core.snake6110.level import EmptyLevel
-from core.policies.custom_policies import CustomCombinedExtractor
-from core.custom_cnns.custom_cnn import SnakeCNN_Simple
-from core.custom_callbacks import TerminationCauseLogger
+from src.snake_rl.envs.snake_envs import SnakeFirstPersonEnv
+from src.snake_rl.game.snakegame import SnakeGame
+from src.snake_rl.game.level import EmptyLevel
+from src.snake_rl.models.sb3.extractors import CustomCombinedExtractor
+from src.snake_rl.models.cnns.custom_cnn import SnakeCNN_Simple
+from src.snake_rl.callbacks.termination_logger import TerminationCauseLogger
 
 
 # === Config dict (single source of truth) ===

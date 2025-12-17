@@ -1,0 +1,41 @@
+# Example configuration for training a PPO agent on Snake
+
+run:
+  name: snake_ppo                 # Base name for logs and checkpoints
+  seed: 42                        # Global RNG seed
+  num_envs: 16                    # Parallel environments
+  total_timesteps: 100_000_000    # Total environment steps
+  checkpoint_freq: 1_000_000      # Checkpoint interval (steps)
+  resume_checkpoint: null         # Path or null to start fresh
+
+
+env:
+  height: 13                      # Board height
+  width: 22                       # Board width
+  food_count: 1                  # Concurrent food items
+
+
+observation:
+  render_mode: none               # none | human | rgb_array
+  n_stack: 1                      # Number of stacked frames
+  view_radius: 10                 # First-person view radius
+
+
+model:
+  features_extractor:
+    type: combined                # Feature extractor (mapped in code)
+    cnn:
+      type: snake_simple          # CNN backbone
+      output_dim: 512             # CNN output feature size
+
+  net_arch: [256, 128]            # Policy/value MLP layers
+
+
+ppo:
+  n_steps: 2_048                  # Steps per env per rollout
+  batch_size: 128                 # PPO minibatch size
+  n_epochs: 2                     # PPO optimization epochs
+  gamma: 0.999                    # Discount factor
+  ent_coef: 0.03                  # Entropy bonus
+  learning_rate: 3e-4             # Optimizer learning rate
+  verbose: 0                      # SB3 verbosity

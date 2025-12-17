@@ -1,11 +1,10 @@
 # base_snake_env.py
 import gymnasium as gym
-import numpy as np
 from gymnasium import spaces
 from abc import ABC, abstractmethod
 from typing import Literal, Optional
-from core.snake6110.snakegame import SnakeGame, MoveResult
-from core.snake6110.geometry import RelativeDirection
+from src.snake_rl.game.snakegame import SnakeGame, MoveResult
+from src.snake_rl.game.geometry import RelativeDirection
 
 
 class BaseSnakeEnv(gym.Env, ABC):

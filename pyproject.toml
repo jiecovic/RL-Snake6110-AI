@@ -1,0 +1,24 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snake-rl"
+version = "0.1.0"
+description = "Snake game with RL experiments"
+requires-python = ">=3.10"
+
+dependencies = [
+    "pygame",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+snake-play = "snake_rl.cli.play:main"

@@ -1,5 +1,5 @@
-from core.snake6110.tileset import Tileset
-from core.snake6110.tile_types import TileType
+from src.snake_rl.game.tileset import Tileset
+from src.snake_rl.game.tile_types import TileType
 
 
 def main():

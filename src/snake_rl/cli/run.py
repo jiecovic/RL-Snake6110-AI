@@ -8,9 +8,9 @@ from typing import Literal, Union
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
-from core.envs.snake_envs import SnakeFirstPersonEnv
-from core.snake6110.snakegame import SnakeGame, MoveResult
-from core.snake6110.level import EmptyLevel
+from src.snake_rl.envs.snake_envs import SnakeFirstPersonEnv
+from src.snake_rl.game.snakegame import SnakeGame
+from src.snake_rl.game.level import EmptyLevel
 
 # === CNN activation capture ===
 activations = []
