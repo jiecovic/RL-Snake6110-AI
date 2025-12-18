@@ -20,6 +20,7 @@ from snake_rl.game.snakegame import SnakeGame
 from snake_rl.training.eval_utils import sanitize_observation
 from snake_rl.training.env_factory import DictPixelVecFrameStack
 from snake_rl.utils.checkpoints import pick_checkpoint
+from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
 from snake_rl.utils.paths import repo_root, resolve_run_dir
 from snake_rl.utils.run_config import (
     get_env_id,
@@ -309,6 +310,8 @@ def main() -> None:
     ckpt = pick_checkpoint(run_dir=run_dir, which=args.which)
     model = _load_model(ckpt, device=str(args.device))
     logger.info(f"loaded checkpoint: {_relpath(ckpt, base=repo)}")
+    logger.info(format_sb3_param_summary(model))
+    logger.info(format_sb3_param_report(model))
 
     level = get_level_params(cfg_d)
     game = _make_game_from_level_params(level, seed=int(args.seed))

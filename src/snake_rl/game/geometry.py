@@ -53,3 +53,28 @@ DIRECTION_TO_POINT: dict[Direction, Point] = {
 def move_point(p: Point, d: Direction) -> Point:
     """Return the point reached by moving one step from p in direction d."""
     return p + DIRECTION_TO_POINT[d]
+
+
+def rel_from_absolute(
+    *,
+    current: Direction,
+    desired: Direction,
+    on_opposite: RelativeDirection = RelativeDirection.FORWARD,
+) -> RelativeDirection:
+    """
+    Convert an absolute desired direction into a relative command given current heading.
+
+    - If desired == current: FORWARD
+    - If desired == current.turn_left(): LEFT
+    - If desired == current.turn_right(): RIGHT
+    - If desired is opposite: return `on_opposite` (default: FORWARD)
+
+    Rationale: snake usually can't reverse; mapping opposite->FORWARD avoids "invalid action" chaos.
+    """
+    if desired == current:
+        return RelativeDirection.FORWARD
+    if desired == current.turn_left():
+        return RelativeDirection.LEFT
+    if desired == current.turn_right():
+        return RelativeDirection.RIGHT
+    return on_opposite

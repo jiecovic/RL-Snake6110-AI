@@ -7,7 +7,7 @@ run:
   seed: 42
   num_envs: 16
   total_timesteps: 100_000_000
-  checkpoint_freq: 100_000
+  checkpoint_freq: 250_000
   resume_checkpoint: null
 
 level:
@@ -22,14 +22,14 @@ env:
 
 observation:
   frame_stack:
-    n_frames: 2
+    n_frames: 1
 
 model:
   features_extractor:
     type: tile4
-    features_dim: 256
+    features_dim: 1024
     params: {}      # optional
-  net_arch: [64, 64]
+  net_arch: [512, 256]
 
 ppo:
   n_steps: 2048
@@ -37,15 +37,15 @@ ppo:
   n_epochs: 2
   gamma: 0.999
   ent_coef: 0.03
-  learning_rate: 3e-4
+  learning_rate: 1e-4
 
-  gae_lambda: 0.95        # bias/variance tradeoff for advantage estimation
-  clip_range: 0.1         # PPO clipping; 0.1 is often more stable for Atari-like CNNs
-  vf_coef: 0.5            # value loss weight (default is fine, but make it explicit)
-  max_grad_norm: 0.5      # gradient clipping (default is fine, but make it explicit)
+#  gae_lambda: 0.95        # bias/variance tradeoff for advantage estimation
+#  clip_range: 0.1         # PPO clipping; 0.1 is often more stable for Atari-like CNNs
+#  vf_coef: 0.5            # value loss weight (default is fine, but make it explicit)
+#  max_grad_norm: 0.5      # gradient clipping (default is fine, but make it explicit)
 
   # stability / early-warning:
-  target_kl: 0.03         # optional: stops updates when KL gets too large (prevents collapse)
+#  target_kl: 0.03         # optional: stops updates when KL gets too large (prevents collapse)
 
   # normalization / reward scale:
   normalize_advantage: true  # usually good; SB3 default is True in recent versions but pin it
@@ -55,7 +55,7 @@ ppo:
 eval:
   intermediate:
     enabled: true
-    episodes: 10
+    episodes: 20
     best_metric: mean_reward   # or: mean_score
     deterministic: true
     seed_offset: 10_000
