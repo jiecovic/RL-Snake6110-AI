@@ -47,17 +47,40 @@ class ObservationConfig:
     frame_stack: FrameStackConfig = field(default_factory=FrameStackConfig)
 
 
+# ---------------------------------------------------------------------------
+# Model configuration (generic feature extractor, CNN or Transformer)
+# ---------------------------------------------------------------------------
+
 @dataclass(frozen=True)
-class CNNConfig:
+class FeaturesExtractorConfig:
+    """
+    Generic feature extractor configuration.
+
+    type:
+      - CNN keys (e.g. 'tile4', 'nature8', ...)
+      - Transformer keys (e.g. 'tile_vit')
+
+    features_dim:
+      Output feature dimension exposed to the policy MLP.
+
+    params:
+      Free-form extractor-specific parameters (passed through to the
+      feature extractor constructor).
+    """
     type: str
     features_dim: int
+    params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ModelConfig:
-    cnn: CNNConfig
+    features_extractor: FeaturesExtractorConfig
     net_arch: list[int]
 
+
+# ---------------------------------------------------------------------------
+# PPO configuration (pass-through SB3 kwargs)
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class PPOConfig:
@@ -69,6 +92,10 @@ class PPOConfig:
     """
     params: dict[str, Any] = field(default_factory=dict)
 
+
+# ---------------------------------------------------------------------------
+# Evaluation configuration
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class EvalPhaseConfig:
@@ -85,6 +112,10 @@ class EvalConfig:
         default_factory=lambda: EvalPhaseConfig(enabled=True, episodes=100, seed_offset=20_000)
     )
 
+
+# ---------------------------------------------------------------------------
+# Top-level training configuration
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class TrainConfig:

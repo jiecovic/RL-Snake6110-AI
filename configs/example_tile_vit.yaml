@@ -1,0 +1,70 @@
+# configs/example_tile_vit.yaml
+# PPO on symbolic tile-id grid with ViT-style transformer feature extractor
+
+run:
+  name: snake_ppo_vit
+  seed: 42
+  num_envs: 16
+  total_timesteps: 100_000_000
+  checkpoint_freq: 100_000
+  resume_checkpoint: null
+
+level:
+  height: 13
+  width: 22
+  food_count: 1
+  random_placement: true
+
+env:
+  id: global_tile_id
+  params: { }
+
+# No frame stacking needed: direction & orientation are encoded in tile IDs
+observation:
+  frame_stack:
+    n_frames: 1
+
+model:
+  features_extractor:
+    type: tile_vit
+    features_dim: 256
+    params:
+      d_model: 128
+      n_layers: 4
+      n_heads: 4
+      dropout: 0.1
+      use_cls_token: true
+      use_2d_positional: true
+      use_frame_embed: false
+  net_arch: [64, 64]
+
+
+ppo:
+  n_steps: 2048
+  batch_size: 128
+  n_epochs: 2
+  gamma: 0.999
+  ent_coef: 0.03
+  learning_rate: 1e-4
+
+  gae_lambda: 0.95
+  clip_range: 0.1
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  target_kl: 0.03
+  normalize_advantage: true
+
+  verbose: 0
+
+eval:
+  intermediate:
+    enabled: true
+    episodes: 10
+    deterministic: true
+    seed_offset: 10_000
+
+  final:
+    enabled: true
+    episodes: 100
+    deterministic: true
+    seed_offset: 20_000

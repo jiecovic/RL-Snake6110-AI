@@ -26,10 +26,10 @@ observation:
 
 model:
   features_extractor:
-    cnn:
-      type: tile4
-      features_dim: 512
-  net_arch: [256, 128]
+    type: tile4
+    features_dim: 256
+    params: {}      # optional
+  net_arch: [64, 64]
 
 ppo:
   n_steps: 2048
@@ -58,12 +58,12 @@ eval:
     episodes: 10
     best_metric: mean_reward   # or: mean_score
     deterministic: true
-    seed_offset: 10000
+    seed_offset: 10_000
 
   final:
     enabled: true
     episodes: 100
     best_metric: mean_reward   # or: mean_score
     deterministic: true
-    seed_offset: 20000
+    seed_offset: 20_000
 

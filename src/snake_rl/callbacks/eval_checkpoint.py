@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import time
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -22,13 +24,67 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _atomic_save_zip(*, model, dst: Path) -> None:
+def _atomic_save_zip(
+        *,
+        model,
+        dst: Path,
+        retries: int = 25,
+        retry_sleep_s: float = 0.05,
+) -> None:
+    """
+    Atomic-ish checkpoint save that behaves well on Windows.
+
+    Strategy:
+      1) Save to a temporary file in the same directory.
+      2) Atomically replace dst with tmp via os.replace() (same filesystem).
+      3) If dst is locked (e.g. snake-watch currently loaded latest.zip), retry.
+      4) If still locked, keep training alive by saving a fallback file.
+
+    Important:
+      - Do NOT unlink(dst) first. On Windows that often fails if another process holds it open.
+      - os.replace() is the right primitive for atomic replacement on both Windows and POSIX.
+    """
+    dst = Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
+
+    # Keep temp in same directory so replace is atomic (same filesystem)
     tmp = dst.with_suffix(dst.suffix + ".tmp")
+
+    # If a stale tmp exists (e.g. after a crash), try to remove it (best effort).
+    try:
+        if tmp.exists():
+            tmp.unlink()
+    except OSError:
+        pass
+
     model.save(str(tmp))
-    if dst.exists():
-        dst.unlink()
-    tmp.replace(dst)
+
+    last_err: Exception | None = None
+    for _ in range(max(1, int(retries))):
+        try:
+            os.replace(str(tmp), str(dst))  # atomic replace (does not require pre-unlink)
+            return
+        except PermissionError as e:
+            last_err = e
+            time.sleep(float(retry_sleep_s))
+        except OSError as e:
+            # Some AV/indexers can cause transient errors too
+            last_err = e
+            time.sleep(float(retry_sleep_s))
+
+    # If we get here, dst is probably locked. Don't kill training; save a fallback.
+    fallback = dst.with_name(dst.stem + f".locked_{int(time.time())}" + dst.suffix)
+    try:
+        if tmp.exists():
+            os.replace(str(tmp), str(fallback))
+    except Exception:
+        # Best effort cleanup; if even that fails, leave tmp around.
+        pass
+
+    raise RuntimeError(
+        f"Failed to replace checkpoint {dst} (likely locked by another process). "
+        f"Saved fallback checkpoint to {fallback}. Last error: {last_err!r}"
+    )
 
 
 def _append_jsonl(path: Path, record: Dict[str, Any]) -> None:

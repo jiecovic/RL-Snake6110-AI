@@ -14,6 +14,7 @@ from snake_rl.training.policy_factory import build_policy_kwargs
 
 
 def _ensure_str_keys(d: dict[Any, Any]) -> dict[str, Any]:
+    # Helps type checkers and avoids accidental non-string YAML keys.
     return {str(k): v for k, v in d.items()}
 
 
@@ -43,12 +44,11 @@ def _coerce_ppo_types(d: dict[str, Any]) -> dict[str, Any]:
         "n_epochs",
         "seed",
         "verbose",
-        "n_envs",  # if someone uses it by mistake, harmless
+        "sde_sample_freq",
     }
     bool_keys = {
         "normalize_advantage",
         "use_sde",
-        "sde_sample_freq",  # actually int in SB3; keep it out if you want
     }
 
     out: dict[str, Any] = dict(d)
@@ -66,11 +66,18 @@ def _coerce_ppo_types(d: dict[str, Any]) -> dict[str, Any]:
                 except ValueError:
                     pass
             elif k in bool_keys:
-                if s.lower() in {"true", "yes", "1"}:
+                if s.lower() in {"true", "yes", "1", "on"}:
                     out[k] = True
-                elif s.lower() in {"false", "no", "0"}:
+                elif s.lower() in {"false", "no", "0", "off"}:
                     out[k] = False
     return out
+
+
+def _select_policy(observation_space) -> str | type[MultiInputActorCriticPolicy]:
+    # SB3 uses "CnnPolicy" for Box (images) and MultiInput* for Dict.
+    if isinstance(observation_space, spaces.Dict):
+        return MultiInputActorCriticPolicy
+    return "CnnPolicy"
 
 
 def make_or_load_model(
@@ -84,16 +91,23 @@ def make_or_load_model(
         return PPO.load(str(resume_path), env=vec_env)
 
     policy_kwargs = build_policy_kwargs(cfg=cfg, observation_space=vec_env.observation_space)
-    policy = MultiInputActorCriticPolicy if isinstance(vec_env.observation_space, spaces.Dict) else "CnnPolicy"
+    policy = _select_policy(vec_env.observation_space)
 
+    # Pass-through PPO kwargs from YAML (filtered to ctor signature + mild type coercion).
     user_ppo_kwargs = _ensure_str_keys(dict(cfg.ppo.params))
     user_ppo_kwargs = _coerce_ppo_types(user_ppo_kwargs)
     user_ppo_kwargs = _filter_valid_ppo_kwargs(user_ppo_kwargs)
+
+    # Default: prefer run.seed as SB3 seed unless user explicitly overrides via ppo.seed.
+    # This avoids the confusing "seed: None" in effective SB3 params.
+    if "seed" not in user_ppo_kwargs:
+        user_ppo_kwargs["seed"] = int(cfg.run.seed)
 
     ppo_kwargs = {
         "policy": policy,
         "env": vec_env,
         "policy_kwargs": policy_kwargs,
+        # Note: SB3 stores this string as-is; we already print it relative in log_ppo_params().
         "tensorboard_log": str(tensorboard_log),
         **user_ppo_kwargs,
     }

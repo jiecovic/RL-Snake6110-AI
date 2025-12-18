@@ -131,6 +131,7 @@ def _to_effective_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
     - config_resolved.json is a normalized dataclass dump (machine-friendly).
     - config_effective.yaml should be rerunnable as an input config (human-friendly).
     """
+    fe = cfg.model.features_extractor
     d: dict[str, Any] = {
         "run": {
             "name": cfg.run.name,
@@ -156,10 +157,9 @@ def _to_effective_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
         },
         "model": {
             "features_extractor": {
-                "cnn": {
-                    "type": str(cfg.model.cnn.type),
-                    "features_dim": int(cfg.model.cnn.features_dim),
-                }
+                "type": str(fe.type),
+                "features_dim": int(fe.features_dim),
+                "params": dict(fe.params),
             },
             "net_arch": [int(x) for x in cfg.model.net_arch],
         },

@@ -88,14 +88,11 @@ class DictPixelVecFrameStack(VecEnvWrapper):
         stacked_shape = (c * self.n_stack, h, w)
 
         def _stack_bounds(x: Any) -> Any:
-            # Handle scalar bounds (common for Box(low=0, high=255, ...)).
             if np.isscalar(x):
                 return x
             arr = np.asarray(x)
-            # Expected (C,H,W) -> tile along channel axis to (C*n_stack,H,W)
             if arr.shape == (c, h, w):
                 return np.tile(arr, (self.n_stack, 1, 1))
-            # Fallback: try to broadcast; if this fails it will surface early.
             return np.broadcast_to(arr, (c * self.n_stack, h, w))
 
         new_spaces = dict(self.venv.observation_space.spaces)
@@ -123,7 +120,6 @@ class DictPixelVecFrameStack(VecEnvWrapper):
         if not isinstance(pix, np.ndarray):
             raise TypeError(f"DictPixelVecFrameStack expects numpy obs, got {type(pix).__name__}")
 
-        # pix: (n_envs, C, H, W)
         if pix.ndim != 4:
             raise TypeError(f"DictPixelVecFrameStack expected pix.ndim==4, got {pix.shape}")
 
@@ -146,14 +142,11 @@ class DictPixelVecFrameStack(VecEnvWrapper):
         if self._buf is None:
             return self._reset_buf(obs)
 
-        # pix: (n_envs, C, H, W)
         c = int(pix.shape[1])
 
-        # shift left by C channels, append current pix
         self._buf[:, :-c, :, :] = self._buf[:, c:, :, :]
         self._buf[:, -c:, :, :] = pix
 
-        # reset stacks for finished envs to repeated current frame (no leakage)
         if dones is not None:
             d = np.asarray(dones, dtype=bool)
             for i in np.where(d)[0]:
@@ -200,8 +193,10 @@ def make_vec_env(*, cfg: Any):
     if n_stack > 1:
         obs_space = vec_env.observation_space
         if isinstance(obs_space, spaces.Dict):
+            # Stack only the pixel channel(s); leave scalar features untouched.
             vec_env = DictPixelVecFrameStack(vec_env, n_stack=n_stack, pixel_key="pixel")
         else:
+            # Works for pixel Box AND for tile-id Box (C,H,W) just fine.
             vec_env = VecFrameStack(vec_env, n_stack=n_stack, channels_order="first")
 
     return vec_env

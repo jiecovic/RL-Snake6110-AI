@@ -8,10 +8,10 @@ from typing import Any, Optional, cast
 import yaml
 
 from snake_rl.config.schema import (
-    CNNConfig,
     EnvConfig,
     EvalConfig,
     EvalPhaseConfig,
+    FeaturesExtractorConfig,
     FrameStackConfig,
     LevelConfig,
     ModelConfig,
@@ -139,6 +139,62 @@ def _parse_ppo_params(ppo_d: dict[str, Any]) -> dict[str, Any]:
     return dict(ppo_d)
 
 
+def _parse_features_extractor(model_d: dict[str, Any]) -> FeaturesExtractorConfig:
+    """
+    Parse model.features_extractor with backward compatibility.
+
+    New schema (preferred):
+      model:
+        features_extractor:
+          type: <str>
+          features_dim: <int>
+          params: { ... }   # optional
+
+    Old schema (back-compat):
+      model:
+        features_extractor:
+          cnn:
+            type: <str>
+            features_dim: <int>
+            ...extra keys...   # (optional; we collect them into params)
+    """
+    fe_d = _require(model_d, "features_extractor", "model")
+    if not isinstance(fe_d, dict):
+        raise TypeError("Expected 'model.features_extractor' to be a dict")
+
+    # Back-compat path: model.features_extractor.cnn
+    if "cnn" in fe_d:
+        cnn_d = fe_d["cnn"]
+        if not isinstance(cnn_d, dict):
+            raise TypeError("Expected 'model.features_extractor.cnn' to be a dict")
+
+        fe_type = str(_require(cnn_d, "type", "model.features_extractor.cnn"))
+        fe_dim = _as_int(
+            _require(cnn_d, "features_dim", "model.features_extractor.cnn"),
+            "model.features_extractor.cnn.features_dim",
+        )
+
+        # Collect any additional keys (helps migrate configs without breakage).
+        params: dict[str, Any] = {
+            str(k): v for k, v in cnn_d.items() if str(k) not in {"type", "features_dim"}
+        }
+
+        return FeaturesExtractorConfig(type=fe_type, features_dim=fe_dim, params=params)
+
+    # New schema path: model.features_extractor.{type, features_dim, params}
+    fe_type = str(_require(fe_d, "type", "model.features_extractor"))
+    fe_dim = _as_int(_require(fe_d, "features_dim", "model.features_extractor"), "model.features_extractor.features_dim")
+
+    params_v = fe_d.get("params", {})
+    if params_v is None:
+        params_v = {}
+    if not isinstance(params_v, dict):
+        raise TypeError("Expected 'model.features_extractor.params' to be a dict")
+    params = cast(dict[str, Any], params_v)
+
+    return FeaturesExtractorConfig(type=fe_type, features_dim=fe_dim, params=dict(params))
+
+
 def parse_config(data: dict[str, Any]) -> TrainConfig:
     # --- run ---
     run_d = _require(data, "run", "root")
@@ -207,21 +263,7 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
     if not isinstance(model_d, dict):
         raise TypeError("Expected 'model' to be a dict")
 
-    fe_d = _require(model_d, "features_extractor", "model")
-    if not isinstance(fe_d, dict):
-        raise TypeError("Expected 'model.features_extractor' to be a dict")
-
-    cnn_d = _require(fe_d, "cnn", "model.features_extractor")
-    if not isinstance(cnn_d, dict):
-        raise TypeError("Expected 'model.features_extractor.cnn' to be a dict")
-
-    cnn = CNNConfig(
-        type=str(_require(cnn_d, "type", "model.features_extractor.cnn")),
-        features_dim=_as_int(
-            _require(cnn_d, "features_dim", "model.features_extractor.cnn"),
-            "model.features_extractor.cnn.features_dim",
-        ),
-    )
+    features_extractor = _parse_features_extractor(model_d)
 
     net_arch_v = _require(model_d, "net_arch", "model")
     if not isinstance(net_arch_v, list):
@@ -229,7 +271,7 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
     net_arch = [_as_int(x, "model.net_arch[i]") for x in net_arch_v]
 
     model = ModelConfig(
-        cnn=cnn,
+        features_extractor=features_extractor,
         net_arch=net_arch,
     )
 
@@ -286,13 +328,13 @@ def load_config(path: str | Path) -> TrainConfig:
 
 
 def apply_overrides(
-    cfg: TrainConfig,
-    *,
-    seed: Optional[int] = None,
-    num_envs: Optional[int] = None,
-    total_timesteps: Optional[int] = None,
-    checkpoint_freq: Optional[int] = None,
-    resume_checkpoint: Optional[str] = None,
+        cfg: TrainConfig,
+        *,
+        seed: Optional[int] = None,
+        num_envs: Optional[int] = None,
+        total_timesteps: Optional[int] = None,
+        checkpoint_freq: Optional[int] = None,
+        resume_checkpoint: Optional[str] = None,
 ) -> TrainConfig:
     run = cfg.run
     if seed is not None:
