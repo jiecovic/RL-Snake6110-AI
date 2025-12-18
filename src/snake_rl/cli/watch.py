@@ -173,7 +173,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--run", type=str, required=True)
     p.add_argument("--which", type=str, default="best", choices=["auto", "latest", "best", "final"])
     p.add_argument("--reload", type=float, default=0.0, help="If >0, poll for newer checkpoint every N seconds.")
-    p.add_argument("--fps", type=int, default=12)
+    p.add_argument("--fps", type=int, default=25)
     p.add_argument("--pixel-size", type=int, default=8)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="auto")
