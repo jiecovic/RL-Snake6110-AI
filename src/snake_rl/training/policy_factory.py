@@ -7,6 +7,7 @@ from gymnasium import spaces
 
 from snake_rl.config.schema import TrainConfig
 from snake_rl.models.cnns.registry import CNN_REGISTRY
+from snake_rl.models.mlps.tile_mlp_extractor import TileMLPExtractor
 from snake_rl.models.vits.tile_vit_extractor import TileViTExtractor
 
 
@@ -43,10 +44,12 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space) -> dict[str, Any
     Build SB3 policy_kwargs from TrainConfig.
 
     - Always passes net_arch (post-extractor MLP).
-    - Selects feature extractor via cfg.model.model.features_extractor.type:
+    - Selects feature extractor via cfg.model.features_extractor.type:
         * CNN_REGISTRY keys -> custom CNN extractor
         * "tile_vit"       -> TileViTExtractor (symbolic tile-id ViT)
-    - Passes cfg.model.features_extractor.params through to the extractor kwargs.
+        * "tile_mlp"       -> TileMLPExtractor (symbolic tile-id embedding + MLP)
+    - Passes cfg.model.features_extractor.params through to the extractor kwargs
+      for tile_vit/tile_mlp.
     """
     policy_kwargs: dict[str, Any] = {
         "net_arch": list(cfg.model.net_arch),
@@ -72,6 +75,21 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space) -> dict[str, Any
         }
         return policy_kwargs
 
+    # --- NEW: MLP tile extractor --------------------------------------------
+    if extractor_key == "tile_mlp":
+        tiles_box = _get_tiles_box(observation_space)
+        num_tiles = _infer_num_tiles_from_box(tiles_box)
+
+        policy_kwargs |= {
+            "features_extractor_class": TileMLPExtractor,
+            "features_extractor_kwargs": {
+                "num_tiles": int(num_tiles),
+                "features_dim": int(features_dim),
+                **extra_params,
+            },
+        }
+        return policy_kwargs
+
     # --- Existing: CNN extractor --------------------------------------------
     if isinstance(observation_space, spaces.Box):
         try:
@@ -79,11 +97,10 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space) -> dict[str, Any
         except KeyError as e:
             raise ValueError(
                 f"Unknown feature extractor type {extractor_key!r}. "
-                f"Available CNNs: {sorted(CNN_REGISTRY.keys())}, plus: 'tile_vit'"
+                f"Available CNNs: {sorted(CNN_REGISTRY.keys())}, plus: 'tile_vit', 'tile_mlp'"
             ) from e
 
         # For CNNs, we only pass features_dim by default.
-        # If you later want CNN-specific params, you can allow a whitelist here.
         policy_kwargs |= {
             "features_extractor_class": cnn_cls,
             "features_extractor_kwargs": {

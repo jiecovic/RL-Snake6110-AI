@@ -5,31 +5,15 @@ import numpy as np
 from gymnasium import spaces
 
 from snake_rl.envs.base import BaseSnakeEnv
+from snake_rl.game.geometry import Direction, Point
 from snake_rl.game.snakegame import SnakeGame
 from snake_rl.game.tile_types import TileType
 
 
-def _build_tile_id_lut() -> dict[TileType, int]:
-    """
-    Stable mapping TileType -> integer tile id.
-
-    Convention:
-      - 0 is reserved for EMPTY
-      - TileType enum members are mapped to 1..N in definition order
-
-    This avoids relying on Enum.auto() values and keeps IDs stable.
-    """
-    lut: dict[TileType, int] = {}
-    idx = 1
-    for tt in TileType:
-        lut[tt] = idx
-        idx += 1
-    return lut
-
-
-_TILE_ID_LUT = _build_tile_id_lut()
-_EMPTY_ID = 0
-_NUM_TILE_IDS = 1 + len(_TILE_ID_LUT)  # includes EMPTY
+def _tile_vocab_size() -> int:
+    # We store TileType.value directly in SnakeGame.tile_grid (uint8).
+    # Vocab size is max enum value + 1, assuming values are 0..K.
+    return int(max(int(t.value) for t in TileType) + 1)
 
 
 class GlobalTileIdEnv(BaseSnakeEnv):
@@ -38,22 +22,30 @@ class GlobalTileIdEnv(BaseSnakeEnv):
 
     Observation:
       Box(shape=(1, H, W), dtype=uint8)
-        0          = empty
-        1..N       = TileType ids (snake head/body/tail orientation, walls, food)
+        value == TileType.value (TileType.EMPTY=0)
 
     Notes:
     - Intended for transformer / symbolic models.
     - Frame stacking works out-of-the-box (stacked along channel dimension).
+    - Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
     """
 
-    def __init__(self, game: SnakeGame):
+    def __init__(self, game: SnakeGame, *, remove_border: bool = True):
         BaseSnakeEnv.__init__(self, game)
 
-        self.game.reset()
-        h, w = int(self.game.height), int(self.game.width)
+        self.remove_border = bool(remove_border)
 
-        # Exposed for model construction (e.g. embedding table size)
-        self.num_tile_ids: int = int(_NUM_TILE_IDS)
+        # Keep historical behavior: env ctor forces a clean state.
+        self.game.reset()
+
+        h, w = int(self.game.height), int(self.game.width)
+        if self.remove_border:
+            if h <= 2 or w <= 2:
+                raise ValueError(f"remove_border=True requires h,w > 2; got h={h} w={w}")
+            h -= 2
+            w -= 2
+
+        self.num_tile_ids: int = _tile_vocab_size()
 
         self.observation_space = spaces.Box(
             low=0,
@@ -62,37 +54,95 @@ class GlobalTileIdEnv(BaseSnakeEnv):
             dtype=np.uint8,
         )
 
-    def _build_tile_id_grid(self) -> np.ndarray:
-        """
-        Build a (H, W) grid of tile IDs from the current game state.
-
-        Priority order:
-          snake > food > walls > empty
-        """
-        h, w = int(self.game.height), int(self.game.width)
-        grid = np.full((h, w), _EMPTY_ID, dtype=np.uint8)
-
-        # Walls
-        for pos, tile_type in self.game.wall_tiles:
-            grid[pos.y, pos.x] = _TILE_ID_LUT.get(tile_type, _EMPTY_ID)
-
-        # Food
-        if hasattr(TileType, "FOOD"):
-            food_id = _TILE_ID_LUT[TileType.FOOD]
-            for p in self.game.food:
-                grid[p.y, p.x] = food_id
-
-        # Snake layers (already encode orientation as TileType)
-        for tile_type, layer in self.game.snake_layers.items():
-            tid = _TILE_ID_LUT.get(tile_type, _EMPTY_ID)
-            if tid == _EMPTY_ID:
-                continue
-            yxs = np.argwhere(layer > 0)
-            for y, x in yxs:
-                grid[int(y), int(x)] = tid
-
-        return grid
+    def _get_grid_view(self) -> np.ndarray:
+        g = self.game.tile_grid  # (H,W) uint8, values are TileType.value
+        if not self.remove_border:
+            return g
+        return g[1:-1, 1:-1]
 
     def get_obs(self):
-        grid = self._build_tile_id_grid()
+        grid = self._get_grid_view()
         return grid[None, :, :].astype(np.uint8, copy=False)
+
+
+class PovTileIdEnv(BaseSnakeEnv):
+    """
+    POV symbolic grid observation (tile ids), centered on head and rotated so forward is UP.
+
+    Observation:
+      Box(shape=(1, V, V), dtype=uint8)
+        value == TileType.value (TileType.EMPTY=0)
+
+    Where:
+      V = 2*view_radius + 1
+
+    """
+
+    def __init__(
+            self,
+            game: SnakeGame,
+            *,
+            view_radius: int,
+    ):
+        BaseSnakeEnv.__init__(self, game)
+
+        self.view_radius = int(view_radius)
+        if self.view_radius < 0:
+            raise ValueError(f"view_radius must be >= 0, got {self.view_radius}")
+
+        # Keep historical behavior: env ctor forces a clean state.
+        self.game.reset()
+
+        v = 2 * self.view_radius + 1
+
+        self.num_tile_ids: int = _tile_vocab_size()
+
+        self.observation_space = spaces.Box(
+            low=0,
+            high=self.num_tile_ids - 1,
+            shape=(1, v, v),
+            dtype=np.uint8,
+        )
+
+    def _pov_tile_frame(self) -> np.ndarray:
+        g = self.game.tile_grid  # (H,W) uint8
+
+        head: Point = self.game.get_head_position()
+        hx, hy = int(head.x), int(head.y)
+
+        r = self.view_radius
+        v = 2 * r + 1
+
+        # Window bounds in grid coordinates
+        x0, x1 = hx - r, hx + r + 1
+        y0, y1 = hy - r, hy + r + 1
+
+        out = np.full((v, v), int(TileType.EMPTY.value), dtype=np.uint8)
+
+        # Overlap with g
+        gy0 = max(0, y0)
+        gy1 = min(g.shape[0], y1)
+        gx0 = max(0, x0)
+        gx1 = min(g.shape[1], x1)
+
+        oy0 = gy0 - y0
+        oy1 = oy0 + (gy1 - gy0)
+        ox0 = gx0 - x0
+        ox1 = ox0 + (gx1 - gx0)
+
+        out[oy0:oy1, ox0:ox1] = g[gy0:gy1, gx0:gx1]
+
+        # Rotate so the head faces UP (match PixelObsEnvBase convention)
+        d = self.game.direction
+        if d == Direction.RIGHT:
+            out = np.rot90(out, k=1)
+        elif d == Direction.DOWN:
+            out = np.rot90(out, k=2)
+        elif d == Direction.LEFT:
+            out = np.rot90(out, k=3)
+
+        return out
+
+    def get_obs(self):
+        frame = self._pov_tile_frame()
+        return frame[None, :, :].astype(np.uint8, copy=False)

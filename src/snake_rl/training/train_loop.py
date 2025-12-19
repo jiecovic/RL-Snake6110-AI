@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
 import torch
 import yaml
-from rich.console import Console
 from stable_baselines3 import PPO
 from stable_baselines3.common.utils import set_random_seed
 
@@ -20,6 +20,37 @@ from snake_rl.training.eval_utils import evaluate_model
 from snake_rl.training.model_factory import make_or_load_model
 from snake_rl.training.resume import resolve_resume_arg
 from snake_rl.training.run_paths import RunPaths, make_run_paths
+from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
+
+
+def _setup_logging(*, use_rich: bool, level: str) -> logging.Logger:
+    logger = logging.getLogger("snake_rl.train")
+    logger.handlers.clear()
+    logger.propagate = False
+
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    logger.setLevel(lvl)
+
+    if use_rich:
+        try:
+            from rich.logging import RichHandler  # type: ignore
+
+            handler = RichHandler(
+                rich_tracebacks=True,
+                show_time=True,
+                show_level=True,
+                show_path=False,
+            )
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            logger.addHandler(handler)
+            return logger
+        except Exception:
+            pass
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s %(message)s"))
+    logger.addHandler(handler)
+    return logger
 
 
 def _fmt_int(x: int) -> str:
@@ -35,7 +66,6 @@ def _fmt_float(x: float) -> str:
 
 
 def _fmt_path(value: Any, *, repo_root: Path) -> str:
-    # Pretty-print paths relative to repo_root when possible.
     if isinstance(value, Path):
         p = value
     elif isinstance(value, str):
@@ -49,19 +79,12 @@ def _fmt_path(value: Any, *, repo_root: Path) -> str:
     try:
         rp = p.resolve()
         rr = repo_root.resolve()
-        rel = rp.relative_to(rr)
-        return str(rel)
+        return str(rp.relative_to(rr))
     except Exception:
         return str(p)
 
 
 def _effective_ppo_init_kwargs(model: PPO) -> dict[str, Any]:
-    """
-    Return effective values for all PPO.__init__ parameters, as exposed by the model.
-
-    Note: not every ctor arg is necessarily stored as an attribute in SB3.
-    Those show as "<not_exposed>".
-    """
     sig = inspect.signature(PPO.__init__)
     keys = [k for k in sig.parameters.keys() if k != "self"]
 
@@ -69,26 +92,73 @@ def _effective_ppo_init_kwargs(model: PPO) -> dict[str, Any]:
     for k in keys:
         if k in {"policy", "env"}:
             continue
-        if hasattr(model, k):
-            out[k] = getattr(model, k)
-        else:
-            out[k] = "<not_exposed>"
+        out[k] = getattr(model, k, "<not_exposed>")
     return out
 
 
+def _log_block(logger: logging.Logger, header: str, obj: Any) -> None:
+    """
+    Log a multi-line repr() block in a stable way across Rich + plain logging.
+    """
+    logger.info(header)
+    if obj is None:
+        logger.info("  <None>")
+        return
+    for line in repr(obj).splitlines():
+        logger.info(line)
+
+
+def log_policy_network_detailed(*, model: PPO, logger: logging.Logger) -> None:
+    """
+    Restore the nice SB3 policy dump you had:
+
+    Policy Network (detailed):
+      policy_class: ...
+      features_extractor:
+      <repr>
+      mlp_extractor:
+      <repr>
+      action_net:
+      <repr>
+      value_net:
+      <repr>
+    """
+    policy = getattr(model, "policy", None)
+    logger.info("Policy Network (detailed):")
+    if policy is None:
+        logger.info("  <no model.policy>")
+        return
+
+    logger.info(f"  policy_class: {policy.__class__.__name__}")
+
+    feat = getattr(policy, "features_extractor", None)
+    if feat is not None:
+        _log_block(logger, "  features_extractor:", feat)
+
+    mlp = getattr(policy, "mlp_extractor", None)
+    if mlp is not None:
+        _log_block(logger, "  mlp_extractor:", mlp)
+
+    an = getattr(policy, "action_net", None)
+    if an is not None:
+        _log_block(logger, "  action_net:", an)
+
+    vn = getattr(policy, "value_net", None)
+    if vn is not None:
+        _log_block(logger, "  value_net:", vn)
+
+
 def log_ppo_params(
+        *,
         model: PPO,
         cfg: TrainConfig,
-        *,
         paths: RunPaths,
-        show_policy_network: bool = True,
+        logger: logging.Logger,
 ) -> None:
-    console = Console()
     repo_root = paths.repo_root
 
-    console.print("[bold magenta]PPO Effective Params (SB3):[/bold magenta]")
+    logger.info("PPO effective params (SB3):")
     eff = _effective_ppo_init_kwargs(model)
-
     for k in sorted(eff.keys()):
         v = eff[k]
         if isinstance(v, float):
@@ -99,38 +169,18 @@ def log_ppo_params(
             vs = _fmt_path(v, repo_root=repo_root)
         else:
             vs = str(v)
-        console.print(f"  [green]{k}:[/green] {vs}")
+        logger.info(f"  {k}: {vs}")
 
-    if show_policy_network:
-        policy = model.policy
-        console.print("[bold magenta]Policy Network (detailed):[/bold magenta]")
-        console.print(f"  [green]policy_class:[/green] {policy.__class__.__name__}")
+    logger.info("Model params (summary):")
+    logger.info(format_sb3_param_summary(model))
+    logger.info("Model params (detailed):")
+    logger.info(format_sb3_param_report(model))
 
-        if hasattr(policy, "features_extractor"):
-            console.print("  [green]features_extractor:[/green]")
-            console.print(policy.features_extractor)
-
-        if hasattr(policy, "mlp_extractor"):
-            console.print("  [green]mlp_extractor:[/green]")
-            console.print(policy.mlp_extractor)
-
-        if hasattr(policy, "action_net"):
-            console.print("  [green]action_net:[/green]")
-            console.print(policy.action_net)
-
-        if hasattr(policy, "value_net"):
-            console.print("  [green]value_net:[/green]")
-            console.print(policy.value_net)
+    # <-- THIS is what you were missing:
+    log_policy_network_detailed(model=model, logger=logger)
 
 
 def _to_effective_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
-    """
-    Convert the parsed TrainConfig (dataclass schema) back into the input YAML schema.
-
-    Motivation:
-    - config_resolved.json is a normalized dataclass dump (machine-friendly).
-    - config_effective.yaml should be rerunnable as an input config (human-friendly).
-    """
     fe = cfg.model.features_extractor
     d: dict[str, Any] = {
         "run": {
@@ -212,7 +262,15 @@ def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def train(*, cfg: TrainConfig, resume_override: Optional[str] = None) -> RunPaths:
+def train(
+        *,
+        cfg: TrainConfig,
+        resume_override: Optional[str] = None,
+        use_rich: bool = True,
+        log_level: str = "INFO",
+) -> RunPaths:
+    logger = _setup_logging(use_rich=use_rich, level=log_level)
+
     paths = make_run_paths(run_name=str(cfg.run.name))
     save_manifest(run_dir=paths.run_dir, cfg=cfg)
 
@@ -232,21 +290,20 @@ def train(*, cfg: TrainConfig, resume_override: Optional[str] = None) -> RunPath
         resume_path=resume_path,
     )
 
-    # Log effective PPO params + policy network (CNN, heads, etc.)
-    log_ppo_params(model, cfg, paths=paths, show_policy_network=True)
+    logger.info(f"[train] run_id={paths.run_id}")
+    logger.info(f"[train] run_dir={paths.run_dir}")
+    logger.info(f"[train] tb_dir={paths.tb_dir}")
+    logger.info(f"[train] checkpoints={paths.checkpoint_dir}")
+    logger.info(f"[train] obs_space={vec_env.observation_space}")
+    logger.info(f"[train] action_space={vec_env.action_space}")
+    logger.info(f"[train] torch={torch.__version__} cuda={torch.cuda.is_available()}")
+
+    log_ppo_params(model=model, cfg=cfg, paths=paths, logger=logger)
 
     callbacks = make_callbacks(
         cfg=cfg,
         checkpoint_dir=paths.checkpoint_dir,
     )
-
-    print(f"[train] run_id={paths.run_id}")
-    print(f"[train] run_dir={paths.run_dir}")
-    print(f"[train] tb_dir={paths.tb_dir}")
-    print(f"[train] checkpoints={paths.checkpoint_dir}")
-    print(f"[train] obs_space={vec_env.observation_space}")
-    print(f"[train] action_space={vec_env.action_space}")
-    print(f"[train] torch={torch.__version__} cuda={torch.cuda.is_available()}")
 
     model.learn(
         total_timesteps=int(cfg.run.total_timesteps),
@@ -276,12 +333,12 @@ def train(*, cfg: TrainConfig, resume_override: Optional[str] = None) -> RunPath
         )
         _append_jsonl(paths.checkpoint_dir / "eval_history.jsonl", metrics)
 
-        print(
+        logger.info(
             f"[eval-final] mean_reward={metrics['mean_reward']:.6g} "
             f"std_reward={metrics['std_reward']:.6g} "
             f"mean_len={metrics['mean_length']:.3f}"
         )
 
     vec_env.close()
-    print(f"[train] Done. Final model saved to: {final_path}")
+    logger.info(f"[train] Done. Final model saved to: {final_path}")
     return paths

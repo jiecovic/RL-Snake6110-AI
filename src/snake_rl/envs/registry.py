@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from snake_rl.envs.base import BaseSnakeEnv
-from snake_rl.envs.tile_id_env import GlobalTileIdEnv
+from snake_rl.envs.tile_id_env import GlobalTileIdEnv, PovTileIdEnv
 from snake_rl.envs.variants import (
     GlobalPixelDirectionEnv,
     GlobalPixelEnv,
@@ -16,4 +16,5 @@ ENV_REGISTRY: dict[str, type[BaseSnakeEnv]] = {
     "pov_pixel": PovPixelEnv,
     "pov_pixel_fill": PovPixelFillEnv,
     "global_tile_id": GlobalTileIdEnv,
+    "pov_tile_id": PovTileIdEnv,
 }

@@ -21,6 +21,11 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Checkpoint .zip path OR a run id OR 'latest:<run_name>'. Overrides run.resume_checkpoint.",
     )
+
+    # Logging cosmetics (match watch.py ergonomics)
+    p.add_argument("--no-rich", action="store_true", help="Disable Rich logging (fallback to plain logging).")
+    p.add_argument("--log-level", type=str, default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR).")
+
     return p.parse_args()
 
 
@@ -37,8 +42,7 @@ def main() -> None:
         resume_checkpoint=args.resume,
     )
 
-    # resume is already applied into cfg.run.resume_checkpoint
-    train(cfg=cfg)
+    train(cfg=cfg, use_rich=not bool(args.no_rich), log_level=str(args.log_level))
 
 
 if __name__ == "__main__":

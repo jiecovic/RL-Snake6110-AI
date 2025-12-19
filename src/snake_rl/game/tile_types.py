@@ -39,10 +39,6 @@ class TileType(Enum):
     # Food
     FOOD = 23
 
-    # Trackers
-    TRACKER_VISITED = 24
-    TRACKER_PATH = 25
-
 
 HEAD_TILES = {
     TileType.SNAKE_HEAD_UP,
