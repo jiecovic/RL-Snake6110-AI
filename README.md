@@ -1,119 +1,202 @@
-
-# RL-Snake6110-AI
-
 # 🐍 Snake RL — PPO Agent for Classic Nokia-Style Snake
 
-This project is my first attempt to **reproduce the famous Snake game from the Nokia 6110** —  
-same classic grid size and window layout — and to **train a reinforcement learning agent** to play it using **Proximal Policy Optimization (PPO)**.
+This project reproduces the **classic Snake game from the Nokia 6110** (original grid size and feel)  
+and explores how **reinforcement learning agents** can learn to play it using **Proximal Policy Optimization (PPO)**.
 
-## Overview
+The repository is intentionally designed as an **experimental RL playground**: a place to try different
+observation representations, network architectures, and training setups while keeping the underlying
+game mechanics fixed and reproducible.
 
-- **Engine:** PyGame  
-- **Algorithm:** PPO (using Stable-Baselines3 and Gymnasium)  
-- **Goal:** Learn to efficiently collect food, avoid fatal collisions, and ultimately **win the game** by filling the entire grid with the snake’s body tiles.  
-- **TensorBoard support** included for performance tracking.
+The ambition is **learning directly from pixels**, but the project also includes
+**symbolic and hybrid observation pipelines** used for experimentation and architectural comparisons with different feature extraction architectures.
 
-### 🎯 Objective
-The primary goal of this project is to **train a reinforcement learning agent purely from game pixels**, without the use of any external world models or tricks. The agent should learn to make decisions and improve its gameplay entirely based on visual input. The model and policy should figure out how to efficiently collect food, avoid collisions, and win the game by itself, relying solely on the raw pixel-based observations provided by the game environment.
+---
 
-### Reward shaping 
-The environment’s `step(action)` returns rewards as follows:
+## ✨ Highlights
 
-- **Tiny step penalty** every move to encourage efficiency: `reward -= tiny_reward`.
-- **Food eaten:**
-  - `+1.0` base,
-  - **speed bonus** up to `+2.0`, scaled by how quickly food is found since the last bite: `reward += 2 * (1 - steps_since_last_food / max_steps)`
-  - resets `visited_nodes` and the food-step counter.
-- **Fatal move** (wall/self/etc.): `−5.0` and **terminate**.
-- **Win** (board cleared / win condition): `+10.0`, terminate (no penalties).
-- **Timeout/truncation:** episode **truncates** when `steps_since_last_food >= max_steps`.
+- 🎮 **Faithful Snake implementation** (PyGame)
+- 🤖 **PPO agents** (Stable-Baselines3 + Gymnasium)
+- 🧠 **Multiple observation paradigms**
+  - Raw pixel-based inputs
+  - Snake-centric POV grids
+  - Symbolic / embedded representations (for experimental architectures)
+- 🧪 **Current feature extraction models**
+  - CNN-based feature extractors
+  - Vision Transformers (ViT)
+  - Embedding + MLP variants
+- 📦 **Reproducible runs via config snapshots**
+- 📊 **TensorBoard logging**
+- 👀 **Live watch mode with hot checkpoint reload**
 
-`info` includes `final_score` and a human-readable `termination_cause` when an episode ends.  
-Rendering is called each step for visual playback.
+---
 
+## 🎯 Objective
+
+The **ultimate objective** of this project is to train a reinforcement learning agent
+**purely from visual input (pixels)**, without relying on handcrafted state abstractions,
+world models, or privileged game information.
+
+At the same time, the codebase deliberately supports **experimental alternatives**, including:
+- symbolic grid encodings,
+- compact embeddings,
+- hybrid POV representations,
+
+to study their impact on learning speed, stability, and asymptotic performance.
+
+The agent should learn to:
+- efficiently collect food,
+- avoid self and wall collisions,
+- and ultimately **win the game** by filling the entire grid,
+
+with all behavior emerging from interaction with the environment and the reward signal.
+
+This makes the repository less a single “final solution” and more a **controlled research and
+engineering sandbox for RL experiments on a classic game**.
+
+---
+
+## 🧠 Reward Shaping
+
+The environment's `step(action)` returns rewards as follows:
+
+- **Step penalty** (encourage efficiency):  
+  `reward -= tiny_reward`
+- **Food eaten**:
+  - `+1.0` base reward
+  - **Speed bonus** up to `+2.0`, scaled by how quickly food is found:
+    ```
+    reward += 2 * (1 - steps_since_last_food / max_steps)
+    ```
+  - resets food counters and visited-node tracking
+- **Fatal move** (wall/self collision):  
+  `−5.0`, episode terminates
+- **Win condition** (board fully filled):  
+  `+10.0`, episode terminates
+- **Timeout / truncation**:  
+  episode truncates if `steps_since_last_food >= max_steps`
+
+The `info` dict includes:
+- `final_score`
+- `termination_cause` (human-readable)
 
 ---
 
 ## 🚀 Usage
 
-### 🏋️‍♂️ Train the Agent
-Start PPO training from scratch using the `snake-train` script defined in `pyproject.toml`:
-```bash
-snake-train
+All entry points are installed as **CLI tools** via `pyproject.toml`.
+
+### 🏋️ Train an Agent
+
+Train from a YAML config:
+
 ```
-Training logs and model checkpoints will be saved automatically under a timestamped subdirectory.
+snake-train --config configs/example_pov_small_tile_vit.yaml
+```
+
+Common overrides:
+
+```
+snake-train \
+  --config configs/example_pov_small_tile_vit.yaml \
+  --seed 123 \
+  --num-envs 8 \
+  --total-timesteps 5_000_000
+```
+
+🔒 **Reproducibility note**  
+At training start, an **effective snapshot** of the configuration is written to:
+
+```
+experiments/<run_id>/config_snapshot.yaml
+```
+
+This snapshot (with all CLI overrides applied) is the **single source of truth** for:
+- evaluation
+- watch mode
+- reproducing the run
 
 ---
 
-### 🎮 Run a Trained Checkpoint
-Render or evaluate a saved model using the `snake-eval` script defined in `pyproject.toml`:
-```bash
-snake-eval --run snake_ppo_x
+### 📊 Evaluate a Trained Run
+
 ```
-Replace `snake_ppo_x` with the name of your training run folder (e.g. `snake_ppo_3`, `snake_ppo_best`, etc.).
+snake-eval --run snake_ppo_001
+```
+
+Options:
+
+```
+snake-eval --run snake_ppo_001 --which best --episodes 100
+```
 
 ---
 
-### 🐍 Watch the Pretrained Model (Included in Repo)
-A pretrained PPO agent is provided under the repository folder `snake_test/`.
+### 👀 Watch a Trained Agent (Live Reload)
 
-Run it directly to watch the trained model play using the `snake-watch` script defined in `pyproject.toml`:
-```bash
-snake-watch --run snake_test
 ```
-This will load the existing checkpoint from `snake_test/` and start a rendering session in the PyGame window.
+snake-watch --run snake_ppo_001
+```
+
+Hot reload during training:
+
+```
+snake-watch --run snake_ppo_001 --reload 30
+```
 
 ---
 
+### 🕹️ Play Snake as a Human
 
-### 🎮 Demo Video
-
-Demonstration of a fully trained agent performing a complete successful run.
-
-[▶️ Watch Demo Video](demo-videos/FullRun-Demo-Win.mp4)
-
-## 🎮 Demo Gif
-![Snake RL Demo](snake_demo.gif)
-
-
-
-
-## 🔮 Future Work & Ideas
-
-- **Extend to other grid sizes and layouts** — larger arenas, variable resolutions, or grids with dynamic obstacles.  
-- **Introduce new game rules or mechanics** — e.g., multiple foods, or wall generation for added complexity.  
-- **Experiment with different observation spaces** — current setup uses a *snake-centric (POV)* observation, which scales well to varying map sizes, but global or hybrid states could offer richer representations.  
-- **Evaluate alternative RL algorithms** — TBD
-- **Hyperparameter Optimization (HPO) and Fine-Tuning** — automate PPO parameter search (learning rate, entropy coef, rollout size, etc.) and fine-tune trained agents for stability and better asymptotic performance.
-- **Explore model-based extensions** — planning or world-model approaches to improve sample efficiency; current agent is purely *model-free*.  
-- **Curriculum learning** — gradually increase grid size or introduce obstacles during training to accelerate convergence.  
-  *(This was already explored in an earlier draft version and yielded promising results — worth revisiting for future iterations.)*  
-
-
-## 📦 Install Dependencies
-
-Make sure to have `pyproject.toml` set up for managing dependencies.
-
-1. **Install required dependencies:**
-
-```bash
-pip install .  # to install the current package and its dependencies
+```
+snake-play
 ```
 
-2. **To install dependencies from `pyproject.toml`:**
-```bash
-pip install --upgrade setuptools pip
+Custom settings:
+
+```
+snake-play --width 30 --height 20 --fps 15
 ```
 
-### Install PyTorch with CUDA (GPU Support):
-To install PyTorch with CUDA support, follow the official guide:
-```bash
-pip install torch torchvision torchaudio
-# For CUDA support, visit https://pytorch.org/get-started/locally/ and choose the appropriate installation command.
+---
+
+## 🧪 Configuration Files
+
+Configs live in `configs/`.
+
+⚠️ **Important**  
+The provided example configs are **experimental** and intended as research starting points.
+
+---
+
+## 📂 Run Structure
+
 ```
+experiments/
+└── snake_ppo_001/
+    ├── config_snapshot.yaml
+    ├── checkpoints/
+    │   ├── latest.zip
+    │   ├── best.zip
+    │   └── final.zip
+    ├── tb/
+    ├── eval_final.json
+    └── status.txt
+```
+
+---
+
+## 📦 Installation
+
+```
+pip install .
+```
+
+
+PyTorch install:
+https://pytorch.org/get-started/locally/
 
 ---
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License — see LICENSE
