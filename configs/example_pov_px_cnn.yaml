@@ -1,4 +1,4 @@
-# configs/example.yaml
+# configs/example_pov_px_cnn.yaml
 # Example configuration for training a PPO agent on Snake
 # Training-only (headless). Human pygame play is handled by snake-play / watch scripts.
 
