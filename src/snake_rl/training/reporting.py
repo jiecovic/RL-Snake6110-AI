@@ -89,7 +89,7 @@ def log_ppo_params(*, model: PPO, cfg: Any, paths: Any, logger) -> None:
     """
     Log SB3 params and model structure.
 
-    Accepts cfg/paths as Any so this can be reused by CLIs that load the frozen YAML dict,
+    Accepts cfg/paths as Any so this can be reused by CLIs that load the snapshot YAML dict,
     without needing TrainConfig/RunPaths.
     """
     repo = getattr(paths, "repo_root", Path.cwd())
@@ -116,7 +116,14 @@ def log_ppo_params(*, model: PPO, cfg: Any, paths: Any, logger) -> None:
     log_policy_network_detailed(model=model, logger=logger)
 
 
-def _to_frozen_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
+def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
+    """
+    Build the persisted run snapshot dict.
+
+    Note: This is a curated snapshot of the effective config fields that matter for
+    reproducibility across train/eval/watch. If you add a new config field that should
+    be reproducible, add it here.
+    """
     fe = cfg.model.features_extractor
     d: dict[str, Any] = {
         "run": {
@@ -174,15 +181,15 @@ def _to_frozen_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
 
 def save_manifest(*, run_dir: Path, cfg: TrainConfig) -> None:
     """
-    Persist ONLY the frozen training configuration.
+    Persist ONLY the snapshot training configuration.
 
-    config_frozen.yaml is the single source of truth for reproducing a run.
+    config_snapshot.yaml is the single source of truth for reproducing a run.
     """
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    (run_dir / "config_frozen.yaml").write_text(
+    (run_dir / "config_snapshot.yaml").write_text(
         yaml.safe_dump(
-            _to_frozen_yaml_dict(cfg),
+            _to_snapshot_yaml_dict(cfg),
             sort_keys=False,
             default_flow_style=False,
             allow_unicode=True,

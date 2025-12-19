@@ -317,7 +317,7 @@ def load_config_yaml(path: str | Path) -> TrainConfig:
     Load a user-facing YAML config (input schema).
 
     This must NOT be used to read experiments/<run_id>/config_resolved.json.
-    For reruns from a run directory, prefer experiments/<run_id>/config_frozen.yaml.
+    For reruns from a run directory, prefer experiments/<run_id>/config_snapshot.yaml.
     """
     return parse_config(load_yaml(path))
 

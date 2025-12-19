@@ -1,4 +1,4 @@
-# src/snake_rl/config/frozen.py
+# src/snake_rl/config/snapshot.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,29 +6,29 @@ from typing import Any, Optional, cast
 
 import yaml
 
-FrozenConfig = dict[str, Any]
+SnapshotConfig = dict[str, Any]
 
 
-def load_frozen_config(*, run_dir: Path) -> FrozenConfig:
+def load_snapshot_config(*, run_dir: Path) -> SnapshotConfig:
     """
-    Load the frozen config from a run directory.
+    Load the snapshot config from a run directory.
 
     Single source of truth:
-      <run_dir>/config_frozen.yaml
+      <run_dir>/config_snapshot.yaml
     """
-    cfg_path = Path(run_dir) / "config_frozen.yaml"
+    cfg_path = Path(run_dir) / "config_snapshot.yaml"
     if not cfg_path.is_file():
-        raise FileNotFoundError(f"Could not find config_frozen.yaml in run dir: {run_dir}")
+        raise FileNotFoundError(f"Could not find config_snapshot.yaml in run dir: {run_dir}")
 
     data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        raise TypeError(f"config_frozen.yaml must parse to a dict, got {type(data).__name__}")
-    return cast(FrozenConfig, data)
+        raise TypeError(f"config_snapshot.yaml must parse to a dict, got {type(data).__name__}")
+    return cast(SnapshotConfig, data)
 
 
-def load_frozen_config_path(*, path: Path) -> FrozenConfig:
+def load_snapshot_config_path(*, path: Path) -> SnapshotConfig:
     """
-    Load a frozen config from an explicit path (yaml).
+    Load a snapshot config from an explicit YAML path.
     """
     path = Path(path)
     if not path.is_file():
@@ -37,7 +37,7 @@ def load_frozen_config_path(*, path: Path) -> FrozenConfig:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise TypeError(f"{path.name} must parse to a dict, got {type(data).__name__}")
-    return cast(FrozenConfig, data)
+    return cast(SnapshotConfig, data)
 
 
 def _get(cfg: Any, path: str, default: Any = None) -> Any:
@@ -54,14 +54,14 @@ def _get(cfg: Any, path: str, default: Any = None) -> Any:
     return cur
 
 
-def require_int(cfg: FrozenConfig, path: str) -> int:
+def require_int(cfg: SnapshotConfig, path: str) -> int:
     v = _get(cfg, path, None)
     if v is None:
         raise KeyError(f"Config missing {path}")
     return int(v)
 
 
-def optional_int(cfg: FrozenConfig, path: str, default: int) -> int:
+def optional_int(cfg: SnapshotConfig, path: str, default: int) -> int:
     v = _get(cfg, path, None)
     if v is None:
         return int(default)
@@ -71,22 +71,22 @@ def optional_int(cfg: FrozenConfig, path: str, default: int) -> int:
         return int(default)
 
 
-def get_run_seed(cfg: FrozenConfig) -> int:
+def get_run_seed(cfg: SnapshotConfig) -> int:
     return require_int(cfg, "run.seed")
 
 
-def get_run_num_envs(cfg: FrozenConfig) -> int:
+def get_run_num_envs(cfg: SnapshotConfig) -> int:
     return require_int(cfg, "run.num_envs")
 
 
-def get_env_id(cfg: FrozenConfig) -> str:
+def get_env_id(cfg: SnapshotConfig) -> str:
     v = _get(cfg, "env.id", None)
     if v is None:
         raise KeyError("Config missing env.id")
     return str(v)
 
 
-def get_env_params(cfg: FrozenConfig) -> dict[str, Any]:
+def get_env_params(cfg: SnapshotConfig) -> dict[str, Any]:
     v = _get(cfg, "env.params", None)
     if v is None:
         return {}
@@ -95,7 +95,7 @@ def get_env_params(cfg: FrozenConfig) -> dict[str, Any]:
     return dict(v)
 
 
-def get_level_params(cfg: FrozenConfig) -> dict[str, int]:
+def get_level_params(cfg: SnapshotConfig) -> dict[str, int]:
     h = _get(cfg, "level.height", None)
     w = _get(cfg, "level.width", None)
     f = _get(cfg, "level.food_count", None)
@@ -104,19 +104,20 @@ def get_level_params(cfg: FrozenConfig) -> dict[str, int]:
     return {"height": int(h), "width": int(w), "food_count": int(f)}
 
 
-def get_frame_stack_n(cfg: FrozenConfig) -> int:
+def get_frame_stack_n(cfg: SnapshotConfig) -> int:
     return max(1, optional_int(cfg, "observation.frame_stack.n_frames", 1))
 
 
-def resolve_cli_config(*, run_dir: Path, override: Optional[str]) -> tuple[FrozenConfig, Path]:
+def resolve_cli_config(*, run_dir: Path, override: Optional[str]) -> tuple[SnapshotConfig, Path]:
     """
     CLI helper:
-      - if override provided: load that YAML
-      - else: load run_dir/config_frozen.yaml
+      - if override provided: load that YAML path
+      - else: load <run_dir>/config_snapshot.yaml
     Returns (cfg, cfg_path_used).
     """
     if override:
         p = Path(override)
-        return load_frozen_config_path(path=p), p
-    p = Path(run_dir) / "config_frozen.yaml"
-    return load_frozen_config(run_dir=run_dir), p
+        return load_snapshot_config_path(path=p), p
+
+    p = Path(run_dir) / "config_snapshot.yaml"
+    return load_snapshot_config(run_dir=run_dir), p

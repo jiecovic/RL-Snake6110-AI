@@ -16,6 +16,7 @@ from snake_rl.training.model_factory import make_or_load_model
 from snake_rl.training.reporting import append_jsonl, log_ppo_params, save_manifest
 from snake_rl.training.resume import resolve_resume_arg
 from snake_rl.training.run_paths import RunPaths, make_run_paths
+from snake_rl.utils.checkpoints import atomic_save_zip
 from snake_rl.utils.logging import setup_logger
 from snake_rl.utils.paths import repo_root
 
@@ -35,6 +36,8 @@ def train(
     vec_env = make_vec_env(cfg=cfg)
 
     paths: Optional[RunPaths] = None
+    finished_ok = False
+
     try:
         # Resolve resume path without needing RunPaths yet.
         experiments_root = repo_root() / "experiments"
@@ -43,7 +46,7 @@ def train(
         if resume_value:
             resume_path = resolve_resume_arg(str(resume_value), experiments_root)
 
-        # Only now create the run directory + manifests.
+        # Only now create the run directory + snapshot.
         paths = make_run_paths(run_name=str(cfg.run.name))
         save_manifest(run_dir=paths.run_dir, cfg=cfg)
 
@@ -68,13 +71,13 @@ def train(
 
         model.learn(
             total_timesteps=int(cfg.run.total_timesteps),
-            progress_bar=True,
+            progress_bar=bool(use_rich),
             callback=callbacks,
             tb_log_name="ppo",
         )
 
         final_path = paths.checkpoint_dir / "final.zip"
-        model.save(str(final_path))
+        atomic_save_zip(model=model, dst=final_path)
 
         if bool(cfg.eval.final.enabled):
             seed_base = int(cfg.run.seed) + int(cfg.eval.final.seed_offset)
@@ -102,13 +105,17 @@ def train(
             )
 
         logger.info(f"[train] Done. Final model saved to: {final_path}")
+        finished_ok = True
         return paths
 
     finally:
         vec_env.close()
-        # If anything fails after run dir creation, at least leave a minimal marker.
+        # If anything fails after run dir creation, leave a minimal marker.
         if paths is not None:
             try:
-                (paths.run_dir / "status.txt").write_text("finished_or_failed\n", encoding="utf-8")
+                (paths.run_dir / "status.txt").write_text(
+                    "finished\n" if finished_ok else "failed\n",
+                    encoding="utf-8",
+                )
             except Exception:
                 pass

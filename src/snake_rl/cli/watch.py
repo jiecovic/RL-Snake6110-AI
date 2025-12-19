@@ -10,12 +10,12 @@ import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 
-from snake_rl.config.frozen import (
+from snake_rl.config.snapshot import (
     get_env_id,
     get_env_params,
     get_frame_stack_n,
     get_level_params,
-    load_frozen_config,
+    load_snapshot_config,
 )
 from snake_rl.envs.registry import get_env_cls
 from snake_rl.game.level import EmptyLevel
@@ -165,7 +165,7 @@ def main() -> None:
     repo = repo_root()
     run_dir = resolve_run_dir(repo, args.run)
 
-    cfg = load_frozen_config(run_dir=run_dir)
+    cfg = load_snapshot_config(run_dir=run_dir)
 
     ckpt = pick_checkpoint(run_dir=run_dir, which=args.which)
     model = load_ppo(ckpt, device=str(args.device))

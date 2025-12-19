@@ -9,7 +9,7 @@ from typing import Optional
 
 from stable_baselines3 import PPO
 
-from snake_rl.config.frozen import get_run_num_envs, get_run_seed, resolve_cli_config
+from snake_rl.config.snapshot import get_run_num_envs, get_run_seed, resolve_cli_config
 from snake_rl.training.eval_utils import evaluate_model
 from snake_rl.training.reporting import log_ppo_params
 from snake_rl.utils.checkpoints import pick_checkpoint
@@ -34,12 +34,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--which", type=str, default="latest", choices=["auto", "latest", "best", "final"])
     p.add_argument("--episodes", type=int, default=20)
 
-    # None => default from config_frozen.yaml (run.num_envs), clamped to <= episodes
+    # None => default from config_snapshot.yaml (run.num_envs), clamped to <= episodes
     p.add_argument(
         "--num-envs",
         type=int,
         default=None,
-        help="Parallel eval envs. Default: run.num_envs from config_frozen.yaml.",
+        help="Parallel eval envs. Default: run.num_envs from config_snapshot.yaml.",
     )
 
     p.add_argument("--deterministic", action="store_true")
@@ -47,7 +47,7 @@ def _parse_args() -> argparse.Namespace:
         "--seed-base",
         type=int,
         default=None,
-        help="Default: cfg.run.seed + 12345 (from config_frozen.yaml).",
+        help="Default: cfg.run.seed + 12345 (from config_snapshot.yaml).",
     )
 
     # Config resolution: YAML only
@@ -55,7 +55,7 @@ def _parse_args() -> argparse.Namespace:
         "--config",
         type=str,
         default=None,
-        help="Optional YAML config path. If omitted, uses experiments/<run>/config_frozen.yaml.",
+        help="Optional YAML config path. If omitted, uses experiments/<run>/config_snapshot.yaml.",
     )
 
     # Output controls
@@ -120,7 +120,7 @@ def main() -> None:
     logger.info(f"[eval] config={cfg_path}")
     logger.info(f"[eval] episodes={int(args.episodes)} deterministic={bool(args.deterministic)}")
 
-    # Default num_envs: from frozen config (run.num_envs), but never exceed episodes
+    # Default num_envs: from snapshot config (run.num_envs), but never exceed episodes
     if args.num_envs is None:
         try:
             cfg_num_envs = int(get_run_num_envs(cfg))

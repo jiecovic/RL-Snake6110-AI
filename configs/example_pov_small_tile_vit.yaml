@@ -28,16 +28,16 @@ observation:
 model:
   features_extractor:
     type: tile_vit
-    features_dim: 64
+    features_dim: 256
     params:
       d_model: 512
       n_layers: 4
       n_heads: 4
-      dropout: 0.10
+      dropout: 0.0
       use_cls_token: true
       use_2d_positional: true
       use_frame_embed: false
-  net_arch: []
+  net_arch: [128]
 
 
 ppo:
@@ -45,14 +45,14 @@ ppo:
   batch_size: 128
   n_epochs: 1
   gamma: 0.999
-  ent_coef: 0.03
-  learning_rate: 4e-5
+  ent_coef: 0.02
+  learning_rate: 6e-5
 
 #  gae_lambda: 0.95
 #  clip_range: 0.1
 #  vf_coef: 0.5
 #  max_grad_norm: 0.5
-  target_kl: 0.09
+  target_kl: 0.1
   normalize_advantage: true
 
   verbose: 0
@@ -60,12 +60,12 @@ ppo:
 eval:
   intermediate:
     enabled: true
-    episodes: 10
+    episodes: 100
     deterministic: true
     seed_offset: 10_000
 
   final:
     enabled: true
-    episodes: 100
+    episodes: 1000
     deterministic: true
     seed_offset: 20_000
