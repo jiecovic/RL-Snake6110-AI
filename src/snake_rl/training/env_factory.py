@@ -205,7 +205,16 @@ def make_vec_env(*, cfg: Any):
     num_envs = int(cfg.run.num_envs)
 
     env_fns = [make_single_env(cfg=cfg, seed=base_seed + i) for i in range(num_envs)]
-    vec_env = SubprocVecEnv(env_fns)
+
+    # Use DummyVecEnv for single-env runs (faster + fewer Windows spawn quirks),
+    # and SubprocVecEnv only when we actually need parallelism.
+    if num_envs <= 1:
+        from stable_baselines3.common.vec_env import DummyVecEnv
+
+        vec_env: VecEnv = DummyVecEnv(env_fns)
+    else:
+        vec_env = SubprocVecEnv(env_fns)
+
     vec_env = VecMonitor(vec_env)
 
     n_stack = _get_n_stack_from_cfg(cfg)
