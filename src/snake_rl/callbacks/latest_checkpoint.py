@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from stable_baselines3.common.callbacks import BaseCallback
+
+from snake_rl.utils.checkpoints import atomic_save_zip
 
 
 class LatestCheckpointCallback(BaseCallback):
@@ -31,12 +32,7 @@ class LatestCheckpointCallback(BaseCallback):
         if (self._calls % self.save_every_steps) != 0:
             return True
 
-        tmp = self.save_path.with_suffix(".zip.tmp")
-        # Save to tmp then replace for atomic-ish behavior on Windows
-        self.model.save(str(tmp))
-        if self.save_path.exists():
-            self.save_path.unlink()
-        tmp.replace(self.save_path)
+        atomic_save_zip(model=self.model, dst=self.save_path)
 
         if self.verbose > 0:
             print(f"[ckpt] wrote latest: {self.save_path}")

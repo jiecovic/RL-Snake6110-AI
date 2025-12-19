@@ -1,4 +1,4 @@
-# src/snake_rl/models/cnns/base_cnn_extractor.py
+# src/snake_rl/models/cnns/base.py
 from __future__ import annotations
 
 import numpy as np

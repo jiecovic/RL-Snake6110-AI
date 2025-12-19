@@ -54,11 +54,15 @@ class ObservationConfig:
 @dataclass(frozen=True)
 class FeaturesExtractorConfig:
     """
-    Generic feature extractor configuration.
+    Feature extractor ("model") configuration.
+
+    In snake_rl, models are SB3 feature extractors that map observations to
+    feature vectors. The PPO policy head (action/value networks) is kept fixed.
 
     type:
-      - CNN keys (e.g. 'tile4', 'nature8', ...)
-      - Transformer keys (e.g. 'tile_vit')
+      Feature extractor key (see models/registry.py), e.g.:
+        - px_*    : pixel-based CNNs
+        - tile_*  : symbolic tile-id models (MLP, ViT, ...)
 
     features_dim:
       Output feature dimension exposed to the policy MLP.

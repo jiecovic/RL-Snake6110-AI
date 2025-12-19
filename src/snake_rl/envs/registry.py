@@ -18,3 +18,21 @@ ENV_REGISTRY: dict[str, type[BaseSnakeEnv]] = {
     "global_tile_id": GlobalTileIdEnv,
     "pov_tile_id": PovTileIdEnv,
 }
+
+
+def get_env_cls(env_id: str) -> type[BaseSnakeEnv]:
+    """
+    Resolve an environment class from env_id.
+
+    This is the single source of truth for env lookup/validation.
+    """
+    key = str(env_id)
+    try:
+        return ENV_REGISTRY[key]
+    except KeyError as e:
+        available = ", ".join(sorted(ENV_REGISTRY.keys()))
+        raise ValueError(f"Unknown env.id={env_id!r}. Available: {available}") from e
+
+
+def available_envs() -> list[str]:
+    return sorted(ENV_REGISTRY.keys())

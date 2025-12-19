@@ -13,15 +13,9 @@ from stable_baselines3.common.vec_env import (
 )
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-from snake_rl.envs.registry import ENV_REGISTRY
+from snake_rl.envs.registry import get_env_cls
 from snake_rl.game.level import EmptyLevel
 from snake_rl.game.snakegame import SnakeGame
-
-
-def _validate_env_id(env_id: str) -> None:
-    if env_id not in ENV_REGISTRY:
-        available = ", ".join(sorted(ENV_REGISTRY.keys()))
-        raise ValueError(f"Unknown env.id={env_id!r}. Available: {available}")
 
 
 def _get_n_stack_from_cfg(cfg: Any) -> int:
@@ -158,14 +152,41 @@ class DictPixelVecFrameStack(VecEnvWrapper):
         return out
 
 
+def apply_frame_stack(*, vec_env: VecEnv, n_stack: int, pixel_key: str = "pixel") -> VecEnv:
+    """
+    Apply frame stacking consistently across CLI + training.
+
+    Rules:
+      - n_stack <= 1: return vec_env unchanged
+      - Dict obs: stack only pixel_key (leave scalar / discrete features untouched)
+      - Box obs: stack along channel dimension (works for pixels and tile-id grids)
+
+    This is intentionally strict and small so watch/train/eval can share it.
+    """
+    n = int(n_stack)
+    if n <= 1:
+        return vec_env
+
+    obs_space = vec_env.observation_space
+    if isinstance(obs_space, spaces.Dict):
+        if pixel_key not in obs_space.spaces:
+            raise KeyError(
+                f"Dict observation has no {pixel_key!r} key; stacking not implemented for this env."
+            )
+        return DictPixelVecFrameStack(vec_env, n_stack=n, pixel_key=str(pixel_key))
+
+    # Works for pixel Box AND for tile-id Box (C,H,W).
+    return VecFrameStack(vec_env, n_stack=n, channels_order="first")
+
+
 def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
-    _validate_env_id(str(cfg.env.id))
+    env_id = str(cfg.env.id)
+    env_cls = get_env_cls(env_id)
 
     def _init():
         level = EmptyLevel(height=int(cfg.level.height), width=int(cfg.level.width))
         game = SnakeGame(level=level, food_count=int(cfg.level.food_count), seed=int(seed))
 
-        env_cls = ENV_REGISTRY[str(cfg.env.id)]
         env_params = _get_env_params_from_cfg(cfg)
 
         # Registry-driven constructor: env params depend on env id (dynamic kwargs).
@@ -180,8 +201,6 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
 
 
 def make_vec_env(*, cfg: Any):
-    _validate_env_id(str(cfg.env.id))
-
     base_seed = int(cfg.run.seed)
     num_envs = int(cfg.run.num_envs)
 
@@ -190,13 +209,6 @@ def make_vec_env(*, cfg: Any):
     vec_env = VecMonitor(vec_env)
 
     n_stack = _get_n_stack_from_cfg(cfg)
-    if n_stack > 1:
-        obs_space = vec_env.observation_space
-        if isinstance(obs_space, spaces.Dict):
-            # Stack only the pixel channel(s); leave scalar features untouched.
-            vec_env = DictPixelVecFrameStack(vec_env, n_stack=n_stack, pixel_key="pixel")
-        else:
-            # Works for pixel Box AND for tile-id Box (C,H,W) just fine.
-            vec_env = VecFrameStack(vec_env, n_stack=n_stack, channels_order="first")
+    vec_env = apply_frame_stack(vec_env=vec_env, n_stack=n_stack, pixel_key="pixel")
 
     return vec_env

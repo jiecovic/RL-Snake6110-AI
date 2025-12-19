@@ -64,8 +64,7 @@ def asset_path(rel: str) -> Path:
     Resolve an asset path relative to assets_dir().
     Example: asset_path('levels/test_level.yaml')
     """
-    p = assets_dir() / rel
-    return p
+    return assets_dir() / rel
 
 
 def resolve_run_dir(repo: Path, run: str) -> Path:
@@ -86,3 +85,14 @@ def resolve_run_dir(repo: Path, run: str) -> Path:
                 return p.parent
         raise FileNotFoundError(f"--run points to an existing path but not a run dir: {p}")
     return repo / "experiments" / run
+
+
+def relpath(p: Path, *, base: Path) -> str:
+    """
+    Return a human-friendly relative path string for logging.
+    Falls back to str(p) if relative_to fails.
+    """
+    try:
+        return str(p.resolve().relative_to(base.resolve()))
+    except Exception:
+        return str(p)

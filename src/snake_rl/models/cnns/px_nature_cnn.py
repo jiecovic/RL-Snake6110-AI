@@ -1,19 +1,22 @@
-# src/snake_rl/models/cnns/nature_cnn8.py
+# src/snake_rl/models/cnns/px_nature_cnn.py
 from gymnasium import spaces
 from torch import nn
 
-from .base_cnn_extractor import BaseCNNExtractor
+from snake_rl.models.cnns.base import BaseCNNExtractor
 
 
-class NatureCNN8(BaseCNNExtractor):
+class PxNatureCNN(BaseCNNExtractor):
     """
     Classic Nature-DQN CNN.
-    Kernel sizes: 8-4-3.
-    Reference baseline.
+
+    Architecture:
+      - Conv(k=8, s=4, c=32)
+      - Conv(k=4, s=2, c=64)
+      - Conv(k=3, s=1, c=64)
     """
 
     def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
-        in_ch = observation_space.shape[0]
+        in_ch = int(observation_space.shape[0])
 
         return nn.Sequential(
             nn.Conv2d(in_ch, 32, kernel_size=8, stride=4),

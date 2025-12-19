@@ -10,7 +10,7 @@ from snake_rl.training.train_loop import train
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train PPO on Snake (headless).")
-    p.add_argument("--config", type=str, default="configs/example.yaml", help="Path to YAML config.")
+    p.add_argument("--config", type=str, required=True, help="Path to YAML config.")
     p.add_argument("--seed", type=int, default=None, help="Override run.seed.")
     p.add_argument("--num-envs", type=int, default=None, help="Override run.num_envs.")
     p.add_argument("--total-timesteps", type=int, default=None, help="Override run.total_timesteps.")

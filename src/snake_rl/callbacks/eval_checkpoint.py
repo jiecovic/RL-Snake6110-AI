@@ -1,9 +1,6 @@
 # src/snake_rl/callbacks/eval_checkpoint.py
 from __future__ import annotations
 
-import json
-import time
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -18,90 +15,11 @@ except Exception:  # pragma: no cover
     from tqdm.auto import tqdm
 
 from snake_rl.training.eval_utils import evaluate_model
+from snake_rl.utils.checkpoints import append_jsonl, atomic_save_zip, read_json, write_json
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _atomic_save_zip(
-        *,
-        model,
-        dst: Path,
-        retries: int = 25,
-        retry_sleep_s: float = 0.05,
-) -> None:
-    """
-    Atomic-ish checkpoint save that behaves well on Windows.
-
-    Strategy:
-      1) Save to a temporary file in the same directory.
-      2) Atomically replace dst with tmp via os.replace() (same filesystem).
-      3) If dst is locked (e.g. snake-watch currently loaded latest.zip), retry.
-      4) If still locked, keep training alive by saving a fallback file.
-
-    Important:
-      - Do NOT unlink(dst) first. On Windows that often fails if another process holds it open.
-      - os.replace() is the right primitive for atomic replacement on both Windows and POSIX.
-    """
-    dst = Path(dst)
-    dst.parent.mkdir(parents=True, exist_ok=True)
-
-    # Keep temp in same directory so replace is atomic (same filesystem)
-    tmp = dst.with_suffix(dst.suffix + ".tmp")
-
-    # If a stale tmp exists (e.g. after a crash), try to remove it (best effort).
-    try:
-        if tmp.exists():
-            tmp.unlink()
-    except OSError:
-        pass
-
-    model.save(str(tmp))
-
-    last_err: Exception | None = None
-    for _ in range(max(1, int(retries))):
-        try:
-            os.replace(str(tmp), str(dst))  # atomic replace (does not require pre-unlink)
-            return
-        except PermissionError as e:
-            last_err = e
-            time.sleep(float(retry_sleep_s))
-        except OSError as e:
-            # Some AV/indexers can cause transient errors too
-            last_err = e
-            time.sleep(float(retry_sleep_s))
-
-    # If we get here, dst is probably locked. Don't kill training; save a fallback.
-    fallback = dst.with_name(dst.stem + f".locked_{int(time.time())}" + dst.suffix)
-    try:
-        if tmp.exists():
-            os.replace(str(tmp), str(fallback))
-    except Exception:
-        # Best effort cleanup; if even that fails, leave tmp around.
-        pass
-
-    raise RuntimeError(
-        f"Failed to replace checkpoint {dst} (likely locked by another process). "
-        f"Saved fallback checkpoint to {fallback}. Last error: {last_err!r}"
-    )
-
-
-def _append_jsonl(path: Path, record: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-def _read_json(path: Path) -> Optional[dict]:
-    if not path.is_file():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _write_json(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 class EvalCheckpointCallback(BaseCallback):
@@ -148,8 +66,8 @@ class EvalCheckpointCallback(BaseCallback):
 
     def _init_callback(self) -> None:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        state = _read_json(self.state_path)
-        if state and isinstance(state, dict):
+        state = read_json(self.state_path) or {}
+        if isinstance(state, dict):
             best = state.get("best")
             if isinstance(best, dict):
                 m = best.get("metric")
@@ -193,6 +111,11 @@ class EvalCheckpointCallback(BaseCallback):
         self.logger.record("eval/mean_length", float(metrics["mean_length"]))
         self.logger.record("eval/std_length", float(metrics["std_length"]))
 
+        if "win_rate" in metrics:
+            self.logger.record("eval/win_rate", float(metrics["win_rate"]))
+        if "wins" in metrics:
+            self.logger.record("eval/wins", int(metrics["wins"]))
+
         if "final_score_mean" in metrics:
             self.logger.record("eval/final_score_mean", float(metrics["final_score_mean"]))
         if "final_score_min" in metrics:
@@ -226,11 +149,11 @@ class EvalCheckpointCallback(BaseCallback):
 
         self._last_ckpt_at = int(self.num_timesteps)
 
-        _atomic_save_zip(model=self.model, dst=self.latest_path)
+        atomic_save_zip(model=self.model, dst=self.latest_path)
 
-        state = _read_json(self.state_path) or {}
+        state = read_json(self.state_path) or {}
         state = self._update_state_latest(state)
-        _write_json(self.state_path, state)
+        write_json(self.state_path, state)
 
         if self.verbose > 0:
             print(f"[ckpt] latest @ {self.num_timesteps}: {self._rel(self.latest_path)}", flush=True)
@@ -262,7 +185,7 @@ class EvalCheckpointCallback(BaseCallback):
                 position=1,
             )
 
-        def _on_episode(i: int, n: int, reward: Optional[float]) -> None:
+        def _on_episode(_i: int, _n: int, reward: Optional[float]) -> None:
             if reward is None:
                 return
             if pbar is not None:
@@ -287,7 +210,7 @@ class EvalCheckpointCallback(BaseCallback):
         metrics["wall_time"] = _utc_now_iso()
         metrics["best_metric"] = best_metric
 
-        _append_jsonl(self.history_path, metrics)
+        append_jsonl(self.history_path, metrics)
         self._log_eval_to_tb(metrics)
 
         chosen_value = self._pick_best_value(metrics, best_metric=best_metric)
@@ -296,6 +219,8 @@ class EvalCheckpointCallback(BaseCallback):
             extra = ""
             if "final_score_mean" in metrics:
                 extra = f" mean_score={metrics['final_score_mean']:.6g}"
+            if "win_rate" in metrics:
+                extra += f" win_rate={metrics['win_rate']:.3f} ({int(metrics.get('wins', 0))}/{episodes})"
             print(
                 f"[eval] done  intermediate @ {self.num_timesteps}: "
                 f"mean_reward={metrics['mean_reward']:.6g} std_reward={metrics['std_reward']:.6g} "
@@ -312,12 +237,12 @@ class EvalCheckpointCallback(BaseCallback):
         if is_best:
             self._best_value = float(chosen_value)
             self._best_metric = best_metric
-            _atomic_save_zip(model=self.model, dst=self.best_path)
+            atomic_save_zip(model=self.model, dst=self.best_path)
 
-            state = _read_json(self.state_path) or {}
+            state = read_json(self.state_path) or {}
             state = self._update_state_latest(state)
             state = self._update_state_best(state, metric=best_metric, value=chosen_value)
-            _write_json(self.state_path, state)
+            write_json(self.state_path, state)
 
             if self.verbose > 0:
                 print(
@@ -326,8 +251,8 @@ class EvalCheckpointCallback(BaseCallback):
                     flush=True,
                 )
         else:
-            state = _read_json(self.state_path) or {}
+            state = read_json(self.state_path) or {}
             state = self._update_state_latest(state)
-            _write_json(self.state_path, state)
+            write_json(self.state_path, state)
 
         return True
