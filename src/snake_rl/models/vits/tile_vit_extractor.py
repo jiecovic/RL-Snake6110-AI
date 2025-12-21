@@ -182,6 +182,12 @@ class TileViTExtractor(BaseFeaturesExtractor):
         # Cast to long for embedding lookup (SB3 might hand us float obs).
         tile_ids = obs.to(dtype=torch.long)  # [B,C,H,W]
 
+        if torch.any(tile_ids < 0) or torch.any(tile_ids >= self.num_tiles):
+            raise ValueError(
+                f"tile id out of range: expected [0,{self.num_tiles - 1}] "
+                f"got min={int(tile_ids.min())} max={int(tile_ids.max())}"
+            )
+
         # Flatten grid -> tokens.
         # Base per-frame embeddings: [B, C, T, D]
         ids = tile_ids.reshape(b, c, self.seq_len)

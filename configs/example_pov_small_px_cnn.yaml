@@ -23,14 +23,14 @@ env:
 
 observation:
   frame_stack:
-    n_frames: 2
+    n_frames: 1
 
 model:
   features_extractor:
     type: px_tilealign_cnn_c4
-    features_dim: 512
+    features_dim: 1024
     params: {}      # optional
-  net_arch: [256, 128]
+  net_arch: [512, 128]
 
 ppo:
   n_steps: 2048
@@ -38,7 +38,7 @@ ppo:
   n_epochs: 2
   gamma: 0.999
   ent_coef: 0.03
-  learning_rate: 5e-4
+  learning_rate: 4e-4
 
 #  gae_lambda: 0.95        # bias/variance tradeoff for advantage estimation
 #  clip_range: 0.1         # PPO clipping; 0.1 is often more stable for Atari-like CNNs

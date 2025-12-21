@@ -8,6 +8,7 @@ from snake_rl.envs.base import BaseSnakeEnv
 from snake_rl.game.geometry import Direction, Point
 from snake_rl.game.snakegame import SnakeGame
 from snake_rl.game.tile_types import TileType
+from snake_rl.vocab import load_tile_vocab
 
 
 def _tile_vocab_size() -> int:
@@ -22,15 +23,22 @@ class GlobalTileIdEnv(BaseSnakeEnv):
 
     Observation:
       Box(shape=(1, H, W), dtype=uint8)
-        value == TileType.value (TileType.EMPTY=0)
+        value == class_id in [0, num_classes-1]
 
     Notes:
+    - If tile_vocab is None (default), class_id == TileType.value (raw IDs).
     - Intended for transformer / symbolic models.
     - Frame stacking works out-of-the-box (stacked along channel dimension).
     - Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
     """
 
-    def __init__(self, game: SnakeGame, *, remove_border: bool = True):
+    def __init__(
+            self,
+            game: SnakeGame,
+            *,
+            remove_border: bool = True,
+            tile_vocab: str | None = None,
+    ):
         BaseSnakeEnv.__init__(self, game)
 
         self.remove_border = bool(remove_border)
@@ -45,14 +53,32 @@ class GlobalTileIdEnv(BaseSnakeEnv):
             h -= 2
             w -= 2
 
-        self.num_tile_ids: int = _tile_vocab_size()
+        # Raw TileType vocab size (TileType.value)
+        self.raw_vocab_size: int = _tile_vocab_size()
+
+        # Optional: map raw TileType IDs -> compact class IDs.
+        self._tile_vocab = None
+        if tile_vocab is not None:
+            self._tile_vocab = load_tile_vocab(tile_vocab)
+
+        self.num_classes: int = (
+            int(self._tile_vocab.num_classes) if self._tile_vocab is not None else int(self.raw_vocab_size)
+        )
+
+        # Expose for logging/debug
+        self.tile_vocab_name: str | None = self._tile_vocab.name if self._tile_vocab is not None else None
+        self.tile_vocab_sha256: str | None = self._tile_vocab.sha256 if self._tile_vocab is not None else None
 
         self.observation_space = spaces.Box(
             low=0,
-            high=self.num_tile_ids - 1,
+            high=self.num_classes - 1,
             shape=(1, h, w),
             dtype=np.uint8,
         )
+
+        # Optional: last grids for tooling (agent-view IDs later)
+        self._last_raw_grid: np.ndarray | None = None
+        self._last_class_grid: np.ndarray | None = None
 
     def _get_grid_view(self) -> np.ndarray:
         g = self.game.tile_grid  # (H,W) uint8, values are TileType.value
@@ -61,7 +87,15 @@ class GlobalTileIdEnv(BaseSnakeEnv):
         return g[1:-1, 1:-1]
 
     def get_obs(self):
-        grid = self._get_grid_view()
+        raw = self._get_grid_view()
+        if self._tile_vocab is None:
+            grid = raw
+        else:
+            grid = self._tile_vocab.lut[raw]
+
+        self._last_raw_grid = raw
+        self._last_class_grid = grid
+
         return grid[None, :, :].astype(np.uint8, copy=False)
 
 
@@ -71,11 +105,13 @@ class PovTileIdEnv(BaseSnakeEnv):
 
     Observation:
       Box(shape=(1, V, V), dtype=uint8)
-        value == TileType.value (TileType.EMPTY=0)
+        value == class_id in [0, num_classes-1]
 
     Where:
       V = 2*view_radius + 1
 
+    Notes:
+    - If tile_vocab is None (default), class_id == TileType.value (raw IDs).
     """
 
     def __init__(
@@ -83,6 +119,7 @@ class PovTileIdEnv(BaseSnakeEnv):
             game: SnakeGame,
             *,
             view_radius: int,
+            tile_vocab: str | None = None,
     ):
         BaseSnakeEnv.__init__(self, game)
 
@@ -95,14 +132,32 @@ class PovTileIdEnv(BaseSnakeEnv):
 
         v = 2 * self.view_radius + 1
 
-        self.num_tile_ids: int = _tile_vocab_size()
+        # Raw TileType vocab size (TileType.value)
+        self.raw_vocab_size: int = _tile_vocab_size()
+
+        # Optional: map raw TileType IDs -> compact class IDs.
+        self._tile_vocab = None
+        if tile_vocab is not None:
+            self._tile_vocab = load_tile_vocab(tile_vocab)
+
+        self.num_classes: int = (
+            int(self._tile_vocab.num_classes) if self._tile_vocab is not None else int(self.raw_vocab_size)
+        )
+
+        # Expose for logging/debug
+        self.tile_vocab_name: str | None = self._tile_vocab.name if self._tile_vocab is not None else None
+        self.tile_vocab_sha256: str | None = self._tile_vocab.sha256 if self._tile_vocab is not None else None
 
         self.observation_space = spaces.Box(
             low=0,
-            high=self.num_tile_ids - 1,
+            high=self.num_classes - 1,
             shape=(1, v, v),
             dtype=np.uint8,
         )
+
+        # Optional: last grids for tooling (agent-view IDs later)
+        self._last_raw_grid: np.ndarray | None = None
+        self._last_class_grid: np.ndarray | None = None
 
     def _pov_tile_frame(self) -> np.ndarray:
         g = self.game.tile_grid  # (H,W) uint8
@@ -144,5 +199,13 @@ class PovTileIdEnv(BaseSnakeEnv):
         return out
 
     def get_obs(self):
-        frame = self._pov_tile_frame()
+        raw = self._pov_tile_frame()
+        if self._tile_vocab is None:
+            frame = raw
+        else:
+            frame = self._tile_vocab.lut[raw]
+
+        self._last_raw_grid = raw
+        self._last_class_grid = frame
+
         return frame[None, :, :].astype(np.uint8, copy=False)

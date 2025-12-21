@@ -4,13 +4,13 @@ from __future__ import annotations
 import inspect
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 from stable_baselines3 import PPO
 
 from snake_rl.config.schema import TrainConfig
-from snake_rl.training.run_paths import RunPaths
+from snake_rl.vocab import load_tile_vocab
 from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
 from snake_rl.utils.paths import relpath
 
@@ -90,7 +90,7 @@ def log_ppo_params(*, model: PPO, cfg: Any, paths: Any, logger) -> None:
     Log SB3 params and model structure.
 
     Accepts cfg/paths as Any so this can be reused by CLIs that load the snapshot YAML dict,
-    without needing TrainConfig/RunPaths.
+    without needing TrainConfig.
     """
     repo = getattr(paths, "repo_root", Path.cwd())
 
@@ -116,6 +116,31 @@ def log_ppo_params(*, model: PPO, cfg: Any, paths: Any, logger) -> None:
     log_policy_network_detailed(model=model, logger=logger)
 
 
+def _resolve_tile_vocab_meta(cfg: TrainConfig) -> Optional[dict[str, Any]]:
+    """
+    If env.params.tile_vocab is set, resolve it to reproducible metadata.
+
+    Returns None if no tile_vocab was configured.
+    """
+    params = dict(cfg.env.params)
+    name_v = params.get("tile_vocab", None)
+    if name_v is None:
+        return None
+
+    name = str(name_v).strip()
+    if not name:
+        raise ValueError("env.params.tile_vocab must be a non-empty string")
+
+    vocab = load_tile_vocab(name)
+    return {
+        "name": vocab.name,
+        "path": str(vocab.path),
+        "sha256": vocab.sha256,
+        "num_classes": int(vocab.num_classes),
+        "class_names": list(vocab.class_names),
+    }
+
+
 def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
     """
     Build the persisted run snapshot dict.
@@ -125,6 +150,13 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
     be reproducible, add it here.
     """
     fe = cfg.model.features_extractor
+
+    env_params = dict(cfg.env.params)
+    vocab_meta = _resolve_tile_vocab_meta(cfg)
+    if vocab_meta is not None:
+        # Store resolved metadata next to the user-facing selection.
+        env_params["tile_vocab_meta"] = vocab_meta
+
     d: dict[str, Any] = {
         "run": {
             "name": cfg.run.name,
@@ -140,7 +172,7 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
         },
         "env": {
             "id": str(cfg.env.id),
-            "params": dict(cfg.env.params),
+            "params": env_params,
         },
         "observation": {
             "params": dict(cfg.observation.params),

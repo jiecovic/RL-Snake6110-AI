@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Optional
 
 import numpy as np
+from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 
@@ -32,6 +35,12 @@ from snake_rl.utils.obs import sanitize_observation
 from snake_rl.utils.obs_render import obs_frame_to_pixels
 from snake_rl.utils.paths import relpath, repo_root, resolve_run_dir
 
+try:
+    # Optional dependency: only needed for tile_vocab runs.
+    from snake_rl.vocab import load_tile_vocab
+except Exception:  # pragma: no cover
+    load_tile_vocab = None  # type: ignore[assignment]
+
 
 def _ts() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
@@ -40,6 +49,106 @@ def _ts() -> str:
 def _make_game_from_level_params(level: dict[str, int], *, seed: int) -> SnakeGame:
     lvl = EmptyLevel(height=int(level["height"]), width=int(level["width"]))
     return SnakeGame(level=lvl, food_count=int(level["food_count"]), seed=int(seed))
+
+
+def _filter_env_kwargs(*, env_cls: type, params: dict[str, Any]) -> dict[str, Any]:
+    """
+    Filter snapshot env params to only those accepted by env_cls.__init__.
+
+    This is important because snapshots may contain reproducibility metadata
+    (e.g. tile_vocab_meta) that should NOT be passed to env constructors.
+    """
+    if not params:
+        return {}
+
+    try:
+        sig = inspect.signature(env_cls.__init__)
+    except Exception:
+        # Best-effort fallback: drop known meta keys.
+        drop = {"tile_vocab_meta"}
+        return {k: v for k, v in params.items() if k not in drop}
+
+    accepted = set(sig.parameters.keys())
+    accepted.discard("self")
+
+    # If env supports **kwargs, keep everything.
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return dict(params)
+
+    filtered = {k: v for k, v in params.items() if k in accepted}
+    return filtered
+
+
+def _infer_num_classes_from_obs_space(obs_space: spaces.Space) -> Optional[int]:
+    """
+    For tile/class-id Box spaces, infer K from high=max_id => K=max_id+1.
+    Supports Box directly or Dict{"tiles": Box} (future-proof).
+    """
+    box: Optional[spaces.Box] = None
+    if isinstance(obs_space, spaces.Box):
+        box = obs_space
+    elif isinstance(obs_space, spaces.Dict) and "tiles" in obs_space.spaces:
+        sub = obs_space.spaces["tiles"]
+        if isinstance(sub, spaces.Box):
+            box = sub
+
+    if box is None:
+        return None
+
+    hi = box.high
+    try:
+        max_hi = float(np.asarray(hi).max())
+    except Exception:
+        return None
+    return int(max_hi) + 1
+
+
+def _obs_has_pixel_key(obs: Any, *, pixel_key: str = "pixel") -> bool:
+    return isinstance(obs, dict) and (pixel_key in obs)
+
+
+def _extract_tile_grid_2d(obs: Any) -> Optional[np.ndarray]:
+    """
+    Convert the current observation into a 2D uint8 grid of class/tile ids.
+
+    Supported shapes:
+      - Box obs from VecEnv: np.ndarray with shape (n_envs, C, H, W)
+      - Box obs without channel: (n_envs, H, W)
+
+    We always take env index 0 (watch uses DummyVecEnv with 1 env),
+    and if C>1 (frame stack), we take the LAST channel as "latest frame".
+    """
+    if not isinstance(obs, np.ndarray):
+        return None
+
+    if obs.ndim == 4:
+        g = obs[0]  # (C,H,W)
+        if g.shape[0] < 1:
+            return None
+        g2 = g[-1]  # latest stacked frame
+        return np.asarray(g2, dtype=np.uint8)
+    if obs.ndim == 3:
+        g2 = obs[0]  # (H,W)
+        return np.asarray(g2, dtype=np.uint8)
+    return None
+
+
+def _load_num_classes_from_env_params(env_params: dict[str, Any]) -> Optional[int]:
+    """
+    If this run used a named tile_vocab, prefer using its num_classes (true K)
+    instead of inferring from observation_space.high (which should match, but
+    this is more explicit and gives us class_names too, later).
+    """
+    name = env_params.get("tile_vocab", None)
+    if name is None:
+        return None
+    if load_tile_vocab is None:
+        return None
+    try:
+        vocab = load_tile_vocab(str(name))
+        return int(vocab.num_classes)
+    except Exception:
+        return None
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,34 +169,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--print-obs-max", type=int, default=5)
 
     # Agent-view window
-    p.add_argument(
-        "--show-agent-view",
-        action="store_true",
-        help="Open a separate window that renders the agent's observation.",
-    )
-    p.add_argument(
-        "--agent-view-max-size",
-        type=int,
-        default=480,
-        help="Max window side in screen pixels (auto scale).",
-    )
-    p.add_argument(
-        "--agent-view-fps",
-        type=int,
-        default=0,
-        help="If >0, cap agent-view updates to this FPS. 0 => send every tick.",
-    )
-    p.add_argument(
-        "--agent-view-keep-stderr",
-        action="store_true",
-        help="Keep agent-view subprocess stderr (useful for debugging).",
-    )
+    p.add_argument("--show-agent-view", action="store_true", help="Open a separate window that renders the agent's observation.")
+    p.add_argument("--agent-view-max-size", type=int, default=1080, help="Max window side in screen pixels (auto scale).")
+    p.add_argument("--agent-view-fps", type=int, default=0, help="If >0, cap agent-view updates to this FPS. 0 => send every tick.")
+    p.add_argument("--agent-view-keep-stderr", action="store_true", help="Keep agent-view subprocess stderr (useful for debugging).")
     p.add_argument(
         "--agent-view-pixel-size",
         type=int,
         default=0,
-        help="If >0, force pixel_size for agent-view window. "
-             "0 => auto. Defaults to --pixel-size if unset.",
+        help="If >0, force pixel_size for agent-view window. 0 => auto. Defaults to --pixel-size if unset.",
     )
 
     return p.parse_args()
@@ -95,20 +185,20 @@ def parse_args() -> argparse.Namespace:
 
 class WatchController:
     def __init__(
-            self,
-            *,
-            vec_env,
-            model: PPO,
-            run_dir: Path,
-            which: str,
-            device: str,
-            reload_seconds: float,
-            initial_ckpt: Path,
-            print_obs: bool,
-            print_obs_every: int,
-            print_obs_max: int,
-            logger,
-            repo: Path,
+        self,
+        *,
+        vec_env,
+        model: PPO,
+        run_dir: Path,
+        which: str,
+        device: str,
+        reload_seconds: float,
+        initial_ckpt: Path,
+        print_obs: bool,
+        print_obs_every: int,
+        print_obs_max: int,
+        logger,
+        repo: Path,
     ):
         self.vec_env = vec_env
         self.model = model
@@ -154,10 +244,7 @@ class WatchController:
                 self.model = load_ppo(chosen, device=self.device)
                 self.current_ckpt = chosen
                 self.current_mtime = mtime
-                self.logger.info(
-                    f"reloaded checkpoint: {relpath(chosen, base=self.repo)} "
-                    f"(mtime={int(mtime)})"
-                )
+                self.logger.info(f"reloaded checkpoint: {relpath(chosen, base=self.repo)} (mtime={int(mtime)})")
         except Exception:
             self.logger.exception("reload error")
 
@@ -213,14 +300,25 @@ def main() -> None:
     env_id = get_env_id(cfg)
     env_cls = get_env_cls(env_id)
     env_params = get_env_params(cfg)
+    env_kwargs = _filter_env_kwargs(env_cls=env_cls, params=env_params)
 
-    base_env = env_cls(game, **env_params)  # type: ignore[arg-type]
+    # (Optional) log dropped keys once (helps catch future metadata additions)
+    dropped = sorted(set(env_params.keys()) - set(env_kwargs.keys()))
+    if dropped:
+        logger.info(f"[watch] ignoring non-constructor env params: {dropped}")
+
+    base_env = env_cls(game, **env_kwargs)  # type: ignore[arg-type]
 
     vec_env = DummyVecEnv([lambda: base_env])
     vec_env = VecMonitor(vec_env)
 
     n_stack = int(get_frame_stack_n(cfg))
     vec_env = apply_frame_stack(vec_env=vec_env, n_stack=n_stack, pixel_key="pixel")
+
+    # Precompute num_classes if possible (used by agent-view ids mode)
+    num_classes_from_vocab = _load_num_classes_from_env_params(env_params)
+    num_classes_from_space = _infer_num_classes_from_obs_space(vec_env.observation_space)
+    num_classes = num_classes_from_vocab or num_classes_from_space
 
     controller = WatchController(
         vec_env=vec_env,
@@ -239,7 +337,6 @@ def main() -> None:
 
     agent_view = AgentViewStream()
     if args.show_agent_view:
-        # Match main window pixel size by default
         av_ps = int(args.agent_view_pixel_size)
         if av_ps <= 0:
             av_ps = int(args.pixel_size)
@@ -255,16 +352,38 @@ def main() -> None:
     def _controller_step() -> None:
         controller.step()
 
-        if agent_view.is_alive():
-            try:
+        if not agent_view.is_alive():
+            return
+
+        try:
+            # Case A: Dict obs with pixels (pixel envs)
+            if _obs_has_pixel_key(controller.obs, pixel_key="pixel"):
                 frame = obs_frame_to_pixels(
                     controller.obs,
                     tileset=game.tileset,
                     pixel_key="pixel",
                 )
-                agent_view.send_frame(frame, max_fps=int(args.agent_view_fps))
-            except Exception:
-                pass
+                agent_view.send_frame(
+                    frame,
+                    mode="gray255",
+                    max_fps=int(args.agent_view_fps),
+                )
+                return
+
+            # Case B: Box obs (tile/class-id envs)
+            grid = _extract_tile_grid_2d(controller.obs)
+            if grid is not None:
+                k = int(num_classes) if num_classes is not None else (int(grid.max()) + 1)
+                agent_view.send_frame(
+                    grid,
+                    mode="ids",
+                    num_classes=int(k),
+                    max_fps=int(args.agent_view_fps),
+                )
+                return
+
+        except Exception:
+            pass
 
     try:
         run_pygame_app(

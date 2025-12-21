@@ -50,6 +50,11 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
     Conventions:
       - px_* extractors: pixel-based (typically CNN); kwargs: {features_dim}
       - tile_* extractors: symbolic tile-id; kwargs: {num_tiles, features_dim, **params}
+
+    IMPORTANT:
+      For tile_* extractors, num_tiles is inferred from observation_space.high (+1).
+      If the user provides num_tiles in config params, we validate it matches to avoid
+      silent mismatches when swapping vocabs.
     """
     fe = cfg.model.features_extractor
     extractor_key = str(fe.type).strip().lower()
@@ -72,10 +77,19 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
     # Tile-id models need vocab size inferred from the observation space.
     if extractor_key.startswith("tile_"):
         tiles_box = _get_tiles_box(observation_space)
-        num_tiles = _infer_num_tiles_from_box(tiles_box)
+        inferred_num_tiles = _infer_num_tiles_from_box(tiles_box)
+
+        # Guard against silent override / mismatch.
+        user_num_tiles = extra_params.pop("num_tiles", None)
+        if user_num_tiles is not None and int(user_num_tiles) != int(inferred_num_tiles):
+            raise ValueError(
+                f"Config provided num_tiles={user_num_tiles}, but observation_space implies "
+                f"num_tiles={inferred_num_tiles}. Remove num_tiles from model.features_extractor.params "
+                f"or fix your env/vocab."
+            )
 
         policy_kwargs["features_extractor_kwargs"] = {
-            "num_tiles": int(num_tiles),
+            "num_tiles": int(inferred_num_tiles),
             "features_dim": int(features_dim),
             **extra_params,
         }

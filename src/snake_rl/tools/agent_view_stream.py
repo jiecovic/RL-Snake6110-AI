@@ -23,20 +23,27 @@ def _send_msg(proc: subprocess.Popen, msg: dict) -> None:
 @dataclass
 class AgentViewStream:
     """
-    Spawns a separate process to render frames (second window) and streams frames to it.
+    Spawns a separate process to render frames (second window)
+    and streams frames + metadata to it.
+
+    Protocol (msg dict):
+      type="frame"
+        - frame: np.ndarray
+        - mode: "gray255" | "ids"        (optional, default="gray255")
+        - num_classes: int | None        (required for mode="ids")
     """
 
     proc: Optional[subprocess.Popen] = None
     last_send_t: float = 0.0
 
     def start(
-        self,
-        *,
-        caption: str,
-        max_size: int,
-        fps: int,
-        keep_stderr: bool = False,
-        pixel_size: int = 0,  # 0 => auto
+            self,
+            *,
+            caption: str,
+            max_size: int,
+            fps: int,
+            keep_stderr: bool = False,
+            pixel_size: int = 0,  # 0 => auto
     ) -> None:
         cmd = [
             sys.executable,
@@ -78,7 +85,29 @@ class AgentViewStream:
             pass
         self.proc = None
 
-    def send_frame(self, frame: np.ndarray, *, max_fps: int = 0) -> None:
+    def send_frame(
+            self,
+            frame: np.ndarray,
+            *,
+            mode: str = "gray255",
+            num_classes: Optional[int] = None,
+            max_fps: int = 0,
+    ) -> None:
+        """
+        Send a frame to the agent-view window.
+
+        Parameters
+        ----------
+        frame:
+            - gray255 mode: uint8 array [H,W] in [0,255]
+            - ids mode:     uint8 / int array [H,W] with class IDs
+        mode:
+            "gray255" (default) or "ids"
+        num_classes:
+            Required for mode="ids"; ignored otherwise.
+        max_fps:
+            If >0, throttle sends to this FPS.
+        """
         if not self.is_alive():
             return
 
@@ -91,6 +120,19 @@ class AgentViewStream:
         try:
             if not isinstance(frame, np.ndarray):
                 frame = np.asarray(frame)
-            _send_msg(self.proc, {"type": "frame", "frame": frame})
+
+            msg = {
+                "type": "frame",
+                "frame": frame,
+                "mode": str(mode),
+            }
+
+            if mode == "ids":
+                if num_classes is None:
+                    raise ValueError("send_frame(mode='ids') requires num_classes")
+                msg["num_classes"] = int(num_classes)
+
+            _send_msg(self.proc, msg)
         except Exception:
+            # Never crash the main loop because of the debug window
             pass
