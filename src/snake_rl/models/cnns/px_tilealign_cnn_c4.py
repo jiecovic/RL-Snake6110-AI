@@ -17,7 +17,7 @@ class PxTileAlignedCNN_C4(BaseCNNExtractor):
 
     def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
         in_ch = int(observation_space.shape[0])
-        c = 4
+        c = 4*4
 
         return nn.Sequential(
             nn.Conv2d(in_ch, c, kernel_size=4, stride=4),

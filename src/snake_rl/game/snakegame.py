@@ -47,7 +47,7 @@ class SnakeGame:
 
     Incremental rendering (permanent):
     - Maintain tile_grid (H,W) of uint8 TileType values (TileType.EMPTY=0).
-    - Maintain pixel_buffer (H*tile_size, W*tile_size) uint8.
+    - Maintain pixel_buffer (H*tile_size, W*tile_size) uint8 in range [0,255].
     - On each successful move, update only the handful of cells that changed.
 
     NOTE:
@@ -56,11 +56,11 @@ class SnakeGame:
     """
 
     def __init__(
-            self,
-            level: BaseLevel,
-            food_count: int | None = None,
-            tileset: Tileset | None = None,
-            seed: int | None = None,
+        self,
+        level: BaseLevel,
+        food_count: int | None = None,
+        tileset: Tileset | None = None,
+        seed: int | None = None,
     ):
         # === Basic config ===
         self.level = level
@@ -110,7 +110,7 @@ class SnakeGame:
         # Debug-only verification (optional)
         self.enable_shadow_check: bool = False  # set True temporarily if you suspect a bug
 
-        # Tile cache for fast blits (TileType -> (tile_size,tile_size) uint8)
+        # Tile cache for fast blits (TileType -> (tile_size,tile_size) uint8 in [0,255])
         self._tile_cache: dict[TileType, np.ndarray] = {}
         self._empty_tile: np.ndarray = np.zeros((self.tileset.tile_size, self.tileset.tile_size), dtype=np.uint8)
 
@@ -188,7 +188,14 @@ class SnakeGame:
             if tt == TileType.EMPTY:
                 continue
             if tt in self.tileset:
-                self._tile_cache[tt] = np.array(self.tileset[tt], dtype=np.uint8)
+                tile = np.array(self.tileset[tt], dtype=np.uint8)
+
+                # Promote binary tiles (0/1) to pixel intensity (0/255) once at load time.
+                # This keeps pixel_buffer in [0,255] while allowing richer tilesets later.
+                if tile.size and int(tile.max()) <= 1:
+                    tile = (tile * np.uint8(255)).astype(np.uint8, copy=False)
+
+                self._tile_cache[tt] = tile
 
         # In case tile_size changed (unlikely, but cheap to keep consistent)
         td = int(self.tileset.tile_size)

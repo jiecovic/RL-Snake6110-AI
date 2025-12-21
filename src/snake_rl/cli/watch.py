@@ -21,6 +21,7 @@ from snake_rl.envs.registry import get_env_cls
 from snake_rl.game.level import EmptyLevel
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snakegame import SnakeGame
+from snake_rl.tools.agent_view_stream import AgentViewStream
 from snake_rl.tools.obs_debug import debug_print_obs
 from snake_rl.training.env_factory import apply_frame_stack
 from snake_rl.utils.checkpoints import pick_checkpoint
@@ -28,6 +29,7 @@ from snake_rl.utils.logging import setup_logger
 from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
 from snake_rl.utils.models import load_ppo
 from snake_rl.utils.obs import sanitize_observation
+from snake_rl.utils.obs_render import obs_frame_to_pixels
 from snake_rl.utils.paths import relpath, repo_root, resolve_run_dir
 
 
@@ -56,6 +58,38 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--print-obs", action="store_true")
     p.add_argument("--print-obs-every", type=int, default=1)
     p.add_argument("--print-obs-max", type=int, default=5)
+
+    # Agent-view window
+    p.add_argument(
+        "--show-agent-view",
+        action="store_true",
+        help="Open a separate window that renders the agent's observation.",
+    )
+    p.add_argument(
+        "--agent-view-max-size",
+        type=int,
+        default=480,
+        help="Max window side in screen pixels (auto scale).",
+    )
+    p.add_argument(
+        "--agent-view-fps",
+        type=int,
+        default=0,
+        help="If >0, cap agent-view updates to this FPS. 0 => send every tick.",
+    )
+    p.add_argument(
+        "--agent-view-keep-stderr",
+        action="store_true",
+        help="Keep agent-view subprocess stderr (useful for debugging).",
+    )
+    p.add_argument(
+        "--agent-view-pixel-size",
+        type=int,
+        default=0,
+        help="If >0, force pixel_size for agent-view window. "
+             "0 => auto. Defaults to --pixel-size if unset.",
+    )
+
     return p.parse_args()
 
 
@@ -203,18 +237,52 @@ def main() -> None:
         repo=repo,
     )
 
-    run_pygame_app(
-        game=game,
-        cfg=AppConfig(
-            fps=int(args.fps),
-            pixel_size=int(args.pixel_size),
-            caption=f"Snake (watch: {run_dir.name} / {args.which})",
-            enable_human_input=False,
-        ),
-        step_fn=controller.step,
-    )
+    agent_view = AgentViewStream()
+    if args.show_agent_view:
+        # Match main window pixel size by default
+        av_ps = int(args.agent_view_pixel_size)
+        if av_ps <= 0:
+            av_ps = int(args.pixel_size)
 
-    vec_env.close()
+        agent_view.start(
+            caption="Snake (agent view)",
+            max_size=int(args.agent_view_max_size),
+            fps=int(args.agent_view_fps),
+            keep_stderr=bool(args.agent_view_keep_stderr),
+            pixel_size=av_ps,
+        )
+
+    def _controller_step() -> None:
+        controller.step()
+
+        if agent_view.is_alive():
+            try:
+                frame = obs_frame_to_pixels(
+                    controller.obs,
+                    tileset=game.tileset,
+                    pixel_key="pixel",
+                )
+                agent_view.send_frame(frame, max_fps=int(args.agent_view_fps))
+            except Exception:
+                pass
+
+    try:
+        run_pygame_app(
+            game=game,
+            cfg=AppConfig(
+                fps=int(args.fps),
+                pixel_size=int(args.pixel_size),
+                caption=f"Snake (watch: {run_dir.name} / {args.which})",
+                enable_human_input=False,
+            ),
+            step_fn=_controller_step,
+        )
+    finally:
+        try:
+            agent_view.close()
+        except Exception:
+            pass
+        vec_env.close()
 
 
 if __name__ == "__main__":

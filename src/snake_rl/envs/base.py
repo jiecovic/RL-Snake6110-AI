@@ -60,7 +60,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         self.action_space: spaces.Discrete = spaces.Discrete(3)
 
         # Limits and rewards based on level dimensions (RL logic: keep unchanged)
-        self.max_steps: int = int(self.game.max_playable_tiles * 1.1)
+        self.max_steps: int = int(self.game.max_playable_tiles * 1.3)
         self.max_snake_length: int = self.game.max_playable_tiles
         self.initial_snake_length: int = self.game.level.init_snake_length
         self.tiny_reward: float = 1.0 / self.max_steps
@@ -119,7 +119,7 @@ class BaseSnakeEnv(gym.Env, ABC):
             reward -= self.tiny_reward
 
             if is_food:
-                reward += 2
+                reward += 1.5
                 reward += 2 * (1.0 - (self.current_step_since_last_food / self.max_steps))
                 self.visited_nodes.clear()
                 self.current_step_since_last_food = 0
@@ -129,8 +129,8 @@ class BaseSnakeEnv(gym.Env, ABC):
 
             terminated = is_fatal
             truncated = not terminated and is_truncated
-            if truncated:
-                reward -= 0.2  # small truncation loss
+            # if truncated:
+                # reward -= 0.2  # small truncation loss
 
         info: dict[str, Any] = {"move_results": results}
 

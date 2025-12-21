@@ -1,16 +1,16 @@
 # src/snake_rl/game/rendering/pygame/renderer.py
 from __future__ import annotations
 
-import numpy as np
 import pygame
 
+from snake_rl.game.rendering.pygame.surf import gray255_to_surface
 from snake_rl.game.rendering.pygame.window import PygameRenderContext
 from snake_rl.game.snakegame import SnakeGame
 
 
 class PygameRenderer:
     def __init__(self, *, pixel_size: int = 10):
-        self.pixel_size = pixel_size
+        self.pixel_size = int(pixel_size)
 
     def draw(self, *, game: SnakeGame, ctx: PygameRenderContext) -> None:
         if game.pixel_buffer is None or game.pixel_buffer.size == 0:
@@ -18,13 +18,8 @@ class PygameRenderer:
 
         ctx.screen.fill((0, 0, 0))
 
-        # Board
-        upscaled = np.kron(
-            game.pixel_buffer,
-            np.ones((self.pixel_size, self.pixel_size), dtype=game.pixel_buffer.dtype),
-        )
-        rgb_buffer = np.stack([upscaled * 255] * 3, axis=-1).astype(np.uint8)
-        surface = pygame.surfarray.make_surface(rgb_buffer.swapaxes(0, 1))
+        # Board: pixel_buffer is now [0,255] uint8
+        surface = gray255_to_surface(game.pixel_buffer, pixel_size=self.pixel_size)
         ctx.screen.blit(surface, (0, ctx.hud_height))
 
         # HUD

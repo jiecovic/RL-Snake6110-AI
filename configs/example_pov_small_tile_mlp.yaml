@@ -13,12 +13,12 @@ level:
   height: 7
   width: 12
   food_count: 1
-  random_placement: true
+#  random_placement: true
 
 env:
-  id: pov_tile_id
-  params:
-    view_radius: 6
+  id: global_tile_id
+#  params:
+#    view_radius: 5
 
 # No frame stacking needed: direction & orientation are encoded in tile IDs
 observation:
@@ -30,29 +30,29 @@ model:
     type: tile_mlp
     features_dim: 512
     params:
-      d_emb: 128
-      mlp_hidden: [1024, 512]
+      d_emb: 64
+      mlp_hidden: [1024]
       dropout: 0.0
       use_2d_positional: true
       use_frame_embed: false
       frame_fuse: sum
       pre_ln: true
-  net_arch: [256, 128]
+  net_arch: [256, 64]
 
 
 ppo:
-  n_steps: 4096
+  n_steps: 2048
   batch_size: 128
-  n_epochs: 2
-  gamma: 0.995
-  ent_coef: 0.002
-  learning_rate: 6e-5
+  n_epochs: 1
+  gamma: 0.999
+  ent_coef: 0.03
+  learning_rate: 1e-4
 
-  gae_lambda: 0.98
+#  gae_lambda: 0.98
 #  clip_range: 0.1
 #  vf_coef: 0.5
 #  max_grad_norm: 0.5
-  target_kl: 0.03
+#  target_kl: 0.03
   normalize_advantage: true
 
   verbose: 0
