@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+import inspect
 
 from gymnasium import spaces
 
@@ -35,6 +36,28 @@ def _get_tiles_box(observation_space: spaces.Space) -> spaces.Box:
             raise ValueError(f"observation_space['tiles'] must be Box, got {type(sub)!r}")
         return sub
     raise ValueError(f"Unsupported observation_space type: {type(observation_space)!r}")
+
+
+def _filter_valid_extractor_kwargs(*, extractor_cls: type, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """
+    Filter kwargs to only those accepted by extractor_cls.__init__.
+
+    We keep configs strict:
+      - Unknown keys => error (helps catch typos)
+      - Known keys => passed through unchanged
+    """
+    sig = inspect.signature(extractor_cls.__init__)
+    valid = set(sig.parameters.keys())
+    valid.discard("self")
+
+    unknown = sorted(k for k in kwargs.keys() if k not in valid)
+    if unknown:
+        raise ValueError(
+            f"Extractor {extractor_cls.__name__} got unknown params: {unknown}. "
+            f"Allowed: {sorted(valid)}"
+        )
+
+    return dict(kwargs)
 
 
 def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) -> dict[str, Any]:
@@ -108,17 +131,15 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
                 f"but got {type(observation_space)!r}."
             )
 
-        # Allow params for specific px_* hybrids (e.g., px_cnn_vit) while keeping others strict.
-        allow_px_params = {"px_cnn_vit"}
-        if extra_params and extractor_key not in allow_px_params:
-            raise ValueError(
-                f"Extractor {extractor_key!r} does not accept params; got: {sorted(extra_params.keys())}"
-            )
-
-        policy_kwargs["features_extractor_kwargs"] = {
+        # px_* extractors may have legit params (e.g. BaseCNNExtractor: c_mult; PxCnnViTExtractor: cnn_stem/d_model/...).
+        # Keep it strict by validating against the extractor's __init__ signature (catch typos).
+        extractor_kwargs = {
             "features_dim": int(features_dim),
-            **(extra_params if extractor_key in allow_px_params else {}),
+            **extra_params,
         }
+        extractor_kwargs = _filter_valid_extractor_kwargs(extractor_cls=extractor_cls, kwargs=extractor_kwargs)
+
+        policy_kwargs["features_extractor_kwargs"] = extractor_kwargs
         return policy_kwargs
 
     # If we ever introduce other prefixes, force an explicit decision.

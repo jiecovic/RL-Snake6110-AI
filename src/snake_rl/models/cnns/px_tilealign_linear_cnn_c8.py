@@ -29,4 +29,6 @@ class PxTileAlignLinearCNN_C8(BaseCNNExtractor):
         return nn.Sequential(
             nn.Conv2d(self.in_ch, c, kernel_size=4, stride=4),
             nn.ReLU(),
+            # nn.Conv2d(c, 2 * c, kernel_size=3, stride=1),
+            # nn.ReLU(),
         )

@@ -25,7 +25,7 @@ class PxTileAlignedCNN_C4(BaseCNNExtractor):
     """
 
     def build_stem(self, observation_space: spaces.Box) -> nn.Module:
-        c = self.c(16)  # 16 * c_mult
+        c = self.c(1)  # 16 * c_mult
 
         return nn.Sequential(
             nn.Conv2d(self.in_ch, c, kernel_size=4, stride=4),

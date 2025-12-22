@@ -28,9 +28,14 @@ class PixelObsEnvBase(ABC):
         """
         return self.game.pixel_buffer.astype(np.uint8, copy=False)
 
-    def _pov_pixel_frame(self, *, view_radius: int) -> np.ndarray:
+    def _pov_pixel_frame(self, *, view_radius: int, rotate_to_head: bool = True) -> np.ndarray:
         """
-        Return a single POV pixel frame centered on the head, rotated so head faces UP.
+        Return a single POV pixel frame centered on the head.
+
+        If rotate_to_head=True (default):
+          - rotate so the head faces UP (egocentric POV).
+        If rotate_to_head=False:
+          - keep world orientation (allocentric POV).
 
         Output: (view_px, view_px) uint8
         """
@@ -67,14 +72,15 @@ class PixelObsEnvBase(ABC):
             grid_col_start:grid_col_end,
         ]
 
-        # Rotate so the head faces UP
-        direction = self.game.direction
-        if direction == Direction.RIGHT:
-            vision = np.rot90(vision, k=1)
-        elif direction == Direction.DOWN:
-            vision = np.rot90(vision, k=2)
-        elif direction == Direction.LEFT:
-            vision = np.rot90(vision, k=3)
+        if rotate_to_head:
+            # Rotate so the head faces UP
+            direction = self.game.direction
+            if direction == Direction.RIGHT:
+                vision = np.rot90(vision, k=1)
+            elif direction == Direction.DOWN:
+                vision = np.rot90(vision, k=2)
+            elif direction == Direction.LEFT:
+                vision = np.rot90(vision, k=3)
 
         return vision.astype(np.uint8, copy=False)
 
