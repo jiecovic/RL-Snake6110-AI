@@ -17,18 +17,40 @@ class GlobalPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
 
     Observation: Box (1,H,W) uint8
     Stacking: handled by wrappers (train/eval/watch should see consistent behavior).
+
+    Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
+    This mirrors GlobalTileIdEnv behavior for symbolic obs.
     """
 
-    def __init__(self, game: SnakeGame):
+    def __init__(self, game: SnakeGame, *, remove_border: bool = True):
         BaseSnakeEnv.__init__(self, game)
         PixelObsEnvBase.__init__(self, game)
 
+        self.remove_border = bool(remove_border)
+
         self.game.reset()
         h, w = self.game.pixel_buffer.shape
+
+        if self.remove_border:
+            ts = int(self.game.tileset.tile_size)
+            if h <= 2 * ts or w <= 2 * ts:
+                raise ValueError(
+                    f"remove_border=True requires pixel dims > 2*tile_size; got h={h} w={w} tile_size={ts}"
+                )
+            h -= 2 * ts
+            w -= 2 * ts
+
         self.observation_space = spaces.Box(low=0, high=255, shape=(1, h, w), dtype=np.uint8)
+
+    def _maybe_crop(self, frame: np.ndarray) -> np.ndarray:
+        if not self.remove_border:
+            return frame
+        ts = int(self.game.tileset.tile_size)
+        return frame[ts:-ts, ts:-ts]
 
     def get_obs(self):
         frame = self._global_pixel_frame()
+        frame = self._maybe_crop(frame)
         return frame[None, :, :].astype(np.uint8, copy=False)
 
 
@@ -42,14 +64,27 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
     )
 
     Stacking: handled by wrappers (stack pixel only, keep direction passthrough).
+
+    Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
     """
 
-    def __init__(self, game: SnakeGame):
+    def __init__(self, game: SnakeGame, *, remove_border: bool = True):
         BaseSnakeEnv.__init__(self, game)
         PixelObsEnvBase.__init__(self, game)
 
+        self.remove_border = bool(remove_border)
+
         self.game.reset()
         h, w = self.game.pixel_buffer.shape
+
+        if self.remove_border:
+            ts = int(self.game.tileset.tile_size)
+            if h <= 2 * ts or w <= 2 * ts:
+                raise ValueError(
+                    f"remove_border=True requires pixel dims > 2*tile_size; got h={h} w={w} tile_size={ts}"
+                )
+            h -= 2 * ts
+            w -= 2 * ts
 
         self.observation_space = spaces.Dict(
             {
@@ -58,8 +93,15 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
             }
         )
 
+    def _maybe_crop(self, frame: np.ndarray) -> np.ndarray:
+        if not self.remove_border:
+            return frame
+        ts = int(self.game.tileset.tile_size)
+        return frame[ts:-ts, ts:-ts]
+
     def get_obs(self):
         frame = self._global_pixel_frame()
+        frame = self._maybe_crop(frame)
         pixel = frame[None, :, :].astype(np.uint8, copy=False)
 
         d = self.game.direction
