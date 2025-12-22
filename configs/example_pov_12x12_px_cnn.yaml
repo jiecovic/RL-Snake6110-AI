@@ -1,4 +1,4 @@
-# configs/example_pov_small_px_cnn.yaml
+# configs/example_pov_12x12_px_cnn.yaml
 # Example configuration for training a PPO agent on Snake
 # Training-only (headless). Human pygame play is handled by snake-play / watch scripts.
 
@@ -11,8 +11,8 @@ run:
   resume_checkpoint: null
 
 level:
-  height: 7
-  width: 12
+  height: 14
+  width: 14
   food_count: 1
   random_placement: true
 

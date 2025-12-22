@@ -108,13 +108,16 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
                 f"but got {type(observation_space)!r}."
             )
 
-        if extra_params:
+        # Allow params for specific px_* hybrids (e.g., px_cnn_vit) while keeping others strict.
+        allow_px_params = {"px_cnn_vit"}
+        if extra_params and extractor_key not in allow_px_params:
             raise ValueError(
                 f"Extractor {extractor_key!r} does not accept params; got: {sorted(extra_params.keys())}"
             )
 
         policy_kwargs["features_extractor_kwargs"] = {
             "features_dim": int(features_dim),
+            **(extra_params if extractor_key in allow_px_params else {}),
         }
         return policy_kwargs
 

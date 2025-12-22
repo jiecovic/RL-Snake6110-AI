@@ -10,16 +10,22 @@ from snake_rl.models.cnns.px_tilealign_linear_cnn_c8 import PxTileAlignLinearCNN
 from snake_rl.models.cnns.px_tilealign_cnn_c4x1 import PxTileAlignedCNN_C4x1
 from snake_rl.models.cnns.px_nature_cnn import PxNatureCNN
 from snake_rl.models.cnns.px_lite_cnn_c8 import PxLiteCNN_C8
+
 from snake_rl.models.vits.tile_vit_extractor import TileViTExtractor
+from snake_rl.models.vits.px_cnn_vit_extractor import PxCnnViTExtractor
 from snake_rl.models.mlps.tile_mlp_extractor import TileMLPExtractor
+
 
 FEATURE_EXTRACTOR_REGISTRY: dict[str, Type[BaseFeaturesExtractor]] = {
     # pixel-based CNNs
     "px_tilealign_cnn_c4": PxTileAlignedCNN_C4,
-    "px_tilealign_cnn_c4x1": PxTileAlignedCNN_C4x1,  # NEW
+    "px_tilealign_cnn_c4x1": PxTileAlignedCNN_C4x1,
     "px_tilealign_linear_cnn_c8": PxTileAlignLinearCNN_C8,
     "px_nature_cnn": PxNatureCNN,
     "px_lite_cnn_c8": PxLiteCNN_C8,
+
+    # hybrid CNN → ViT
+    "px_cnn_vit": PxCnnViTExtractor,
 
     # symbolic tile-id models
     "tile_vit": TileViTExtractor,

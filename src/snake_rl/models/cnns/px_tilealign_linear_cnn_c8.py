@@ -1,4 +1,6 @@
 # src/snake_rl/models/cnns/px_tilealign_linear_cnn_c8.py
+from __future__ import annotations
+
 from gymnasium import spaces
 from torch import nn
 
@@ -9,20 +11,22 @@ class PxTileAlignLinearCNN_C8(BaseCNNExtractor):
     """
     Single-layer tile-aligned CNN baseline.
 
-    Architecture:
-      - Conv(k=4, s=4, c=8)
+    Architecture (base channels = 8):
+      - Conv(k=4, s=4)
       - ReLU
-      - Flatten
 
-    Acts as a minimal patchifying baseline (no spatial mixing beyond tiles).
+    Channel scaling:
+      - output channels = self.c(8) => 8*c_mult
+
+    Output:
+      - build_stem() returns spatial map [B, c, H', W'] (NO Flatten)
+      - BaseCNNExtractor adds: Flatten -> Linear -> ReLU
     """
 
-    def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
-        in_ch = int(observation_space.shape[0])
-        c = 8
+    def build_stem(self, observation_space: spaces.Box) -> nn.Module:
+        c = self.c(8)  # 8 * c_mult
 
         return nn.Sequential(
-            nn.Conv2d(in_ch, c, kernel_size=4, stride=4),
+            nn.Conv2d(self.in_ch, c, kernel_size=4, stride=4),
             nn.ReLU(),
-            nn.Flatten(),
         )

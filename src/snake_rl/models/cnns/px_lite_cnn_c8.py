@@ -9,15 +9,17 @@ class PxLiteCNN_C8(BaseCNNExtractor):
     """
     Lightweight Nature-style CNN with reduced channel count.
 
-    Architecture:
-      - Conv(k=8, s=4, c=8)
-      - Conv(k=4, s=2, c=16)
-      - Conv(k=3, s=1, c=16)
+    Base (c_mult=1):
+      - Conv(k=8,s=4):  8
+      - Conv(k=4,s=2): 16
+      - Conv(k=3,s=1): 16
+
+    c_mult scales all channels.
     """
 
-    def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
+    def build_stem(self, observation_space: spaces.Box) -> nn.Module:
         in_ch = int(observation_space.shape[0])
-        c = 8
+        c = 8 * self.c_mult
 
         return nn.Sequential(
             nn.Conv2d(in_ch, c, kernel_size=8, stride=4),
@@ -26,5 +28,4 @@ class PxLiteCNN_C8(BaseCNNExtractor):
             nn.ReLU(),
             nn.Conv2d(2 * c, 2 * c, kernel_size=3, stride=1),
             nn.ReLU(),
-            nn.Flatten(),
         )

@@ -8,6 +8,7 @@ from typing import Any, Optional
 from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.policies import MultiInputActorCriticPolicy
+from stable_baselines3.common.preprocessing import is_image_space
 
 from snake_rl.config.schema import TrainConfig
 from snake_rl.training.policy_factory import build_policy_kwargs
@@ -74,10 +75,13 @@ def _coerce_ppo_types(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def _select_policy(observation_space) -> str | type[MultiInputActorCriticPolicy]:
-    # SB3 uses "CnnPolicy" for Box (images) and MultiInput* for Dict.
+    # SB3 uses "CnnPolicy" for image-like Box spaces and MultiInput* for Dict.
+    # For non-image Box (e.g., symbolic tile-id grids), prefer MlpPolicy (the feature extractor handles structure).
     if isinstance(observation_space, spaces.Dict):
         return MultiInputActorCriticPolicy
-    return "CnnPolicy"
+    if isinstance(observation_space, spaces.Box) and is_image_space(observation_space, check_channels=False):
+        return "CnnPolicy"
+    return "MlpPolicy"
 
 
 def make_or_load_model(

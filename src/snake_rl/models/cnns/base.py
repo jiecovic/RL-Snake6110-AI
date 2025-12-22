@@ -11,12 +11,15 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 class BaseCNNExtractor(BaseFeaturesExtractor):
     """
-    Base class for CNN feature extractors compatible with Stable-Baselines3.
+    Base CNN extractor for SB3.
 
-    Design:
-    - Expects channel-first image observations: (C, H, W)
-    - Subclasses implement build_cnn() only
-    - Feature dimensionality is inferred automatically via a forward probe
+    Contract:
+      - Subclasses implement build_stem() returning a spatial map [B, C', H', W'] (NO Flatten).
+      - Base adds a default head: Flatten -> Linear -> ReLU to produce features_dim.
+
+    Channel scaling:
+      - c_mult scales all "base channel" choices inside subclasses through self.c(base).
+      - Subclasses should never cast shapes or validate c_mult.
     """
 
     def __init__(
@@ -24,14 +27,16 @@ class BaseCNNExtractor(BaseFeaturesExtractor):
         observation_space: spaces.Box,
         features_dim: int = 256,
         normalized_image: bool = False,
-    ):
+        *,
+        c_mult: int = 1,
+    ) -> None:
         if not isinstance(observation_space, spaces.Box):
-            raise TypeError(f"Expected Box space, got {type(observation_space)}")
+            raise TypeError(f"Expected Box space, got {type(observation_space)!r}")
 
         if not is_image_space(
             observation_space,
             check_channels=False,
-            normalized_image=normalized_image,
+            normalized_image=bool(normalized_image),
         ):
             raise ValueError(
                 "CNN extractors require an image space "
@@ -39,36 +44,64 @@ class BaseCNNExtractor(BaseFeaturesExtractor):
                 f"Got: {observation_space}"
             )
 
-        super().__init__(observation_space, features_dim)
-        self.normalized_image = normalized_image
+        if int(c_mult) < 1:
+            raise ValueError("c_mult must be >= 1")
 
-        # Subclass provides CNN backbone (must end with Flatten)
-        self.cnn = self.build_cnn(observation_space)
+        super().__init__(observation_space, int(features_dim))
 
-        # Infer flattened feature size via a dummy forward pass
-        with th.no_grad():
-            sample = observation_space.sample()
-            if not isinstance(sample, np.ndarray):
-                raise ValueError(
-                    f"Sampled observation was not a numpy array: {type(sample)}"
-                )
+        shape = observation_space.shape
+        if shape is None or len(shape) != 3:
+            raise ValueError(f"Expected image shape (C,H,W), got {shape!r}")
 
-            sample_tensor = th.as_tensor(sample[None]).float()
-            try:
-                n_flatten = self.cnn(sample_tensor).shape[1]
-            except Exception as e:
-                raise RuntimeError(
-                    f"Error computing flattened CNN size: {e}"
-                ) from e
+        # Freeze these as plain ints (type checkers + IDEs stay happy everywhere).
+        self.in_ch: int = int(shape[0])
+        self.c_mult: int = int(c_mult)
+        self.normalized_image: bool = bool(normalized_image)
 
-        self.linear = nn.Sequential(
-            nn.Linear(n_flatten, features_dim),
+        # Subclass-defined stem (spatial map).
+        self.stem: nn.Module = self.build_stem(observation_space)
+
+        # Infer flattened size from the stem once.
+        n_flatten = self._probe_flattened_dim_from_stem(self.stem, observation_space)
+
+        # Default head used by plain CNN extractors.
+        self.head: nn.Module = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(int(n_flatten), int(features_dim)),
             nn.ReLU(),
         )
 
-    def forward(self, observations: th.Tensor) -> th.Tensor:
-        return self.linear(self.cnn(observations))
+    def c(self, base: int) -> int:
+        """
+        Scale a base channel count by c_mult.
+        Use this instead of `base * self.c_mult` in subclasses.
+        """
+        return int(base) * self.c_mult
 
-    def build_cnn(self, observation_space: spaces.Box) -> nn.Module:
-        """Return CNN backbone ending in nn.Flatten()."""
+    def forward(self, observations: th.Tensor) -> th.Tensor:
+        x = self.stem(observations)
+        return self.head(x)
+
+    def forward_stem(self, observations: th.Tensor) -> th.Tensor:
+        """Expose spatial map for hybrid extractors (e.g., CNN->ViT)."""
+        return self.stem(observations)
+
+    def build_stem(self, observation_space: spaces.Box) -> nn.Module:
+        """Return CNN stem producing [B,C,H,W] (NO Flatten)."""
         raise NotImplementedError
+
+    @staticmethod
+    def _sample_as_tensor(space: spaces.Box) -> th.Tensor:
+        sample = space.sample()
+        if not isinstance(sample, np.ndarray):
+            raise ValueError(f"Sampled observation was not a numpy array: {type(sample)!r}")
+        return th.as_tensor(sample[None], dtype=th.float32)
+
+    @classmethod
+    def _probe_flattened_dim_from_stem(cls, stem: nn.Module, space: spaces.Box) -> int:
+        with th.no_grad():
+            x = cls._sample_as_tensor(space)
+            y = stem(x)
+        if y.ndim != 4:
+            raise RuntimeError(f"build_stem() must output [B,C,H,W]. Got shape={tuple(y.shape)}")
+        return int(y.shape[1] * y.shape[2] * y.shape[3])

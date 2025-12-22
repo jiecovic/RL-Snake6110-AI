@@ -1,4 +1,4 @@
-# configs/example_pov_small_px_cnn.yaml
+# configs/example_global_small_px_cnn.yaml
 # Example configuration for training a PPO agent on Snake
 # Training-only (headless). Human pygame play is handled by snake-play / watch scripts.
 
@@ -17,9 +17,7 @@ level:
   random_placement: true
 
 env:
-  id: pov_pixel
-  params:
-    view_radius: 5
+  id: global_pixel
 
 observation:
   frame_stack:
