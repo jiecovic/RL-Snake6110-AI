@@ -38,13 +38,10 @@ class TileViTExtractor(BaseFeaturesExtractor):
     """
     ViT-like encoder-only Transformer features extractor for symbolic tile-ID grids.
 
-    Input (SB3):
-      observations: torch.Tensor
-        - [B, H, W] or [B, C, H, W]
-      Values are tile ids in [0, num_tiles-1] (uint8 or float from wrappers; casted to long).
-
-    Output:
-      features: [B, features_dim]
+    Pooling modes:
+      - "cls"      : use CLS token only (requires use_cls_token=True)
+      - "mean"     : mean over tokens (excludes CLS if present)
+      - "cls_mean" : concatenate [CLS, mean(tokens)] then project
     """
 
     def __init__(
@@ -59,6 +56,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
             ffn_dim: int | None = None,
             dropout: float = 0.1,
             use_cls_token: bool = True,
+            pooling: str = "cls",  # "cls" | "mean" | "cls_mean"
             use_2d_positional: bool = True,
             use_frame_embed: bool = True,
             frame_fuse: str = "sum",  # "sum" or "concat"
@@ -76,6 +74,12 @@ class TileViTExtractor(BaseFeaturesExtractor):
         if frame_fuse not in {"sum", "concat"}:
             raise ValueError(f"frame_fuse must be 'sum' or 'concat', got {frame_fuse!r}")
 
+        pooling = str(pooling)
+        if pooling not in {"cls", "mean", "cls_mean"}:
+            raise ValueError(f"pooling must be one of {{'cls','mean','cls_mean'}}, got {pooling!r}")
+        if pooling in {"cls", "cls_mean"} and not use_cls_token:
+            raise ValueError(f"pooling={pooling!r} requires use_cls_token=True")
+
         self.num_tiles = int(num_tiles)
         self.d_model = int(d_model)
         self.n_layers = int(n_layers)
@@ -83,6 +87,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
         self.ffn_dim = int(ffn_dim) if ffn_dim is not None else 4 * int(d_model)
         self.dropout = float(dropout)
         self.use_cls_token = bool(use_cls_token)
+        self.pooling = pooling
         self.use_2d_positional = bool(use_2d_positional)
         self.use_frame_embed = bool(use_frame_embed)
         self.frame_fuse = str(frame_fuse)
@@ -131,7 +136,8 @@ class TileViTExtractor(BaseFeaturesExtractor):
         self.encoder = nn.TransformerEncoder(enc_layer, num_layers=self.n_layers)
 
         # Pool projection to SB3 features_dim.
-        self.out_proj = nn.Linear(self.d_model, int(features_dim), bias=True)
+        in_dim = self.d_model * (2 if self.pooling == "cls_mean" else 1)
+        self.out_proj = nn.Linear(in_dim, int(features_dim), bias=True)
 
         # Init (simple, consistent).
         nn.init.normal_(self.tile_emb.weight, mean=0.0, std=0.02)
@@ -179,17 +185,9 @@ class TileViTExtractor(BaseFeaturesExtractor):
         if c != self.in_channels:
             raise ValueError(f"obs C mismatch: got C={c} expected C={self.in_channels}")
 
-        # Cast to long for embedding lookup (SB3 might hand us float obs).
         tile_ids = obs.to(dtype=torch.long)  # [B,C,H,W]
 
-        if torch.any(tile_ids < 0) or torch.any(tile_ids >= self.num_tiles):
-            raise ValueError(
-                f"tile id out of range: expected [0,{self.num_tiles - 1}] "
-                f"got min={int(tile_ids.min())} max={int(tile_ids.max())}"
-            )
-
         # Flatten grid -> tokens.
-        # Base per-frame embeddings: [B, C, T, D]
         ids = tile_ids.reshape(b, c, self.seq_len)
         t = self.tile_emb(ids)  # [B, C, T, D]
 
@@ -198,21 +196,17 @@ class TileViTExtractor(BaseFeaturesExtractor):
             frame_ids = torch.arange(c, device=obs.device, dtype=torch.long).view(1, c, 1)  # [1,C,1]
             t = t + self.frame_emb(frame_ids).expand(b, c, self.seq_len, self.d_model)
 
-        # Fuse frames into a single token sequence [B, T, D].
+        # Fuse frames into a single token sequence [B, T, D] or [B, C*T, D].
         if c == 1:
             x = t[:, 0, :, :]
         elif self.frame_fuse == "sum":
             x = t.sum(dim=1)  # [B, T, D]
         else:
-            # concat frames along token dimension -> [B, C*T, D]
-            x = t.reshape(b, c * self.seq_len, self.d_model)
+            x = t.reshape(b, c * self.seq_len, self.d_model)  # [B, C*T, D]
 
-        # If we concatenated frames, positional embeddings need to be applied per-frame grid.
+        # Positional embeddings
         if c > 1 and self.frame_fuse == "concat":
-            # Apply grid positional per frame, then concat already did that by layout:
-            # easiest: reshape back, add pos per frame, reshape again.
             x2 = x.reshape(b, c, self.seq_len, self.d_model)
-            # add pos to each frame independently
             pos_added = []
             for fi in range(c):
                 pos_added.append(self._add_positional(x2[:, fi, :, :]))
@@ -227,13 +221,16 @@ class TileViTExtractor(BaseFeaturesExtractor):
             cls = self.cls_token.expand(b, 1, self.d_model)
             x = torch.cat([cls, x], dim=1)
 
-        # Transformer encoder.
         x = self.encoder(x)
 
-        # Pool.
-        if self.cls_token is not None:
+        # Pool (always return [B, features_dim])
+        if self.pooling == "cls":
             pooled = x[:, 0, :]
-        else:
-            pooled = x.mean(dim=1)
+        elif self.pooling == "mean":
+            pooled = x[:, 1:, :].mean(dim=1) if self.cls_token is not None else x.mean(dim=1)
+        else:  # "cls_mean"
+            cls = x[:, 0, :]
+            mean = x[:, 1:, :].mean(dim=1)
+            pooled = torch.cat([cls, mean], dim=-1)
 
         return self.out_proj(pooled)

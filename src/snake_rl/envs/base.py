@@ -62,7 +62,10 @@ class BaseSnakeEnv(gym.Env, ABC):
         # Limits and rewards based on level dimensions (RL logic: keep unchanged)
         self.max_steps: int = int(self.game.max_playable_tiles * 1.3)
         self.max_snake_length: int = self.game.max_playable_tiles
-        self.initial_snake_length: int = self.game.level.init_snake_length
+
+        # Snake length is runtime state (spawn), so capture it on reset().
+        self.initial_snake_length: int = 0
+
         self.tiny_reward: float = 1.0 / self.max_steps
 
         self.current_step_since_last_food: int = 0
@@ -72,6 +75,8 @@ class BaseSnakeEnv(gym.Env, ABC):
         super().reset(seed=seed)
 
         self.game.reset()
+        self.initial_snake_length = len(self.game.snake)
+
         self.current_step_since_last_food = 0
         self.visited_nodes.clear()
 
@@ -130,7 +135,7 @@ class BaseSnakeEnv(gym.Env, ABC):
             terminated = is_fatal
             truncated = not terminated and is_truncated
             # if truncated:
-                # reward -= 0.2  # small truncation loss
+            #     reward -= 0.2  # small truncation loss
 
         info: dict[str, Any] = {"move_results": results}
 

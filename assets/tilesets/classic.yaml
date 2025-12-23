@@ -1,0 +1,220 @@
+# assets/tilesets/classic.yaml
+# Tileset YAML schema (no aliasing):
+# - tile_size: int
+# - tiles: mapping tile_name -> { glyph: str, pixels: [[int]] }
+#
+# Note:
+# - Direction-aware straight body variants are fully separate tiles:
+#   snake_body_horizontal_left/right and snake_body_vertical_up/down.
+# - Glyphs for left/right and up/down are intentionally the same; glyphs do not encode flow direction.
+tile_size: 4
+
+tiles:
+  empty:
+    glyph: " "
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+
+  food:
+    glyph: "*"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 0, 1, 0]
+      - [0, 1, 0, 1]
+      - [0, 0, 1, 0]
+
+  wall_tl:
+    glyph: "┌"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 1]
+
+  wall_top:
+    glyph: "─"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+      - [1, 1, 1, 1]
+
+  wall_tr:
+    glyph: "┐"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+      - [1, 1, 0, 0]
+
+  wall_right:
+    glyph: "¦"
+    pixels:
+      - [0, 1, 0, 0]
+      - [0, 1, 0, 0]
+      - [0, 1, 0, 0]
+      - [0, 1, 0, 0]
+
+  wall_br:
+    glyph: "┘"
+    pixels:
+      - [0, 1, 0, 0]
+      - [1, 1, 0, 0]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+
+  wall_bottom:
+    glyph: "="
+    pixels:
+      - [0, 0, 0, 0]
+      - [1, 1, 1, 1]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+
+  wall_bl:
+    glyph: "└"
+    pixels:
+      - [0, 0, 0, 1]
+      - [0, 0, 0, 1]
+      - [0, 0, 0, 0]
+      - [0, 0, 0, 0]
+
+  wall_left:
+    glyph: "│"
+    pixels:
+      - [0, 0, 0, 1]
+      - [0, 0, 0, 1]
+      - [0, 0, 0, 1]
+      - [0, 0, 0, 1]
+
+  snake_head_up:
+    glyph: "▲"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 1, 1, 1]
+      - [0, 1, 0, 1]
+      - [0, 1, 1, 1]
+
+  snake_head_down:
+    glyph: "▼"
+    pixels:
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 0, 1]
+      - [0, 1, 1, 1]
+
+  snake_head_left:
+    glyph: "◀"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 1, 1, 1]
+      - [0, 1, 0, 1]
+      - [0, 1, 1, 1]
+
+  snake_head_right:
+    glyph: "▶"
+    pixels:
+      - [0, 0, 0, 0]
+      - [1, 1, 1, 1]
+      - [1, 1, 0, 1]
+      - [1, 1, 1, 1]
+
+  snake_tail_up:
+    glyph: "╻"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+
+  snake_tail_down:
+    glyph: "╹"
+    pixels:
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 0, 0, 0]
+
+  snake_tail_left:
+    glyph: "╺"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+
+  snake_tail_right:
+    glyph: "╸"
+    pixels:
+      - [0, 0, 0, 0]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+
+  # Direction-aware straight body variants (fully separate tiles)
+  snake_body_horizontal_left:
+    glyph: "═"
+    pixels:
+      - [0, 0, 0, 0]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+
+  snake_body_horizontal_right:
+    glyph: "═"
+    pixels:
+      - [0, 0, 0, 0]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+
+  snake_body_vertical_up:
+    glyph: "║"
+    pixels:
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+
+  snake_body_vertical_down:
+    glyph: "║"
+    pixels:
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+
+  snake_body_tr:
+    glyph: "╗"
+    pixels:
+      - [0, 0, 0, 0]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+
+  snake_body_tl:
+    glyph: "╔"
+    pixels:
+      - [0, 0, 0, 0]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+
+  snake_body_br:
+    glyph: "╝"
+    pixels:
+      - [0, 1, 1, 1]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+      - [1, 1, 1, 1]
+
+  snake_body_bl:
+    glyph: "╚"
+    pixels:
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]
+      - [0, 1, 1, 1]

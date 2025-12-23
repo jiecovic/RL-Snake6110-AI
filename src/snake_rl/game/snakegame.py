@@ -10,6 +10,7 @@ import numpy as np
 
 from snake_rl.game.geometry import DIRECTION_TO_POINT, Direction, Point, RelativeDirection
 from snake_rl.game.level import BaseLevel
+from snake_rl.game.level.placement import compute_spawn_cells, is_straight_spawn_valid
 from snake_rl.game.tile_types import TileType
 from snake_rl.game.tileset import Tileset
 
@@ -40,29 +41,30 @@ class _MoveDelta:
 
 class SnakeGame:
     """
-    Core game state + rules.
+    Core game state + rules (headless, RL-safe).
 
-    Design rule: no pygame and no networkx imports here. Keep this module importable in
-    headless RL training environments.
+    Data model
+    - BaseLevel grid is static-only (walls/empty).
+    - Snake + food are runtime state (spawn + food_count policy).
 
-    Incremental rendering (permanent):
-    - Maintain tile_grid (H,W) of uint8 TileType values (TileType.EMPTY=0).
-    - Maintain pixel_buffer (H*tile_size, W*tile_size) uint8 in range [0,255].
-    - On each successful move, update only the handful of cells that changed.
+    Rendering contract
+    - tile_grid    : (H,W) uint8 storing TileType.value
+    - pixel_buffer : (H*tile_size, W*tile_size) uint8 in [0,255]
+    - After a successful move, we only touch the handful of cells that changed.
 
-    NOTE:
-    - If a move results in a collision (HIT_*), the snake state does NOT advance.
-      In that case, we MUST NOT apply incremental deltas (otherwise we'd corrupt buffers).
+    Failure semantics
+    - On collisions / terminal results, the snake state does NOT advance.
+      Therefore we MUST NOT apply incremental updates in those cases.
     """
 
     def __init__(
-        self,
-        level: BaseLevel,
-        food_count: int | None = None,
-        tileset: Tileset | None = None,
-        seed: int | None = None,
+            self,
+            level: BaseLevel,
+            food_count: int | None = None,
+            tileset: Tileset | None = None,
+            seed: int | None = None,
     ):
-        # === Basic config ===
+        # === Static config ===
         self.level = level
         self.width = level.width
         self.height = level.height
@@ -72,29 +74,25 @@ class SnakeGame:
         self.seed_value = seed
         self.rng = random.Random(seed)
 
-        # === Rendering buffers ===
+        # === Buffers ===
         self.pixel_buffer: np.ndarray = np.zeros((1, 1), dtype=np.uint8)
-
-        # Canonical tile grid (TileType values, EMPTY=0)
         self.tile_grid: np.ndarray = np.zeros((self.height, self.width), dtype=np.uint8)
 
-        # Optional trackers (kept from your original; used by analysis tooling)
+        # Optional trackers (debug/analysis tooling)
         self.visited: set[Point] = set()
 
-        # === Wall setup (static) ===
+        # === Walls (static) ===
         self.wall_tiles: list[tuple[Point, TileType]] = level.get_wall_tiles()
         self.wall_positions: set[Point] = {pos for pos, _ in self.wall_tiles}
 
-        # === Food target count ===
-        existing_food = level.get_food_positions()
-        if food_count is not None:
-            self.target_food_count: int = int(food_count)
-        elif existing_food:
-            self.target_food_count = len(existing_food)
-        else:
-            raise ValueError("No food defined in level and no food_count specified.")
+        # === Food policy ===
+        if food_count is None:
+            raise ValueError("food_count must be provided (level does not encode food).")
+        self.target_food_count: int = int(food_count)
+        if self.target_food_count < 0:
+            raise ValueError(f"food_count must be >= 0, got {food_count}")
 
-        # === Game state ===
+        # === Runtime state ===
         self.spawnable_tiles: set[Point] = set()
         self.snake: list[Point] = []
         self.snake_set: set[Point] = set()
@@ -104,50 +102,118 @@ class SnakeGame:
         self.score: int = 0
         self.running: bool = True
 
-        # Optional: kept from your original; can be used by cycle detection tooling later
+        # Cycle/debug helpers (kept; not enforced yet)
         self.recent_heads: deque[Point] = deque(maxlen=max(1, self.max_playable_tiles))
 
-        # Debug-only verification (optional)
-        self.enable_shadow_check: bool = False  # set True temporarily if you suspect a bug
+        # Debug-only validation switch
+        self.enable_shadow_check: bool = False
 
-        # Tile cache for fast blits (TileType -> (tile_size,tile_size) uint8 in [0,255])
+        # Precomputed tiles for fast blits
         self._tile_cache: dict[TileType, np.ndarray] = {}
         self._empty_tile: np.ndarray = np.zeros((self.tileset.tile_size, self.tileset.tile_size), dtype=np.uint8)
 
-        # === Run reset ===
         self.reset()
 
     def reset(self) -> None:
-        """Reset snake, food, score, state flags, and buffers."""
-        self.snake = self.level.get_snake_segments()
-        self.snake_set = set(self.snake)
-        self.direction = self.level.get_snake_direction()
-        self.food = list(self.level.get_food_positions())
+        """Reinitialize runtime state and rebuild buffers."""
         self.score = 0
         self.running = True
+        self.food = []
+        self.snake = []
+        self.snake_set = set()
+        self.direction = None
 
-        # spawnable tiles = non-wall minus snake minus food
+        # Spawnable tiles = any non-wall position; subtract snake/food as we place them.
         self.spawnable_tiles = {
             Point(x, y)
             for y in range(self.height)
             for x in range(self.width)
             if Point(x, y) not in self.wall_positions
         }
-        self.spawnable_tiles -= self.snake_set
-        self.spawnable_tiles -= set(self.food)
 
+        # 1) spawn snake from level.spawn
+        self._spawn_snake_from_level()
+
+        # 2) remove snake cells from spawnables
+        self.spawnable_tiles -= self.snake_set
+
+        # 3) spawn food
         self._spawn_food()
 
+        # 4) bookkeeping + buffers
         self.visited.clear()
         self.recent_heads.clear()
 
-        # Prepare tile cache + rebuild canonical grid + render full frame
         self._build_tile_cache()
         self._rebuild_tile_grid_full()
         self._render_full_from_tile_grid()
 
         if self.enable_shadow_check:
             self._shadow_check()
+
+    def _spawn_snake_from_level(self) -> None:
+        """
+        Initialize snake state from level.spawn.
+
+        Uses level.spawn:
+          - x/y (optional; defaults to center)
+          - length (required >= 2)
+          - direction (optional; default RIGHT unless random_direction)
+          - random_direction (optional)
+          - jitter (optional; expands candidate head positions)
+        """
+        sp = self.level.spawn
+
+        if sp.length < 2:
+            raise ValueError(f"spawn.length must be >= 2, got {sp.length}")
+
+        # direction selection
+        if sp.random_direction:
+            direction = self.rng.choice([Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT])
+        else:
+            direction = sp.direction if sp.direction is not None else Direction.RIGHT
+
+        # base head position
+        if sp.x is None or sp.y is None:
+            base = Point(self.width // 2, self.height // 2)
+        else:
+            base = Point(int(sp.x), int(sp.y))
+
+        jitter = int(sp.jitter)
+        if jitter < 0:
+            raise ValueError(f"spawn.jitter must be >= 0, got {sp.jitter}")
+
+        # candidate generation: base -> jittered -> random
+        candidates: list[Point] = [base]
+
+        if jitter > 0:
+            for _ in range(64):
+                dx = self.rng.randint(-jitter, jitter)
+                dy = self.rng.randint(-jitter, jitter)
+                candidates.append(Point(base.x + dx, base.y + dy))
+
+        for _ in range(64):
+            candidates.append(Point(self.rng.randrange(self.width), self.rng.randrange(self.height)))
+
+        # pick first valid
+        for head in candidates:
+            cells = compute_spawn_cells(head_pos=head, length=sp.length, direction=direction)
+            if is_straight_spawn_valid(
+                    cells=cells,
+                    width=self.width,
+                    height=self.height,
+                    wall_positions=self.wall_positions,
+            ):
+                self.snake = cells
+                self.snake_set = set(cells)
+                self.direction = direction
+                return
+
+        raise ValueError(
+            "Could not find a valid snake spawn. "
+            "Check spawn settings (x/y/direction/length/jitter) and level walls. "
+            f"spawn={sp}"
+        )
 
     def set_seed(self, seed: int | None) -> None:
         self.seed_value = seed
@@ -179,25 +245,27 @@ class SnakeGame:
         return len(candidates)
 
     # -------------------------------------------------------------------------
-    # Incremental tile-grid + pixel rendering
+    # Rendering plumbing (tile cache -> tile_grid -> pixel_buffer)
     # -------------------------------------------------------------------------
 
     def _build_tile_cache(self) -> None:
+        """
+        Precompute TileType -> (tile_size, tile_size) uint8 tile.
+
+        Notes
+        - Missing TileType entries in the tileset YAML render as empty.
+        - Binary tiles (0/1) are promoted to (0/255) once here.
+        """
         self._tile_cache.clear()
         for tt in TileType:
             if tt == TileType.EMPTY:
                 continue
             if tt in self.tileset:
                 tile = np.array(self.tileset[tt], dtype=np.uint8)
-
-                # Promote binary tiles (0/1) to pixel intensity (0/255) once at load time.
-                # This keeps pixel_buffer in [0,255] while allowing richer tilesets later.
                 if tile.size and int(tile.max()) <= 1:
                     tile = (tile * np.uint8(255)).astype(np.uint8, copy=False)
-
                 self._tile_cache[tt] = tile
 
-        # In case tile_size changed (unlikely, but cheap to keep consistent)
         td = int(self.tileset.tile_size)
         if self._empty_tile.shape != (td, td):
             self._empty_tile = np.zeros((td, td), dtype=np.uint8)
@@ -249,14 +317,18 @@ class SnakeGame:
             return
 
         for i in range(1, len(self.snake) - 1):
-            prev = self.snake[i - 1]
+            prev = self.snake[i - 1]  # closer to head
             curr = self.snake[i]
-            nxt = self.snake[i + 1]
+            nxt = self.snake[i + 1]  # closer to tail
             self.tile_grid[curr.y, curr.x] = int(self._body_tile(prev, curr, nxt).value)
 
         tail = self.snake[-1]
         prev = self.snake[-2]
         self.tile_grid[tail.y, tail.x] = int(self._tail_tile(prev, tail).value)
+
+    # -------------------------------------------------------------------------
+    # TileType synthesis for snake geometry
+    # -------------------------------------------------------------------------
 
     def _head_tile(self, d: Direction) -> TileType:
         return {
@@ -278,11 +350,30 @@ class SnakeGame:
         raise RuntimeError(f"Could not determine tail direction: prev={prev}, tail={tail}")
 
     def _body_tile(self, prev: Point, curr: Point, nxt: Point) -> TileType:
-        if prev.x == nxt.x:
-            return TileType.SNAKE_BODY_VERTICAL
-        if prev.y == nxt.y:
-            return TileType.SNAKE_BODY_HORIZONTAL
+        """
+        Body tile resolver for `curr`.
 
+        Convention
+        - prev is closer to head, nxt is closer to tail.
+        - Straight segments encode direction as tail->head flow (nxt -> prev).
+        """
+        # Straight vertical
+        if prev.x == nxt.x:
+            if prev.y < nxt.y:
+                return TileType.SNAKE_BODY_VERTICAL_UP
+            if prev.y > nxt.y:
+                return TileType.SNAKE_BODY_VERTICAL_DOWN
+            raise RuntimeError(f"Degenerate vertical body segment: prev={prev}, nxt={nxt}")
+
+        # Straight horizontal
+        if prev.y == nxt.y:
+            if prev.x < nxt.x:
+                return TileType.SNAKE_BODY_HORIZONTAL_LEFT
+            if prev.x > nxt.x:
+                return TileType.SNAKE_BODY_HORIZONTAL_RIGHT
+            raise RuntimeError(f"Degenerate horizontal body segment: prev={prev}, nxt={nxt}")
+
+        # Corners
         if (prev.x < curr.x and nxt.y > curr.y) or (nxt.x < curr.x and prev.y > curr.y):
             return TileType.SNAKE_BODY_TR
         if (prev.x > curr.x and nxt.y > curr.y) or (nxt.x > curr.x and prev.y > curr.y):
@@ -294,10 +385,14 @@ class SnakeGame:
 
         raise RuntimeError(f"Could not determine body tile type: prev={prev}, curr={curr}, next={nxt}")
 
+    # -------------------------------------------------------------------------
+    # Incremental updates (single source of truth for buffer correctness)
+    # -------------------------------------------------------------------------
+
     def _apply_incremental_updates(self, delta: _MoveDelta) -> None:
         changed: list[Point] = []
 
-        # Food changes
+        # Food diffs
         added_food = delta.food_after - delta.food_before
         removed_food = delta.food_before - delta.food_after
 
@@ -309,7 +404,7 @@ class SnakeGame:
             self.tile_grid[p.y, p.x] = int(TileType.FOOD.value)
             changed.append(p)
 
-        # Tail cell becomes empty only if we actually popped tail (i.e., no food eaten)
+        # Tail cell cleared only on non-eat moves
         if not delta.ate_food:
             self.tile_grid[delta.old_tail.y, delta.old_tail.x] = int(TileType.EMPTY.value)
             changed.append(delta.old_tail)
@@ -318,7 +413,7 @@ class SnakeGame:
         self.tile_grid[delta.new_head.y, delta.new_head.x] = int(self._head_tile(delta.new_dir).value)
         changed.append(delta.new_head)
 
-        # Old head becomes body (only meaningful if length >= 3 after the move)
+        # Old head becomes body (length >= 3 after move)
         if len(self.snake) >= 3:
             curr = self.snake[1]  # old head position
             prev = self.snake[0]  # new head position
@@ -326,7 +421,7 @@ class SnakeGame:
             self.tile_grid[curr.y, curr.x] = int(self._body_tile(prev, curr, nxt).value)
             changed.append(curr)
 
-        # Tail + pre-tail refresh (cheap & safe)
+        # Tail + pre-tail refresh
         if len(self.snake) >= 2:
             tail = self.snake[-1]
             prev_tail = self.snake[-2]
@@ -343,6 +438,7 @@ class SnakeGame:
         if not changed:
             return
 
+        # Dedup + blit
         seen: set[Point] = set()
         for p in changed:
             if p in seen:
@@ -352,6 +448,7 @@ class SnakeGame:
             self._blit_cell(p, tt)
 
     def _shadow_check(self) -> None:
+        """Debug-only: rebuild tile_grid the slow way and compare."""
         ref = np.zeros_like(self.tile_grid)
         ref.fill(int(TileType.EMPTY.value))
 
@@ -383,7 +480,7 @@ class SnakeGame:
             )
 
     # -------------------------------------------------------------------------
-    # Core move logic (rules) + integration with incremental rendering
+    # Move logic (state transitions) + incremental rendering hook
     # -------------------------------------------------------------------------
 
     def move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> list[MoveResult]:
@@ -399,7 +496,7 @@ class SnakeGame:
 
         results = self._move(rel_dir)
 
-        # If _move() returned early (collision / not running), the snake state did not advance.
+        # No OK => no state advance => no incremental update
         if MoveResult.OK not in results:
             if self.enable_shadow_check:
                 self._shadow_check()
@@ -421,7 +518,6 @@ class SnakeGame:
             food_after=food_after,
         )
 
-        # Incremental tile_grid + incremental pixel blits (the one and only path)
         self._apply_incremental_updates(delta)
 
         if self.enable_shadow_check:
@@ -438,7 +534,7 @@ class SnakeGame:
 
         results: list[MoveResult] = []
 
-        # 1) determine new direction
+        # 1) choose new direction
         new_direction = self.direction
         if rel_dir == RelativeDirection.LEFT:
             new_direction = self.direction.turn_left()
@@ -448,7 +544,7 @@ class SnakeGame:
         vec = DIRECTION_TO_POINT[new_direction]
         new_head = Point(self.snake[0].x + vec.x, self.snake[0].y + vec.y)
 
-        # 2) collisions (EARLY RETURN: no state advance)
+        # 2) collision checks (early return => no state advance)
         if not (0 <= new_head.x < self.width and 0 <= new_head.y < self.height):
             self.running = False
             return [MoveResult.HIT_BOUNDARY]
