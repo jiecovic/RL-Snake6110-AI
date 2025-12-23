@@ -1,6 +1,7 @@
 # src/snake_rl/config/io.py
 from __future__ import annotations
 
+from ast import literal_eval
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional, cast
@@ -67,14 +68,50 @@ def _as_opt_str(v: Any, ctx: str) -> Optional[str]:
     return s or None
 
 
+def _coerce_tuple_strings(x: Any) -> Any:
+    """
+    Recursively coerce strings like "(4, 9)" into Python tuples.
+
+    This lets users write either:
+      view_radius: [4, 9]    # YAML-native list
+      view_radius: (4, 9)    # also accepted (will be parsed)
+
+    We keep this conservative:
+    - only strings that start with '(' and end with ')'
+    - only if ast.literal_eval parses to a tuple
+    """
+    if isinstance(x, dict):
+        return {k: _coerce_tuple_strings(v) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_coerce_tuple_strings(v) for v in x]
+    if isinstance(x, tuple):
+        return tuple(_coerce_tuple_strings(v) for v in x)
+    if isinstance(x, str):
+        s = x.strip()
+        if s.startswith("(") and s.endswith(")"):
+            try:
+                v = literal_eval(s)
+            except Exception:
+                return x
+            if isinstance(v, tuple):
+                return tuple(_coerce_tuple_strings(i) for i in v)
+        return x
+    return x
+
+
 def load_yaml(path: str | Path) -> dict[str, Any]:
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"Config file not found: {p}")
     with p.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
+
     if not isinstance(data, dict):
         raise TypeError(f"Top-level YAML must be a mapping/dict, got: {type(data).__name__}")
+
+    # Normalize a few common "human" notations like "(4, 9)" -> (4, 9)
+    data = _coerce_tuple_strings(data)
+
     return cast(dict[str, Any], data)
 
 

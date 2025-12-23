@@ -1,7 +1,7 @@
 # src/snake_rl/models/vits/tile_vit_extractor.py
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 from gymnasium import spaces
@@ -38,11 +38,20 @@ class TileViTExtractor(BaseFeaturesExtractor):
     """
     ViT-like encoder-only Transformer features extractor for symbolic tile-ID grids.
 
+    Positional modes (single source of truth via `pos_mode`):
+      - "abs_2d"          : learned row+col embeddings (classic ViT-ish)
+      - "abs_1d"          : learned 1D index embedding over flattened tokens
+      - "pov_center"      : learned offsets from grid center (anchor at center)
+      - "pov_center_rot"  : same as pov_center, but offsets are rotated per-sample
+                            so "forward" is UP (direction inferred from center head tile)
+
     Pooling modes:
       - "cls"      : use CLS token only (requires use_cls_token=True)
       - "mean"     : mean over tokens (excludes CLS if present)
       - "cls_mean" : concatenate [CLS, mean(tokens)] then project
     """
+
+    POS_MODES = {"abs_2d", "abs_1d", "pov_center", "pov_center_rot"}
 
     def __init__(
             self,
@@ -57,9 +66,15 @@ class TileViTExtractor(BaseFeaturesExtractor):
             dropout: float = 0.1,
             use_cls_token: bool = True,
             pooling: str = "cls",  # "cls" | "mean" | "cls_mean"
-            use_2d_positional: bool = True,
             use_frame_embed: bool = True,
             frame_fuse: str = "sum",  # "sum" or "concat"
+            pos_mode: str = "abs_2d",
+            # Only used for pov_center_rot: infer direction from the head tile id at the center.
+            # Example: {"up": 10, "right": 11, "down": 12, "left": 13}
+            head_tile_ids: Optional[Dict[str, int]] = None,
+            # If frames are stacked in channels, pick which channel to inspect for the center head tile.
+            # "last" is usually the newest frame for frame stacking.
+            anchor_frame: str = "last",  # "first" | "last"
     ) -> None:
         super().__init__(observation_space, features_dim)
 
@@ -80,6 +95,13 @@ class TileViTExtractor(BaseFeaturesExtractor):
         if pooling in {"cls", "cls_mean"} and not use_cls_token:
             raise ValueError(f"pooling={pooling!r} requires use_cls_token=True")
 
+        if anchor_frame not in {"first", "last"}:
+            raise ValueError(f"anchor_frame must be 'first' or 'last', got {anchor_frame!r}")
+
+        pos_mode = str(pos_mode)
+        if pos_mode not in self.POS_MODES:
+            raise ValueError(f"pos_mode must be one of {sorted(self.POS_MODES)}, got {pos_mode!r}")
+
         self.num_tiles = int(num_tiles)
         self.d_model = int(d_model)
         self.n_layers = int(n_layers)
@@ -88,9 +110,11 @@ class TileViTExtractor(BaseFeaturesExtractor):
         self.dropout = float(dropout)
         self.use_cls_token = bool(use_cls_token)
         self.pooling = pooling
-        self.use_2d_positional = bool(use_2d_positional)
         self.use_frame_embed = bool(use_frame_embed)
         self.frame_fuse = str(frame_fuse)
+
+        self.pos_mode = pos_mode
+        self.anchor_frame = anchor_frame
 
         c, h, w = _infer_chw(observation_space)
         self.in_channels = int(c)
@@ -106,15 +130,42 @@ class TileViTExtractor(BaseFeaturesExtractor):
         if self.in_channels > 1 and self.use_frame_embed:
             self.frame_emb = nn.Embedding(self.in_channels, self.d_model)
 
-        # Positional embeddings for the grid.
+        # Absolute positional embeddings.
         self.pos_1d = None
         self.pos_row = None
         self.pos_col = None
-        if self.use_2d_positional:
+
+        # Anchored (center-relative) positional embeddings.
+        self.rel_row = None
+        self.rel_col = None
+
+        if self.pos_mode == "abs_1d":
+            self.pos_1d = nn.Embedding(self.seq_len, self.d_model)
+        elif self.pos_mode == "abs_2d":
             self.pos_row = nn.Embedding(self.h, self.d_model)
             self.pos_col = nn.Embedding(self.w, self.d_model)
         else:
-            self.pos_1d = nn.Embedding(self.seq_len, self.d_model)
+            # pov_center / pov_center_rot: learn embeddings over center-relative offsets.
+            # We index offsets via (dy+cy) and (dx+cx), so embedding sizes are H and W.
+            self.rel_row = nn.Embedding(self.h, self.d_model)
+            self.rel_col = nn.Embedding(self.w, self.d_model)
+
+        # For pov_center_rot we need to infer direction from head tile ids.
+        self._head_tile_ids = None
+        if self.pos_mode == "pov_center_rot":
+            if self.h != self.w:
+                raise ValueError("pos_mode='pov_center_rot' requires a square grid (H==W).")
+            if head_tile_ids is None:
+                raise ValueError(
+                    "pos_mode='pov_center_rot' requires head_tile_ids={'up','right','down','left': int} "
+                    "to infer rotation from the center tile."
+                )
+            keys = {"up", "right", "down", "left"}
+            if set(head_tile_ids.keys()) != keys:
+                raise ValueError(
+                    f"head_tile_ids must have exactly keys {sorted(keys)}, got {sorted(head_tile_ids.keys())}"
+                )
+            self._head_tile_ids = {k: int(v) for k, v in head_tile_ids.items()}
 
         # Optional CLS token.
         self.cls_token = None
@@ -149,26 +200,129 @@ class TileViTExtractor(BaseFeaturesExtractor):
             nn.init.normal_(self.pos_col.weight, mean=0.0, std=0.02)
         if self.pos_1d is not None:
             nn.init.normal_(self.pos_1d.weight, mean=0.0, std=0.02)
+        if self.rel_row is not None:
+            nn.init.normal_(self.rel_row.weight, mean=0.0, std=0.02)
+        if self.rel_col is not None:
+            nn.init.normal_(self.rel_col.weight, mean=0.0, std=0.02)
         if self.cls_token is not None:
             nn.init.normal_(self.cls_token, mean=0.0, std=0.02)
 
-    def _add_positional(self, x: torch.Tensor) -> torch.Tensor:
-        # x: [B, T, D], where T == H*W
-        if self.use_2d_positional:
-            assert self.pos_row is not None and self.pos_col is not None
-            device = x.device
-            row_idx = torch.arange(self.h, device=device)
-            col_idx = torch.arange(self.w, device=device)
-            pe_row = self.pos_row(row_idx)  # [H, D]
-            pe_col = self.pos_col(col_idx)  # [W, D]
-            pe = (pe_row[:, None, :] + pe_col[None, :, :]).reshape(self.seq_len, self.d_model)  # [T, D]
-            return x + pe.unsqueeze(0)
+        # Cache base offset grids (registered buffers so they move with .to(device)).
+        cy = self.h // 2
+        cx = self.w // 2
+        dy = (torch.arange(self.h) - cy).view(self.h, 1).expand(self.h, self.w)  # [H,W]
+        dx = (torch.arange(self.w) - cx).view(1, self.w).expand(self.h, self.w)  # [H,W]
+        self.register_buffer("_dy_base", dy.reshape(self.seq_len), persistent=False)  # [T]
+        self.register_buffer("_dx_base", dx.reshape(self.seq_len), persistent=False)  # [T]
+
+    def _add_positional_absolute_2d(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, T, D], T == H*W
+        assert self.pos_row is not None and self.pos_col is not None
+        device = x.device
+        row_idx = torch.arange(self.h, device=device)
+        col_idx = torch.arange(self.w, device=device)
+        pe_row = self.pos_row(row_idx)  # [H, D]
+        pe_col = self.pos_col(col_idx)  # [W, D]
+        pe = (pe_row[:, None, :] + pe_col[None, :, :]).reshape(self.seq_len, self.d_model)  # [T, D]
+        return x + pe.unsqueeze(0)
+
+    def _add_positional_absolute_1d(self, x: torch.Tensor) -> torch.Tensor:
+        assert self.pos_1d is not None
+        device = x.device
+        idx = torch.arange(self.seq_len, device=device)
+        pe = self.pos_1d(idx)  # [T, D]
+        return x + pe.unsqueeze(0)
+
+    def _add_positional_pov_center(self, x: torch.Tensor, *, rot_k: Optional[torch.Tensor]) -> torch.Tensor:
+        """
+        Center-anchored PE: position is encoded as (dy, dx) relative to grid center.
+
+        If rot_k is provided (shape [B]), rotate offsets per-sample:
+          k=0: (dy, dx)
+          k=1: (-dx, dy)
+          k=2: (-dy, -dx)
+          k=3: (dx, -dy)
+        """
+        assert self.rel_row is not None and self.rel_col is not None
+
+        dy = self._dy_base
+        dx = self._dx_base
+
+        if rot_k is not None:
+            # Broadcast base offsets to [B,T]
+            k = rot_k.view(-1, 1)
+            dy0 = dy.view(1, -1).expand(k.shape[0], dy.numel())
+            dx0 = dx.view(1, -1).expand(k.shape[0], dx.numel())
+
+            # Apply rotation (matches np.rot90(out, k=1) used in envs).
+            dy1 = torch.where(k == 1, -dx0, dy0)
+            dx1 = torch.where(k == 1, dy0, dx0)
+
+            dy2 = torch.where(k == 2, -dy0, dy1)
+            dx2 = torch.where(k == 2, -dx0, dx1)
+
+            dy3 = torch.where(k == 3, dx0, dy2)
+            dx3 = torch.where(k == 3, -dy0, dx2)
+
+            dy_r, dx_r = dy3, dx3  # [B,T]
         else:
-            assert self.pos_1d is not None
-            device = x.device
-            idx = torch.arange(self.seq_len, device=device)
-            pe = self.pos_1d(idx)  # [T, D]
-            return x + pe.unsqueeze(0)
+            dy_r = dy.view(1, -1)  # [1,T]
+            dx_r = dx.view(1, -1)  # [1,T]
+
+        # Map offsets to embedding indices in [0..H-1] / [0..W-1]
+        cy = self.h // 2
+        cx = self.w // 2
+        iy = (dy_r + cy).clamp(0, self.h - 1).to(dtype=torch.long)
+        ix = (dx_r + cx).clamp(0, self.w - 1).to(dtype=torch.long)
+
+        pe = self.rel_row(iy) + self.rel_col(ix)  # [B,T,D] or [1,T,D]
+        return x + pe
+
+    def _infer_rot_k_from_center_head(self, tile_ids: torch.Tensor) -> torch.Tensor:
+        """
+        Infer per-sample rotation k in {0,1,2,3} from the center tile id.
+        Requires directional head tile IDs.
+        """
+        assert self._head_tile_ids is not None
+
+        cy = self.h // 2
+        cx = self.w // 2
+        center = tile_ids[:, cy, cx]  # [B]
+
+        up = self._head_tile_ids["up"]
+        right = self._head_tile_ids["right"]
+        down = self._head_tile_ids["down"]
+        left = self._head_tile_ids["left"]
+
+        # Default to k=0, then overwrite.
+        k = torch.zeros_like(center, dtype=torch.long)
+        k = torch.where(center == right, torch.ones_like(k), k)
+        k = torch.where(center == down, torch.full_like(k, 2), k)
+        k = torch.where(center == left, torch.full_like(k, 3), k)
+
+        # Fail loudly if we cannot infer direction (e.g., non-POV input or vocab collapsed head dir).
+        valid = (center == up) | (center == right) | (center == down) | (center == left)
+        if not bool(valid.all().item()):
+            bad = int((~valid).sum().item())
+            raise ValueError(
+                f"pov_center_rot: cannot infer head direction from center tile for {bad} samples. "
+                "Ensure POV crop is head-centered AND head tiles are directional in the vocab, "
+                "or use pos_mode='pov_center' / 'abs_*'."
+            )
+        return k
+
+    def _add_positional(self, x: torch.Tensor, *, raw_tile_ids: Optional[torch.Tensor]) -> torch.Tensor:
+        # x: [B, T, D], T == H*W
+        if self.pos_mode == "abs_2d":
+            return self._add_positional_absolute_2d(x)
+        if self.pos_mode == "abs_1d":
+            return self._add_positional_absolute_1d(x)
+        if self.pos_mode == "pov_center":
+            return self._add_positional_pov_center(x, rot_k=None)
+        # pov_center_rot
+        assert raw_tile_ids is not None
+        k = self._infer_rot_k_from_center_head(raw_tile_ids)
+        return self._add_positional_pov_center(x, rot_k=k)
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         # Accept [B,H,W] or [B,C,H,W]
@@ -204,15 +358,23 @@ class TileViTExtractor(BaseFeaturesExtractor):
         else:
             x = t.reshape(b, c * self.seq_len, self.d_model)  # [B, C*T, D]
 
-        # Positional embeddings
+        # For pov_center_rot, infer rotation from the chosen frame's raw tile ids.
+        raw_for_rot: Optional[torch.Tensor] = None
+        if self.pos_mode == "pov_center_rot":
+            fi = 0 if self.anchor_frame == "first" else (c - 1)
+            raw_for_rot = tile_ids[:, fi, :, :]  # [B,H,W]
+
+        # Positional embeddings.
         if c > 1 and self.frame_fuse == "concat":
+            # Each frame gets PE independently, then tokens are concatenated.
             x2 = x.reshape(b, c, self.seq_len, self.d_model)
             pos_added = []
             for fi in range(c):
-                pos_added.append(self._add_positional(x2[:, fi, :, :]))
+                raw_this = raw_for_rot if raw_for_rot is None else tile_ids[:, fi, :, :]
+                pos_added.append(self._add_positional(x2[:, fi, :, :], raw_tile_ids=raw_this))
             x = torch.cat(pos_added, dim=1)  # [B, C*T, D]
         else:
-            x = self._add_positional(x)
+            x = self._add_positional(x, raw_tile_ids=raw_for_rot)
 
         x = self.drop(x)
 

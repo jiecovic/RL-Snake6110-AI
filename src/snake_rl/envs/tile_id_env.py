@@ -1,6 +1,8 @@
 # src/snake_rl/envs/tile_id_env.py
 from __future__ import annotations
 
+from typing import Any, Tuple
+
 import numpy as np
 from gymnasium import spaces
 
@@ -15,6 +17,37 @@ def _tile_vocab_size() -> int:
     # We store TileType.value directly in SnakeGame.tile_grid (uint8).
     # Vocab size is max enum value + 1, assuming values are 0..K.
     return int(max(int(t.value) for t in TileType) + 1)
+
+
+def _parse_view_radius(v: Any) -> Tuple[int, int]:
+    """
+    Parse POV radius.
+
+    Accepted:
+      - int r           -> (r, r)
+      - (ry, rx) tuple  -> (ry, rx)
+      - [ry, rx] list   -> (ry, rx)  (YAML)
+
+    Returns:
+      (ry, rx) with ry,rx >= 0
+    """
+    if isinstance(v, (int, np.integer)):
+        r = int(v)
+        if r < 0:
+            raise ValueError(f"view_radius must be >= 0, got {r}")
+        return (r, r)
+
+    if isinstance(v, (tuple, list)) and len(v) == 2:
+        ry = int(v[0])
+        rx = int(v[1])
+        if ry < 0 or rx < 0:
+            raise ValueError(f"view_radius must be >= 0, got {(ry, rx)}")
+        return (ry, rx)
+
+    raise TypeError(
+        "view_radius must be an int or a pair (ry, rx) / [ry, rx], "
+        f"got {type(v).__name__}: {v}"
+    )
 
 
 class GlobalTileIdEnv(BaseSnakeEnv):
@@ -101,36 +134,43 @@ class GlobalTileIdEnv(BaseSnakeEnv):
 
 class PovTileIdEnv(BaseSnakeEnv):
     """
-    POV symbolic grid observation (tile ids), centered on head and rotated so forward is UP.
+    POV symbolic grid observation (tile ids), centered on head.
 
     Observation:
-      Box(shape=(1, V, V), dtype=uint8)
+      Box(shape=(1, VY, VX), dtype=uint8)
         value == class_id in [0, num_classes-1]
 
     Where:
-      V = 2*view_radius + 1
+      VY = 2*ry + 1
+      VX = 2*rx + 1
 
     Notes:
     - If tile_vocab is None (default), class_id == TileType.value (raw IDs).
+    - rotate_to_head=True uses an egocentric view where:
+        ry = forward/back radius
+        rx = left/right radius
+      (shape remains constant even when rx != ry)
+    - rotate_to_head=False crops in world axes (ry vertical, rx horizontal).
     """
 
     def __init__(
             self,
             game: SnakeGame,
             *,
-            view_radius: int,
+            view_radius: int | tuple[int, int],
             tile_vocab: str | None = None,
+            rotate_to_head: bool = True,
     ):
         BaseSnakeEnv.__init__(self, game)
 
-        self.view_radius = int(view_radius)
-        if self.view_radius < 0:
-            raise ValueError(f"view_radius must be >= 0, got {self.view_radius}")
+        self.view_radius_y, self.view_radius_x = _parse_view_radius(view_radius)
+        self.rotate_to_head = bool(rotate_to_head)
 
         # Keep historical behavior: env ctor forces a clean state.
         self.game.reset()
 
-        v = 2 * self.view_radius + 1
+        vy = 2 * self.view_radius_y + 1
+        vx = 2 * self.view_radius_x + 1
 
         # Raw TileType vocab size (TileType.value)
         self.raw_vocab_size: int = _tile_vocab_size()
@@ -151,7 +191,7 @@ class PovTileIdEnv(BaseSnakeEnv):
         self.observation_space = spaces.Box(
             low=0,
             high=self.num_classes - 1,
-            shape=(1, v, v),
+            shape=(1, vy, vx),
             dtype=np.uint8,
         )
 
@@ -165,36 +205,63 @@ class PovTileIdEnv(BaseSnakeEnv):
         head: Point = self.game.get_head_position()
         hx, hy = int(head.x), int(head.y)
 
-        r = self.view_radius
-        v = 2 * r + 1
+        ry = int(self.view_radius_y)
+        rx = int(self.view_radius_x)
+        vy = 2 * ry + 1
+        vx = 2 * rx + 1
 
-        # Window bounds in grid coordinates
-        x0, x1 = hx - r, hx + r + 1
-        y0, y1 = hy - r, hy + r + 1
+        out = np.full((vy, vx), int(TileType.EMPTY.value), dtype=np.uint8)
 
-        out = np.full((v, v), int(TileType.EMPTY.value), dtype=np.uint8)
+        if not self.rotate_to_head:
+            # World-oriented rectangular crop (ry vertical, rx horizontal).
+            x0, x1 = hx - rx, hx + rx + 1
+            y0, y1 = hy - ry, hy + ry + 1
 
-        # Overlap with g
-        gy0 = max(0, y0)
-        gy1 = min(g.shape[0], y1)
-        gx0 = max(0, x0)
-        gx1 = min(g.shape[1], x1)
+            gy0 = max(0, y0)
+            gy1 = min(g.shape[0], y1)
+            gx0 = max(0, x0)
+            gx1 = min(g.shape[1], x1)
 
-        oy0 = gy0 - y0
-        oy1 = oy0 + (gy1 - gy0)
-        ox0 = gx0 - x0
-        ox1 = ox0 + (gx1 - gx0)
+            oy0 = gy0 - y0
+            oy1 = oy0 + (gy1 - gy0)
+            ox0 = gx0 - x0
+            ox1 = ox0 + (gx1 - gx0)
 
-        out[oy0:oy1, ox0:ox1] = g[gy0:gy1, gx0:gx1]
+            out[oy0:oy1, ox0:ox1] = g[gy0:gy1, gx0:gx1]
+            return out
 
-        # Rotate so the head faces UP (match PixelObsEnvBase convention)
+        # Egocentric crop (forward is UP). Shape stays (vy, vx) even if ry != rx.
         d = self.game.direction
-        if d == Direction.RIGHT:
-            out = np.rot90(out, k=1)
+        assert d is not None, "SnakeGame.direction is None (did you call game.reset()?)"
+
+        ys = np.arange(-ry, ry + 1, dtype=np.int32)  # ego dy (rows)
+        xs = np.arange(-rx, rx + 1, dtype=np.int32)  # ego dx (cols)
+        dy_ego, dx_ego = np.meshgrid(ys, xs, indexing="ij")  # (vy,vx)
+
+        if d == Direction.UP:
+            dx_w = dx_ego
+            dy_w = dy_ego
+        elif d == Direction.RIGHT:
+            # dx_w = -dy_ego ; dy_w = dx_ego
+            dx_w = -dy_ego
+            dy_w = dx_ego
         elif d == Direction.DOWN:
-            out = np.rot90(out, k=2)
+            # dx_w = -dx_ego ; dy_w = -dy_ego
+            dx_w = -dx_ego
+            dy_w = -dy_ego
         elif d == Direction.LEFT:
-            out = np.rot90(out, k=3)
+            # dx_w = dy_ego ; dy_w = -dx_ego
+            dx_w = dy_ego
+            dy_w = -dx_ego
+        else:
+            dx_w = dx_ego
+            dy_w = dy_ego
+
+        xw = hx + dx_w
+        yw = hy + dy_w
+
+        mask = (xw >= 0) & (xw < g.shape[1]) & (yw >= 0) & (yw < g.shape[0])
+        out[mask] = g[yw[mask], xw[mask]]
 
         return out
 
