@@ -45,6 +45,11 @@ class TileViTExtractor(BaseFeaturesExtractor):
       - "pov_center_rot"  : same as pov_center, but offsets are rotated per-sample
                             so "forward" is UP (direction inferred from center head tile)
 
+    Optional masking (attention padding mask):
+      - if use_token_mask=True, tokens with tile_id == mask_token_id are ignored by attention
+      - CLS token is never masked
+      - for pooling="mean"/"cls_mean", masked tokens can be excluded from the mean (mask_pool=True)
+
     Pooling modes:
       - "cls"      : use CLS token only (requires use_cls_token=True)
       - "mean"     : mean over tokens (excludes CLS if present)
@@ -75,6 +80,10 @@ class TileViTExtractor(BaseFeaturesExtractor):
             # If frames are stacked in channels, pick which channel to inspect for the center head tile.
             # "last" is usually the newest frame for frame stacking.
             anchor_frame: str = "last",  # "first" | "last"
+            # NEW: token masking
+            use_token_mask: bool = False,
+            mask_token_id: int = 0,
+            mask_pool: bool = True,
     ) -> None:
         super().__init__(observation_space, features_dim)
 
@@ -116,6 +125,10 @@ class TileViTExtractor(BaseFeaturesExtractor):
         self.pos_mode = pos_mode
         self.anchor_frame = anchor_frame
 
+        self.use_token_mask = bool(use_token_mask)
+        self.mask_token_id = int(mask_token_id)
+        self.mask_pool = bool(mask_pool)
+
         c, h, w = _infer_chw(observation_space)
         self.in_channels = int(c)
         self.h = int(h)
@@ -146,7 +159,6 @@ class TileViTExtractor(BaseFeaturesExtractor):
             self.pos_col = nn.Embedding(self.w, self.d_model)
         else:
             # pov_center / pov_center_rot: learn embeddings over center-relative offsets.
-            # We index offsets via (dy+cy) and (dx+cx), so embedding sizes are H and W.
             self.rel_row = nn.Embedding(self.h, self.d_model)
             self.rel_col = nn.Embedding(self.w, self.d_model)
 
@@ -216,7 +228,6 @@ class TileViTExtractor(BaseFeaturesExtractor):
         self.register_buffer("_dx_base", dx.reshape(self.seq_len), persistent=False)  # [T]
 
     def _add_positional_absolute_2d(self, x: torch.Tensor) -> torch.Tensor:
-        # x: [B, T, D], T == H*W
         assert self.pos_row is not None and self.pos_col is not None
         device = x.device
         row_idx = torch.arange(self.h, device=device)
@@ -249,12 +260,10 @@ class TileViTExtractor(BaseFeaturesExtractor):
         dx = self._dx_base
 
         if rot_k is not None:
-            # Broadcast base offsets to [B,T]
             k = rot_k.view(-1, 1)
             dy0 = dy.view(1, -1).expand(k.shape[0], dy.numel())
             dx0 = dx.view(1, -1).expand(k.shape[0], dx.numel())
 
-            # Apply rotation (matches np.rot90(out, k=1) used in envs).
             dy1 = torch.where(k == 1, -dx0, dy0)
             dx1 = torch.where(k == 1, dy0, dx0)
 
@@ -269,7 +278,6 @@ class TileViTExtractor(BaseFeaturesExtractor):
             dy_r = dy.view(1, -1)  # [1,T]
             dx_r = dx.view(1, -1)  # [1,T]
 
-        # Map offsets to embedding indices in [0..H-1] / [0..W-1]
         cy = self.h // 2
         cx = self.w // 2
         iy = (dy_r + cy).clamp(0, self.h - 1).to(dtype=torch.long)
@@ -279,10 +287,6 @@ class TileViTExtractor(BaseFeaturesExtractor):
         return x + pe
 
     def _infer_rot_k_from_center_head(self, tile_ids: torch.Tensor) -> torch.Tensor:
-        """
-        Infer per-sample rotation k in {0,1,2,3} from the center tile id.
-        Requires directional head tile IDs.
-        """
         assert self._head_tile_ids is not None
 
         cy = self.h // 2
@@ -294,13 +298,11 @@ class TileViTExtractor(BaseFeaturesExtractor):
         down = self._head_tile_ids["down"]
         left = self._head_tile_ids["left"]
 
-        # Default to k=0, then overwrite.
         k = torch.zeros_like(center, dtype=torch.long)
         k = torch.where(center == right, torch.ones_like(k), k)
         k = torch.where(center == down, torch.full_like(k, 2), k)
         k = torch.where(center == left, torch.full_like(k, 3), k)
 
-        # Fail loudly if we cannot infer direction (e.g., non-POV input or vocab collapsed head dir).
         valid = (center == up) | (center == right) | (center == down) | (center == left)
         if not bool(valid.all().item()):
             bad = int((~valid).sum().item())
@@ -312,17 +314,53 @@ class TileViTExtractor(BaseFeaturesExtractor):
         return k
 
     def _add_positional(self, x: torch.Tensor, *, raw_tile_ids: Optional[torch.Tensor]) -> torch.Tensor:
-        # x: [B, T, D], T == H*W
         if self.pos_mode == "abs_2d":
             return self._add_positional_absolute_2d(x)
         if self.pos_mode == "abs_1d":
             return self._add_positional_absolute_1d(x)
         if self.pos_mode == "pov_center":
             return self._add_positional_pov_center(x, rot_k=None)
-        # pov_center_rot
-        assert raw_tile_ids is not None
+        assert raw_tile_ids is not None  # pov_center_rot
         k = self._infer_rot_k_from_center_head(raw_tile_ids)
         return self._add_positional_pov_center(x, rot_k=k)
+
+    def _build_token_mask(self, tile_ids: torch.Tensor) -> Optional[torch.Tensor]:
+        """
+        Build src_key_padding_mask for attention.
+
+        Returns:
+          mask: [B, T] bool, True means "ignore this token" (padding/OOB)
+        """
+        if not self.use_token_mask:
+            return None
+
+        b, c, h, w = tile_ids.shape
+        assert h == self.h and w == self.w
+
+        if c == 1:
+            m = (tile_ids[:, 0, :, :] == self.mask_token_id).reshape(b, self.seq_len)
+            return m
+
+        if self.frame_fuse == "sum":
+            # One token per position; mark masked only if all frames are masked there.
+            m = (tile_ids == self.mask_token_id).all(dim=1)  # [B,H,W]
+            return m.reshape(b, self.seq_len)
+
+        # frame_fuse == "concat": each frame contributes its own tokens
+        m = (tile_ids == self.mask_token_id).reshape(b, c * self.seq_len)  # [B,C*T]
+        return m
+
+    @staticmethod
+    def _masked_mean(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        """
+        Mean over tokens excluding masked positions.
+        x:    [B,T,D]
+        mask: [B,T] bool (True => exclude)
+        """
+        keep = ~mask  # True => include
+        denom = keep.sum(dim=1).clamp(min=1).to(dtype=x.dtype)  # [B]
+        keep_f = keep.to(dtype=x.dtype).unsqueeze(-1)  # [B,T,1]
+        return (x * keep_f).sum(dim=1) / denom.unsqueeze(-1)  # [B,D]
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         # Accept [B,H,W] or [B,C,H,W]
@@ -340,6 +378,9 @@ class TileViTExtractor(BaseFeaturesExtractor):
             raise ValueError(f"obs C mismatch: got C={c} expected C={self.in_channels}")
 
         tile_ids = obs.to(dtype=torch.long)  # [B,C,H,W]
+
+        # Build token mask in the same token order as x (before CLS).
+        token_mask = self._build_token_mask(tile_ids)  # [B,T] or [B,C*T] or None
 
         # Flatten grid -> tokens.
         ids = tile_ids.reshape(b, c, self.seq_len)
@@ -366,7 +407,6 @@ class TileViTExtractor(BaseFeaturesExtractor):
 
         # Positional embeddings.
         if c > 1 and self.frame_fuse == "concat":
-            # Each frame gets PE independently, then tokens are concatenated.
             x2 = x.reshape(b, c, self.seq_len, self.d_model)
             pos_added = []
             for fi in range(c):
@@ -378,21 +418,36 @@ class TileViTExtractor(BaseFeaturesExtractor):
 
         x = self.drop(x)
 
-        # Optional CLS token.
+        # Optional CLS token (never masked).
         if self.cls_token is not None:
             cls = self.cls_token.expand(b, 1, self.d_model)
             x = torch.cat([cls, x], dim=1)
+            if token_mask is not None:
+                cls_mask = torch.zeros((b, 1), device=token_mask.device, dtype=torch.bool)
+                token_mask = torch.cat([cls_mask, token_mask], dim=1)  # [B,1+T]
 
-        x = self.encoder(x)
+        # Attention masking: True means "ignore".
+        x = self.encoder(x, src_key_padding_mask=token_mask)
 
         # Pool (always return [B, features_dim])
         if self.pooling == "cls":
             pooled = x[:, 0, :]
+
         elif self.pooling == "mean":
-            pooled = x[:, 1:, :].mean(dim=1) if self.cls_token is not None else x.mean(dim=1)
+            if self.cls_token is not None:
+                tok = x[:, 1:, :]
+                m = token_mask[:, 1:] if (token_mask is not None and self.mask_pool) else None
+            else:
+                tok = x
+                m = token_mask if (token_mask is not None and self.mask_pool) else None
+
+            pooled = self._masked_mean(tok, m) if m is not None else tok.mean(dim=1)
+
         else:  # "cls_mean"
             cls = x[:, 0, :]
-            mean = x[:, 1:, :].mean(dim=1)
+            tok = x[:, 1:, :]
+            m = token_mask[:, 1:] if (token_mask is not None and self.mask_pool) else None
+            mean = self._masked_mean(tok, m) if m is not None else tok.mean(dim=1)
             pooled = torch.cat([cls, mean], dim=-1)
 
         return self.out_proj(pooled)

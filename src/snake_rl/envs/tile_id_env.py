@@ -151,6 +151,10 @@ class PovTileIdEnv(BaseSnakeEnv):
         rx = left/right radius
       (shape remains constant even when rx != ry)
     - rotate_to_head=False crops in world axes (ry vertical, rx horizontal).
+    - If mask_oob=True:
+        - 0 is reserved as the OOB sentinel
+        - all in-bounds IDs are shifted by +1
+        - num_classes increases by +1
     """
 
     def __init__(
@@ -160,11 +164,17 @@ class PovTileIdEnv(BaseSnakeEnv):
             view_radius: int | tuple[int, int],
             tile_vocab: str | None = None,
             rotate_to_head: bool = True,
+            mask_oob: bool = False,
     ):
         BaseSnakeEnv.__init__(self, game)
 
         self.view_radius_y, self.view_radius_x = _parse_view_radius(view_radius)
         self.rotate_to_head = bool(rotate_to_head)
+        self.mask_oob = bool(mask_oob)
+
+        # Expose for debugging/logging.
+        self.oob_id: int | None = 0 if self.mask_oob else None
+        self._id_shift: int = 1 if self.mask_oob else 0
 
         # Keep historical behavior: env ctor forces a clean state.
         self.game.reset()
@@ -180,9 +190,8 @@ class PovTileIdEnv(BaseSnakeEnv):
         if tile_vocab is not None:
             self._tile_vocab = load_tile_vocab(tile_vocab)
 
-        self.num_classes: int = (
-            int(self._tile_vocab.num_classes) if self._tile_vocab is not None else int(self.raw_vocab_size)
-        )
+        base_num = int(self._tile_vocab.num_classes) if self._tile_vocab is not None else int(self.raw_vocab_size)
+        self.num_classes: int = base_num + (1 if self.mask_oob else 0)
 
         # Expose for logging/debug
         self.tile_vocab_name: str | None = self._tile_vocab.name if self._tile_vocab is not None else None
@@ -199,7 +208,13 @@ class PovTileIdEnv(BaseSnakeEnv):
         self._last_raw_grid: np.ndarray | None = None
         self._last_class_grid: np.ndarray | None = None
 
-    def _pov_tile_frame(self) -> np.ndarray:
+    def _pov_tile_frame_with_valid(self) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Return (raw_frame, valid_mask), both (VY,VX).
+
+        raw_frame contains TileType.value IDs. OOB is filled with EMPTY in raw_frame;
+        valid_mask indicates which entries correspond to real board coordinates.
+        """
         g = self.game.tile_grid  # (H,W) uint8
 
         head: Point = self.game.get_head_position()
@@ -211,6 +226,7 @@ class PovTileIdEnv(BaseSnakeEnv):
         vx = 2 * rx + 1
 
         out = np.full((vy, vx), int(TileType.EMPTY.value), dtype=np.uint8)
+        valid = np.zeros((vy, vx), dtype=np.bool_)
 
         if not self.rotate_to_head:
             # World-oriented rectangular crop (ry vertical, rx horizontal).
@@ -228,7 +244,8 @@ class PovTileIdEnv(BaseSnakeEnv):
             ox1 = ox0 + (gx1 - gx0)
 
             out[oy0:oy1, ox0:ox1] = g[gy0:gy1, gx0:gx1]
-            return out
+            valid[oy0:oy1, ox0:ox1] = True
+            return out, valid
 
         # Egocentric crop (forward is UP). Shape stays (vy, vx) even if ry != rx.
         d = self.game.direction
@@ -242,15 +259,12 @@ class PovTileIdEnv(BaseSnakeEnv):
             dx_w = dx_ego
             dy_w = dy_ego
         elif d == Direction.RIGHT:
-            # dx_w = -dy_ego ; dy_w = dx_ego
             dx_w = -dy_ego
             dy_w = dx_ego
         elif d == Direction.DOWN:
-            # dx_w = -dx_ego ; dy_w = -dy_ego
             dx_w = -dx_ego
             dy_w = -dy_ego
         elif d == Direction.LEFT:
-            # dx_w = dy_ego ; dy_w = -dx_ego
             dx_w = dy_ego
             dy_w = -dx_ego
         else:
@@ -262,11 +276,13 @@ class PovTileIdEnv(BaseSnakeEnv):
 
         mask = (xw >= 0) & (xw < g.shape[1]) & (yw >= 0) & (yw < g.shape[0])
         out[mask] = g[yw[mask], xw[mask]]
-
-        return out
+        valid[mask] = True
+        return out, valid
 
     def get_obs(self):
-        raw = self._pov_tile_frame()
+        raw, valid = self._pov_tile_frame_with_valid()
+
+        # Map raw -> class IDs (or identity).
         if self._tile_vocab is None:
             frame = raw
         else:
@@ -275,4 +291,10 @@ class PovTileIdEnv(BaseSnakeEnv):
         self._last_raw_grid = raw
         self._last_class_grid = frame
 
-        return frame[None, :, :].astype(np.uint8, copy=False)
+        if not self.mask_oob:
+            return frame[None, :, :].astype(np.uint8, copy=False)
+
+        # mask_oob=True: 0 is OOB, valid IDs shifted by +1.
+        out = np.zeros_like(frame, dtype=np.uint8)
+        out[valid] = (frame[valid].astype(np.uint16) + 1).astype(np.uint8, copy=False)
+        return out[None, :, :].astype(np.uint8, copy=False)
