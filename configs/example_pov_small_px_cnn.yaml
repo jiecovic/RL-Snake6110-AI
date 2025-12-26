@@ -14,12 +14,13 @@ level:
   height: 7
   width: 12
   food_count: 1
-  random_placement: true
 
 env:
   id: pov_pixel
   params:
-    view_radius: 5
+    view_radius: 6
+    rotate_to_head: true
+    add_oob_mask: true
 
 observation:
   frame_stack:
@@ -27,10 +28,11 @@ observation:
 
 model:
   features_extractor:
-    type: px_tilealign_cnn_c4
-    features_dim: 1024
-    params: {}      # optional
-  net_arch: [512, 128]
+    type: px_strided_cnn_l3k8
+    features_dim: 512
+    params:
+      c_mult: 64
+  net_arch: [256]
 
 ppo:
   n_steps: 2048
@@ -38,7 +40,7 @@ ppo:
   n_epochs: 2
   gamma: 0.999
   ent_coef: 0.03
-  learning_rate: 1e-4
+  learning_rate: 3e-4
 
 #  gae_lambda: 0.95        # bias/variance tradeoff for advantage estimation
 #  clip_range: 0.1         # PPO clipping; 0.1 is often more stable for Atari-like CNNs

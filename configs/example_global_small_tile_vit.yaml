@@ -5,7 +5,7 @@ run:
   name: snake_ppo_vit
   seed: 42
   num_envs: 16
-  total_timesteps: 20_000_000
+  total_timesteps: 100_000_000
   checkpoint_freq: 250_000
   resume_checkpoint: null
 
@@ -15,11 +15,9 @@ level:
   food_count: 1
 
 env:
-  id: pov_tile_id
+  id: global_tile_id
   params:
-    tile_vocab: pov_v1
-    view_radius: 6
-    rotate_to_head: true
+    tile_vocab: global_v1
 
 # No frame stacking needed: direction & orientation are encoded in tile IDs
 observation:
@@ -33,12 +31,10 @@ model:
     params:
       d_model: 64
       n_layers: 3
-#      ffn_dim: 64
       n_heads: 8
       dropout: 0.0
       pooling: cls_mean
-      pos_mode : pov_center
-      use_token_mask: true
+      pos_mode : pov_center_rot
   net_arch: []
 
 

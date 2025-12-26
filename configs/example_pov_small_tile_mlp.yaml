@@ -18,7 +18,8 @@ env:
   id: pov_tile_id
   params:
     tile_vocab: pov_v1
-    view_radius: 5
+    view_radius: 6
+    rotate_to_head: true
 
 # No frame stacking needed: direction & orientation are encoded in tile IDs
 observation:
@@ -42,7 +43,7 @@ ppo:
   n_steps: 2048
   batch_size: 128
   n_epochs: 2
-  gamma: 0.999
+  gamma: 0.998
   ent_coef: 0.03
   learning_rate: 1e-4
 

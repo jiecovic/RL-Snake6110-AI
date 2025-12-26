@@ -1,4 +1,4 @@
-# configs/example_global_small_px_cnn.yaml
+# configs/example_pov_small_px_cnn.yaml
 # Example configuration for training a PPO agent on Snake
 # Training-only (headless). Human pygame play is handled by snake-play / watch scripts.
 
@@ -14,27 +14,27 @@ level:
   height: 7
   width: 12
   food_count: 1
-  random_placement: true
 
 env:
   id: global_pixel
 
 observation:
   frame_stack:
-    n_frames: 1
+    n_frames: 2
 
 model:
   features_extractor:
-    type: px_tilealign_cnn_c4
-    features_dim: 1024
-    params: {}      # optional
-  net_arch: [512, 128]
+    type: px_lite_cnn_c8
+    features_dim: 512
+    params:
+      c_mult: 32
+  net_arch: [256, 128]
 
 ppo:
   n_steps: 2048
   batch_size: 128
   n_epochs: 2
-  gamma: 0.999
+  gamma: 0.998
   ent_coef: 0.03
   learning_rate: 1e-4
 

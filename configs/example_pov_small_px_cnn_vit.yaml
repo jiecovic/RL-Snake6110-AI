@@ -5,7 +5,7 @@ run:
   name: snake_ppo_cnn_vit
   seed: 42
   num_envs: 16
-  total_timesteps: 100_000_000
+  total_timesteps: 20_000_000
   checkpoint_freq: 250_000
   resume_checkpoint: null
 
@@ -17,7 +17,8 @@ level:
 env:
   id: pov_pixel
   params:
-    view_radius: 5
+    view_radius: 6
+    rotate_to_head: true
 
 observation:
   frame_stack:
@@ -28,25 +29,26 @@ model:
     type: px_cnn_vit
     features_dim: 64
     params:
-      cnn_stem: px_tilealign_cnn_c4
-      c_mult: 1
+      cnn_stem: px_strided_cnn_l2_s2s2_k4
+      c_mult: 32
 
       # ViT part
-      d_model: 64
-      n_layers: 2
-      n_heads: 2
+      d_model: 128
+      n_layers: 3
+      n_heads: 8
       dropout: 0.0
-      use_cls_token: true
-      use_2d_positional: true
+      pooling: cls_mean
+      pos_mode : pov_center
+#      force_in_proj: false
 
-  net_arch: [32]
+  net_arch: []
 
 
 ppo:
   n_steps: 2048
   batch_size: 128
   n_epochs: 2
-  gamma: 0.999
+  gamma: 0.998
   ent_coef: 0.03
   learning_rate: 1e-4
 
