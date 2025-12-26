@@ -32,7 +32,7 @@ def _available_stems_from_registry() -> list[str]:
     """
     mod = importlib.import_module("snake_rl.models.registry")
     reg = getattr(mod, "FEATURE_EXTRACTOR_REGISTRY")
-    keys = []
+    keys: list[str] = []
     for k, cls in reg.items():
         try:
             if issubclass(cls, BaseCNNExtractor):
@@ -82,7 +82,7 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
 
     Pipeline:
       obs [B,C,H,W] -> cnn_stem -> featmap [B,C',H',W']
-      -> 1x1 conv proj to d_model -> tokens [B, T=H'*W', d_model]
+      -> (optional) 1x1 conv proj to d_model -> tokens [B, T=H'*W', d_model]
       -> +pos (+optional CLS) -> TransformerEncoder -> pool -> out_proj -> [B, features_dim]
 
     Positional modes (single source of truth via `pos_mode`):
@@ -90,9 +90,19 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
       - "abs_1d"     : learned 1D index embedding over flattened tokens (T=H'*W')
       - "pov_center" : learned center-anchored offsets over the CNN token grid (H',W')
 
+    Pooling modes:
+      - "cls"      : use CLS token only (requires use_cls_token=True)
+      - "mean"     : mean over tokens (excludes CLS if present)
+      - "cls_mean" : concatenate [CLS, mean(tokens)] then project
+
+    In-projection behavior:
+      - If force_in_proj=True (default), always apply 1x1 projection (C' -> d_model).
+      - If force_in_proj=False, use Identity when C' == d_model, otherwise apply 1x1 projection.
+
     Notes:
       - "pov_center" assumes the observation is head-centered (POV); the anchor is token-grid center.
       - This extractor does not try to infer direction from pixels; rotate egocentrically in the env.
+      - No token masking here (pixels don’t have a natural “mask token”); if you need it, add it upstream.
     """
 
     POS_MODES = POS_MODES
@@ -110,9 +120,10 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
             ffn_dim: int | None = None,
             dropout: float = 0.1,
             use_cls_token: bool = True,
-            pooling: str = "cls",  # "cls" | "mean"
+            pooling: str = "cls",  # "cls" | "mean" | "cls_mean"
             pos_mode: str = "abs_2d",
             normalized_image: bool = False,
+            force_in_proj: bool = True,
     ) -> None:
         super().__init__(observation_space, int(features_dim))
 
@@ -133,10 +144,10 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
             raise ValueError(f"d_model={d_model} must be divisible by n_heads={n_heads}")
 
         pooling = str(pooling)
-        if pooling not in {"cls", "mean"}:
-            raise ValueError(f"pooling must be one of {{'cls','mean'}}, got {pooling!r}")
-        if pooling == "cls" and not use_cls_token:
-            raise ValueError("pooling='cls' requires use_cls_token=True")
+        if pooling not in {"cls", "mean", "cls_mean"}:
+            raise ValueError(f"pooling must be one of {{'cls','mean','cls_mean'}}, got {pooling!r}")
+        if pooling in {"cls", "cls_mean"} and not use_cls_token:
+            raise ValueError(f"pooling={pooling!r} requires use_cls_token=True")
 
         pos_mode = str(pos_mode)
         if pos_mode not in self.POS_MODES:
@@ -145,6 +156,7 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
         self.normalized_image = bool(normalized_image)
         self.pooling = pooling
         self.pos_mode = pos_mode
+        self.force_in_proj = bool(force_in_proj)
 
         self.d_model = int(d_model)
         self.n_layers = int(n_layers)
@@ -178,8 +190,21 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
         self.w = int(w_out)
         self.seq_len = int(self.h * self.w)
 
-        # Project CNN channels -> transformer width
-        self.in_proj = nn.Conv2d(self.cnn_out_channels, self.d_model, kernel_size=1, stride=1, padding=0, bias=True)
+        # Project CNN channels -> transformer width (optional)
+        if self.force_in_proj or (self.cnn_out_channels != self.d_model):
+            self.in_proj: nn.Module = nn.Conv2d(
+                self.cnn_out_channels,
+                self.d_model,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=True,
+            )
+            nn.init.normal_(self.in_proj.weight, mean=0.0, std=0.02)  # type: ignore[arg-type]
+            if getattr(self.in_proj, "bias", None) is not None:
+                nn.init.zeros_(self.in_proj.bias)  # type: ignore[arg-type]
+        else:
+            self.in_proj = nn.Identity()
 
         # Shared positional encoding over the CNN token grid (H',W')
         self.pos_enc = GridPositionalEncoding(h=self.h, w=self.w, d_model=self.d_model, pos_mode=self.pos_mode)
@@ -202,12 +227,9 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
         )
         self.encoder = nn.TransformerEncoder(enc_layer, num_layers=self.n_layers)
 
-        self.out_proj = nn.Linear(self.d_model, int(features_dim), bias=True)
-
-        # Init
-        nn.init.normal_(self.in_proj.weight, mean=0.0, std=0.02)
-        if self.in_proj.bias is not None:
-            nn.init.zeros_(self.in_proj.bias)
+        # Pool projection to SB3 features_dim.
+        in_dim = self.d_model * (2 if self.pooling == "cls_mean" else 1)
+        self.out_proj = nn.Linear(in_dim, int(features_dim), bias=True)
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         if observations.ndim != 4:
@@ -215,11 +237,21 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
 
         x = observations.float()
         x = self.stem(x)  # [B, C', H', W']
-        x = self.in_proj(x)  # [B, d_model, H', W']
+
+        b0, c0, h0, w0 = x.shape
+        if h0 != self.h or w0 != self.w:
+            raise ValueError(f"stem spatial changed: got {(h0, w0)} expected {(self.h, self.w)}")
+
+        x = self.in_proj(x)  # [B, d_model, H', W']  (or Identity)
 
         b, d, h, w = x.shape
         if h != self.h or w != self.w:
-            raise ValueError(f"stem spatial changed: got {(h, w)} expected {(self.h, self.w)}")
+            raise ValueError(f"proj spatial changed: got {(h, w)} expected {(self.h, self.w)}")
+        if d != self.d_model:
+            raise ValueError(
+                f"proj channel mismatch: got d={d} expected d_model={self.d_model} "
+                f"(cnn_out={self.cnn_out_channels}, force_in_proj={self.force_in_proj})"
+            )
 
         tokens = x.flatten(2).transpose(1, 2).contiguous()  # [B, T, d_model]
         tokens = self.pos_enc(tokens)
@@ -233,7 +265,7 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
 
         pooled = pool_tokens(
             tokens,
-            pooling=("cls" if self.pooling == "cls" else "mean"),
+            pooling=self.pooling,  # "cls" | "mean" | "cls_mean"
             has_cls=(self.cls_token is not None),
             token_mask=None,
             mask_pool=False,
