@@ -12,6 +12,7 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from torch import nn
 
 from snake_rl.models.cnns.base import BaseCNNExtractor
+from snake_rl.models.vits.vit_utils import GridPositionalEncoding, POS_MODES, pool_tokens
 
 
 def _infer_chw(space: spaces.Box) -> Tuple[int, int, int]:
@@ -94,7 +95,7 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
       - This extractor does not try to infer direction from pixels; rotate egocentrically in the env.
     """
 
-    POS_MODES = {"abs_2d", "abs_1d", "pov_center"}
+    POS_MODES = POS_MODES
 
     def __init__(
             self,
@@ -180,26 +181,13 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
         # Project CNN channels -> transformer width
         self.in_proj = nn.Conv2d(self.cnn_out_channels, self.d_model, kernel_size=1, stride=1, padding=0, bias=True)
 
-        # Positional embeddings on token grid (H', W')
-        self.pos_1d = None
-        self.pos_row = None
-        self.pos_col = None
-        self.rel_row = None
-        self.rel_col = None
-
-        if self.pos_mode == "abs_1d":
-            self.pos_1d = nn.Embedding(self.seq_len, self.d_model)
-        elif self.pos_mode == "abs_2d":
-            self.pos_row = nn.Embedding(self.h, self.d_model)
-            self.pos_col = nn.Embedding(self.w, self.d_model)
-        else:
-            # pov_center: learn embeddings over center-relative offsets (via indices in [0..H'-1],[0..W'-1]).
-            self.rel_row = nn.Embedding(self.h, self.d_model)
-            self.rel_col = nn.Embedding(self.w, self.d_model)
+        # Shared positional encoding over the CNN token grid (H',W')
+        self.pos_enc = GridPositionalEncoding(h=self.h, w=self.w, d_model=self.d_model, pos_mode=self.pos_mode)
 
         self.cls_token = None
         if self.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, self.d_model))
+            nn.init.normal_(self.cls_token, mean=0.0, std=0.02)
 
         self.drop = nn.Dropout(self.dropout)
 
@@ -221,67 +209,6 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
         if self.in_proj.bias is not None:
             nn.init.zeros_(self.in_proj.bias)
 
-        if self.pos_row is not None:
-            nn.init.normal_(self.pos_row.weight, mean=0.0, std=0.02)
-        if self.pos_col is not None:
-            nn.init.normal_(self.pos_col.weight, mean=0.0, std=0.02)
-        if self.pos_1d is not None:
-            nn.init.normal_(self.pos_1d.weight, mean=0.0, std=0.02)
-        if self.rel_row is not None:
-            nn.init.normal_(self.rel_row.weight, mean=0.0, std=0.02)
-        if self.rel_col is not None:
-            nn.init.normal_(self.rel_col.weight, mean=0.0, std=0.02)
-        if self.cls_token is not None:
-            nn.init.normal_(self.cls_token, mean=0.0, std=0.02)
-
-        # Cache base offset grids (registered buffers so they move with .to(device)).
-        # These are on the CNN token grid (H', W').
-        cy = self.h // 2
-        cx = self.w // 2
-        dy = (torch.arange(self.h) - cy).view(self.h, 1).expand(self.h, self.w)  # [H',W']
-        dx = (torch.arange(self.w) - cx).view(1, self.w).expand(self.h, self.w)  # [H',W']
-        self.register_buffer("_dy_base", dy.reshape(self.seq_len), persistent=False)  # [T]
-        self.register_buffer("_dx_base", dx.reshape(self.seq_len), persistent=False)  # [T]
-
-    def _add_positional_absolute_2d(self, x: torch.Tensor) -> torch.Tensor:
-        assert self.pos_row is not None and self.pos_col is not None
-        device = x.device
-        row_idx = torch.arange(self.h, device=device)
-        col_idx = torch.arange(self.w, device=device)
-        pe = (self.pos_row(row_idx)[:, None, :] + self.pos_col(col_idx)[None, :, :]).reshape(self.seq_len, self.d_model)
-        return x + pe.unsqueeze(0)
-
-    def _add_positional_absolute_1d(self, x: torch.Tensor) -> torch.Tensor:
-        assert self.pos_1d is not None
-        device = x.device
-        idx = torch.arange(self.seq_len, device=device)
-        pe = self.pos_1d(idx)
-        return x + pe.unsqueeze(0)
-
-    def _add_positional_pov_center(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Center-anchored PE on the token grid: position is encoded as (dy, dx) relative to grid center.
-        """
-        assert self.rel_row is not None and self.rel_col is not None
-
-        dy = self._dy_base.view(1, -1)  # [1,T]
-        dx = self._dx_base.view(1, -1)  # [1,T]
-
-        cy = self.h // 2
-        cx = self.w // 2
-        iy = (dy + cy).clamp(0, self.h - 1).to(dtype=torch.long)
-        ix = (dx + cx).clamp(0, self.w - 1).to(dtype=torch.long)
-
-        pe = self.rel_row(iy) + self.rel_col(ix)  # [1,T,D]
-        return x + pe
-
-    def _add_positional(self, x: torch.Tensor) -> torch.Tensor:
-        if self.pos_mode == "abs_2d":
-            return self._add_positional_absolute_2d(x)
-        if self.pos_mode == "abs_1d":
-            return self._add_positional_absolute_1d(x)
-        return self._add_positional_pov_center(x)
-
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         if observations.ndim != 4:
             raise ValueError(f"expected obs [B,C,H,W], got shape={tuple(observations.shape)}")
@@ -295,7 +222,7 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
             raise ValueError(f"stem spatial changed: got {(h, w)} expected {(self.h, self.w)}")
 
         tokens = x.flatten(2).transpose(1, 2).contiguous()  # [B, T, d_model]
-        tokens = self._add_positional(tokens)
+        tokens = self.pos_enc(tokens)
         tokens = self.drop(tokens)
 
         if self.cls_token is not None:
@@ -304,9 +231,11 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
 
         tokens = self.encoder(tokens)
 
-        if self.pooling == "cls":
-            pooled = tokens[:, 0, :]
-        else:
-            pooled = tokens[:, 1:, :].mean(dim=1) if self.cls_token is not None else tokens.mean(dim=1)
-
+        pooled = pool_tokens(
+            tokens,
+            pooling=("cls" if self.pooling == "cls" else "mean"),
+            has_cls=(self.cls_token is not None),
+            token_mask=None,
+            mask_pool=False,
+        )
         return self.out_proj(pooled)
