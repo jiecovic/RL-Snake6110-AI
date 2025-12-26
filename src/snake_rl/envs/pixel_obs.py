@@ -1,8 +1,8 @@
-# src/snake_rl/envs/obs_base.py
+# src/snake_rl/envs/pixel_obs.py
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union, overload
 
 import numpy as np
 
@@ -43,6 +43,36 @@ def _parse_view_radius(v: Any) -> Tuple[int, int]:
     )
 
 
+def _rotate_tile_block(block: np.ndarray, d: Direction) -> np.ndarray:
+    """
+    Rotate a tile's pixel block so the egocentric view has "forward == UP".
+
+    The egocentric sampling already maps world coordinates into the ego window.
+    But the *sprites inside each tile* (e.g. directional head, corners) are still
+    in world orientation, so we rotate the pixel block itself.
+
+    Convention (np.rot90): k>0 rotates CCW.
+      - If snake faces UP    : no rotation
+      - RIGHT (east)         : rotate CCW 90 (k=1)
+      - DOWN (south)         : rotate 180 (k=2)
+      - LEFT (west)          : rotate CW 90  (k=3)
+    """
+    if d == Direction.UP:
+        k = 0
+    elif d == Direction.RIGHT:
+        k = 1
+    elif d == Direction.DOWN:
+        k = 2
+    elif d == Direction.LEFT:
+        k = 3
+    else:
+        k = 0
+
+    if k == 0:
+        return block
+    return np.rot90(block, k=k).copy()
+
+
 class PixelObsEnvBase(ABC):
     """
     Small helper base for pixel observations.
@@ -61,7 +91,36 @@ class PixelObsEnvBase(ABC):
         """
         return self.game.pixel_buffer.astype(np.uint8, copy=False)
 
-    def _pov_pixel_frame(self, *, view_radius: Radius, rotate_to_head: bool = True) -> np.ndarray:
+    @overload
+    def _pov_pixel_frame(
+            self,
+            *,
+            view_radius: Radius,
+            rotate_to_head: bool = True,
+            oob_fill_value: int = 0,
+            return_valid: bool,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        ...
+
+    @overload
+    def _pov_pixel_frame(
+            self,
+            *,
+            view_radius: Radius,
+            rotate_to_head: bool = True,
+            oob_fill_value: int = 0,
+            return_valid: bool = False,
+    ) -> np.ndarray:
+        ...
+
+    def _pov_pixel_frame(
+            self,
+            *,
+            view_radius: Radius,
+            rotate_to_head: bool = True,
+            oob_fill_value: int = 0,
+            return_valid: bool = False,
+    ):
         """
         Return a single POV pixel frame centered on the head.
 
@@ -74,10 +133,18 @@ class PixelObsEnvBase(ABC):
                      ry = forward/back radius, rx = left/right radius.
           - False => world-oriented crop (ry vertical, rx horizontal).
 
-        Output: (H,W) uint8
+        oob_fill_value:
+          - Pixel value used for padded OOB regions (uint8-ish int).
+
+        return_valid:
+          - If True, also return a boolean valid mask (H,W) where True means "in-bounds board pixels".
+
+        Output:
+          - frame: (H,W) uint8
+          - optionally valid: (H,W) bool
         """
         tilesize = int(self._tilesize)
-        pixel_grid = self.game.pixel_buffer
+        pixel_grid = self.game.pixel_buffer  # (H,W), uint8-ish
 
         ry, rx = _parse_view_radius(view_radius)
         view_tiles_y = 2 * ry + 1
@@ -87,7 +154,12 @@ class PixelObsEnvBase(ABC):
 
         head_x, head_y = int(self.game.snake[0].x), int(self.game.snake[0].y)
 
-        vision = np.zeros((view_h, view_w), dtype=pixel_grid.dtype)
+        fill = np.uint8(int(oob_fill_value) & 0xFF)
+        vision = np.full((view_h, view_w), fill, dtype=np.uint8)
+
+        valid: Optional[np.ndarray] = None
+        if return_valid:
+            valid = np.zeros((view_h, view_w), dtype=np.bool_)
 
         if not rotate_to_head:
             # World-oriented rectangular crop (ry vertical, rx horizontal).
@@ -106,23 +178,30 @@ class PixelObsEnvBase(ABC):
             vision_col_start = grid_col_start - col_start
             vision_col_end = vision_col_start + (grid_col_end - grid_col_start)
 
-            vision[vision_row_start:vision_row_end, vision_col_start:vision_col_end] = pixel_grid[
-                grid_row_start:grid_row_end,
-                grid_col_start:grid_col_end,
-            ]
+            if grid_row_end > grid_row_start and grid_col_end > grid_col_start:
+                vision[vision_row_start:vision_row_end, vision_col_start:vision_col_end] = pixel_grid[
+                    grid_row_start:grid_row_end,
+                    grid_col_start:grid_col_end,
+                ].astype(np.uint8, copy=False)
+                if valid is not None:
+                    valid[vision_row_start:vision_row_end, vision_col_start:vision_col_end] = True
 
-            return vision.astype(np.uint8, copy=False)
+            if return_valid:
+                assert valid is not None
+                return vision, valid
+            return vision
 
-        # Egocentric crop (forward is UP). Implemented by sampling tiles into a fixed (ry, rx) window.
+        # Egocentric crop (forward is UP). We sample tiles into a fixed (ry, rx) window.
+        # IMPORTANT: we must also rotate each tile's *pixel block* so directional sprites look correct.
         d = self.game.direction
         assert d is not None, "SnakeGame.direction is None (did you call game.reset()?)"
 
-        # For each ego tile offset (dx, dy) in the output window, map to world tile offset.
         for oy in range(-ry, ry + 1):
             for ox in range(-rx, rx + 1):
                 dx_ego = ox
                 dy_ego = oy
 
+                # Map ego offsets -> world offsets (so the correct tile is selected)
                 if d == Direction.UP:
                     dx_w = dx_ego
                     dy_w = dy_ego
@@ -145,20 +224,31 @@ class PixelObsEnvBase(ABC):
                 if not (0 <= wx < self.game.width and 0 <= wy < self.game.height):
                     continue
 
-                # Copy that tile's pixel block into the egocentric buffer.
+                # Source tile block in the *world-oriented* pixel buffer
                 src_y0 = wy * tilesize
                 src_y1 = src_y0 + tilesize
                 src_x0 = wx * tilesize
                 src_x1 = src_x0 + tilesize
 
+                # Destination tile block in the ego view
                 dst_y0 = (oy + ry) * tilesize
                 dst_y1 = dst_y0 + tilesize
                 dst_x0 = (ox + rx) * tilesize
                 dst_x1 = dst_x0 + tilesize
 
-                vision[dst_y0:dst_y1, dst_x0:dst_x1] = pixel_grid[src_y0:src_y1, src_x0:src_x1]
+                block = pixel_grid[src_y0:src_y1, src_x0:src_x1].astype(np.uint8, copy=False)
 
-        return vision.astype(np.uint8, copy=False)
+                # Rotate the *tile pixels* so forward==UP visually
+                block = _rotate_tile_block(block, d)
+
+                vision[dst_y0:dst_y1, dst_x0:dst_x1] = block
+                if valid is not None:
+                    valid[dst_y0:dst_y1, dst_x0:dst_x1] = True
+
+        if return_valid:
+            assert valid is not None
+            return vision, valid
+        return vision
 
 
 class FillFeature:
