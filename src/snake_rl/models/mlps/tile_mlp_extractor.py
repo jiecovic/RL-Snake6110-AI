@@ -64,10 +64,12 @@ class TileMLPExtractor(BaseFeaturesExtractor):
     """
     Tile-ID embedding + (optional) positional encoding + MLP head.
 
-    Compared to TileViTExtractor, this is "no attention": we embed per-cell tokens and then either:
-      - flatten -> big MLP (classic baseline)
-      - pool tokens -> smaller MLP (often more stable / less params)
-      - optional CLS token -> cls / cls_mean pooling
+    This is a "no attention" baseline:
+      - embed per-cell tokens
+      - add grid positional encoding (optional)
+      - either:
+        * "flatten_mlp": flatten token embeddings into one big vector (default)
+        * "mean":        average token embeddings into one vector (smaller head, often stabler)
 
     Input:
       obs: [B,H,W] or [B,C,H,W] with tile ids in [0, num_tiles-1]
@@ -75,17 +77,14 @@ class TileMLPExtractor(BaseFeaturesExtractor):
     Pooling modes:
       - "flatten_mlp": flatten tokens then MLP (backward compatible default)
       - "mean":        mean over tokens then MLP
-      - "cls":         CLS token only (requires use_cls_token=True)
-      - "cls_mean":    concat [CLS, mean(tokens)] then MLP (requires use_cls_token=True)
 
     Token masking (optional):
-      - if use_token_mask=True, tokens with tile_id == mask_token_id can be ignored for mean pooling
-      - CLS token is never masked
-      - masking affects "mean"/"cls_mean" only (not flatten)
+      - if use_token_mask=True, tokens with tile_id == mask_token_id can be excluded from mean pooling
+      - masking affects "mean" only (not flatten)
     """
 
     POS_MODES = POS_MODES
-    POOLING = {"flatten_mlp", "mean", "cls", "cls_mean"}
+    POOLING = {"flatten_mlp", "mean"}
 
     def __init__(
             self,
@@ -105,8 +104,7 @@ class TileMLPExtractor(BaseFeaturesExtractor):
             pre_ln: bool = True,
             # pooling
             pooling: str = "flatten_mlp",
-            use_cls_token: bool = False,
-            # token masking
+            # token masking (mean pooling only)
             use_token_mask: bool = False,
             mask_token_id: int = 0,
             mask_pool: bool = True,
@@ -123,8 +121,6 @@ class TileMLPExtractor(BaseFeaturesExtractor):
         pooling = str(pooling)
         if pooling not in self.POOLING:
             raise ValueError(f"pooling must be one of {sorted(self.POOLING)}, got {pooling!r}")
-        if pooling in {"cls", "cls_mean"} and not use_cls_token:
-            raise ValueError(f"pooling={pooling!r} requires use_cls_token=True")
 
         pos_mode = str(pos_mode)
         if pos_mode not in self.POS_MODES:
@@ -145,7 +141,6 @@ class TileMLPExtractor(BaseFeaturesExtractor):
         self.pre_ln = bool(pre_ln)
 
         self.pooling = pooling
-        self.use_cls_token = bool(use_cls_token)
 
         self.use_token_mask = bool(use_token_mask)
         self.mask_token_id = int(mask_token_id)
@@ -160,14 +155,8 @@ class TileMLPExtractor(BaseFeaturesExtractor):
             self.frame_emb = nn.Embedding(self.in_channels, self.d_emb)
             nn.init.normal_(self.frame_emb.weight, mean=0.0, std=0.02)
 
-        # shared grid positional encoding (same as ViT)
+        # shared grid positional encoding (same helper as ViT)
         self.pos_enc = GridPositionalEncoding(h=self.h, w=self.w, d_model=self.d_emb, pos_mode=self.pos_mode)
-
-        # optional CLS token (for cls / cls_mean)
-        self.cls_token = None
-        if self.use_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, self.d_emb))
-            nn.init.normal_(self.cls_token, mean=0.0, std=0.02)
 
         self.ln = nn.LayerNorm(self.d_emb) if self.pre_ln else nn.Identity()
 
@@ -177,18 +166,14 @@ class TileMLPExtractor(BaseFeaturesExtractor):
                 head_in = self.seq_len * self.d_emb
             else:
                 head_in = (self.in_channels * self.seq_len) * self.d_emb
-        elif self.pooling == "mean":
+        else:  # "mean"
             head_in = self.d_emb
-        elif self.pooling == "cls":
-            head_in = self.d_emb
-        else:  # "cls_mean"
-            head_in = 2 * self.d_emb
 
         self.mlp = _build_mlp(head_in, mlp_hidden, int(features_dim), float(dropout))
 
     def _build_token_mask(self, tile_ids: torch.Tensor) -> Optional[torch.Tensor]:
         """
-        Build a token mask aligned with the token sequence (pre-CLS).
+        Build a token mask aligned with the token sequence (no CLS).
         Returns mask: [B,T] or [B,C*T] bool, True => ignore/exclude.
         """
         if not self.use_token_mask:
@@ -251,38 +236,14 @@ class TileMLPExtractor(BaseFeaturesExtractor):
 
         x = self.ln(x)
 
-        # If flatten mode: keep old behavior (no CLS, no mean mask handling beyond whatever you encode)
         if self.pooling == "flatten_mlp":
             flat = x.reshape(b, -1)
             return self.mlp(flat)
 
-        # CLS handling for cls / cls_mean
-        if self.cls_token is not None:
-            cls = self.cls_token.expand(b, 1, self.d_emb)
-            x = torch.cat([cls, x], dim=1)
-            if token_mask is not None:
-                cls_mask = torch.zeros((b, 1), device=token_mask.device, dtype=torch.bool)
-                token_mask = torch.cat([cls_mask, token_mask], dim=1)  # [B,1+T]
-
-        # mean / cls / cls_mean
-        if self.pooling == "cls":
-            pooled = x[:, 0, :]
-
-        elif self.pooling == "mean":
-            if self.cls_token is not None:
-                tok = x[:, 1:, :]
-                m = token_mask[:, 1:] if (token_mask is not None and self.mask_pool) else None
-            else:
-                tok = x
-                m = token_mask if (token_mask is not None and self.mask_pool) else None
-
-            pooled = _masked_mean(tok, m) if m is not None else tok.mean(dim=1)
-
-        else:  # "cls_mean"
-            clsv = x[:, 0, :]
-            tok = x[:, 1:, :]
-            m = token_mask[:, 1:] if (token_mask is not None and self.mask_pool) else None
-            meanv = _masked_mean(tok, m) if m is not None else tok.mean(dim=1)
-            pooled = torch.cat([clsv, meanv], dim=-1)
+        # mean pooling
+        if token_mask is not None and self.mask_pool:
+            pooled = _masked_mean(x, token_mask)
+        else:
+            pooled = x.mean(dim=1)
 
         return self.mlp(pooled)
