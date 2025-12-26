@@ -222,6 +222,10 @@ experiments/
 experiments/**/tb/
 experiments/**/tb/**
 
+old_experiments/
+old_experiments/**/tb/
+old_experiments/**/tb/**
+
 # TensorBoard event files (just in case they appear elsewhere too)
 events.out.tfevents*
 
