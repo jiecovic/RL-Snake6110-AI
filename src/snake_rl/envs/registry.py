@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from snake_rl.envs.base import BaseSnakeEnv
 from snake_rl.envs.tile_id_env import GlobalTileIdEnv, PovTileIdEnv
-from snake_rl.envs.variants import (
+from snake_rl.envs.pixel_envs import (
     GlobalPixelDirectionEnv,
     GlobalPixelEnv,
     PovPixelEnv,
