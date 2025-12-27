@@ -50,34 +50,43 @@ class TileViTExtractor(BaseFeaturesExtractor):
       - CLS token is never masked
       - for pooling="mean"/"cls_mean", masked tokens can be excluded from the mean (mask_pool=True)
 
-    Pooling modes:
+    Pooling modes (output aggregation):
       - "cls"      : use CLS token only (requires use_cls_token=True)
       - "mean"     : mean over tokens (excludes CLS if present)
       - "cls_mean" : concatenate [CLS, mean(tokens)] then project
+      - "flatten"  : no pooling; flatten all (non-CLS) tokens and project.
+
+        When pooling="flatten" and `flatten_mlp_hidden_dim` is not None,
+        a LayerNorm + MLP (flatten → hidden → GELU → features_dim) is
+        applied before projecting to features_dim. When `flatten_mlp_hidden_dim`
+        is None (the default), a simple Linear(in_dim, features_dim) is used,
+        which is backwards-compatible with older checkpoints.
     """
 
     POS_MODES = POS_MODES
 
     def __init__(
-        self,
-        observation_space: spaces.Box,
-        *,
-        num_tiles: int,
-        features_dim: int = 512,
-        d_model: int = 128,
-        n_layers: int = 4,
-        n_heads: int = 4,
-        ffn_dim: int | None = None,
-        dropout: float = 0.1,
-        use_cls_token: bool = True,
-        pooling: str = "cls",  # "cls" | "mean" | "cls_mean"
-        use_frame_embed: bool = True,
-        frame_fuse: str = "sum",  # "sum" or "concat"
-        pos_mode: str = "abs_2d",
-        # token masking
-        use_token_mask: bool = False,
-        mask_token_id: int = 0,
-        mask_pool: bool = True,
+            self,
+            observation_space: spaces.Box,
+            *,
+            num_tiles: int,
+            features_dim: int = 512,
+            d_model: int = 128,
+            n_layers: int = 4,
+            n_heads: int = 4,
+            ffn_dim: int | None = None,
+            dropout: float = 0.1,
+            use_cls_token: bool = True,
+            pooling: str = "cls",  # "cls" | "mean" | "cls_mean" | "flatten"
+            use_frame_embed: bool = True,
+            frame_fuse: str = "sum",  # "sum" or "concat"
+            pos_mode: str = "abs_2d",
+            # token masking
+            use_token_mask: bool = False,
+            mask_token_id: int = 0,
+            mask_pool: bool = True,
+            # extra config for flatten aggregation
+            flatten_mlp_hidden_dim: int | None = None,
     ) -> None:
         super().__init__(observation_space, features_dim)
 
@@ -93,10 +102,14 @@ class TileViTExtractor(BaseFeaturesExtractor):
             raise ValueError(f"frame_fuse must be 'sum' or 'concat', got {frame_fuse!r}")
 
         pooling = str(pooling)
-        if pooling not in {"cls", "mean", "cls_mean"}:
-            raise ValueError(f"pooling must be one of {{'cls','mean','cls_mean'}}, got {pooling!r}")
+        if pooling not in {"cls", "mean", "cls_mean", "flatten"}:
+            raise ValueError(
+                f"pooling must be one of {{'cls','mean','cls_mean','flatten'}}, got {pooling!r}"
+            )
         if pooling in {"cls", "cls_mean"} and not use_cls_token:
             raise ValueError(f"pooling={pooling!r} requires use_cls_token=True")
+        # For flatten we interpret semantics as "flatten non-CLS tokens".
+        # CLS is allowed but will be dropped before flatten in forward().
 
         pos_mode = str(pos_mode)
         if pos_mode not in self.POS_MODES:
@@ -118,6 +131,9 @@ class TileViTExtractor(BaseFeaturesExtractor):
         self.use_token_mask = bool(use_token_mask)
         self.mask_token_id = int(mask_token_id)
         self.mask_pool = bool(mask_pool)
+        self.flatten_mlp_hidden_dim = (
+            int(flatten_mlp_hidden_dim) if flatten_mlp_hidden_dim is not None else None
+        )
 
         c, h, w = _infer_chw(observation_space)
         self.in_channels = int(c)
@@ -130,7 +146,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
         nn.init.normal_(self.tile_emb.weight, mean=0.0, std=0.02)
 
         # Optional: embed the "frame/channel" index if we have C>1.
-        self.frame_emb = None
+        self.frame_emb: Optional[nn.Embedding] = None
         if self.in_channels > 1 and self.use_frame_embed:
             self.frame_emb = nn.Embedding(self.in_channels, self.d_model)
             nn.init.normal_(self.frame_emb.weight, mean=0.0, std=0.02)
@@ -139,7 +155,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
         self.pos_enc = GridPositionalEncoding(h=self.h, w=self.w, d_model=self.d_model, pos_mode=self.pos_mode)
 
         # Optional CLS token.
-        self.cls_token = None
+        self.cls_token: Optional[torch.Tensor] = None
         if self.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, self.d_model))
             nn.init.normal_(self.cls_token, mean=0.0, std=0.02)
@@ -158,9 +174,31 @@ class TileViTExtractor(BaseFeaturesExtractor):
         )
         self.encoder = nn.TransformerEncoder(enc_layer, num_layers=self.n_layers)
 
-        # Pool projection to SB3 features_dim.
-        in_dim = self.d_model * (2 if self.pooling == "cls_mean" else 1)
-        self.out_proj = nn.Linear(in_dim, int(features_dim), bias=True)
+        # Pool / aggregation projection to SB3 features_dim.
+        if self.pooling == "flatten":
+            # How many tokens after frame_fuse (before optional CLS)?
+            if self.in_channels == 1 or self.frame_fuse == "sum":
+                num_tokens = self.seq_len  # H*W
+            else:
+                num_tokens = self.in_channels * self.seq_len  # C*H*W when concat
+            in_dim = num_tokens * self.d_model
+
+            if self.flatten_mlp_hidden_dim is not None:
+                # Only for pooling="flatten": LayerNorm + MLP used to stabilize
+                # the large flattened token vector before projecting to features_dim.
+                self.out_proj = nn.Sequential(
+                    nn.LayerNorm(in_dim),
+                    nn.Linear(in_dim, self.flatten_mlp_hidden_dim),
+                    nn.GELU(),
+                    nn.Linear(self.flatten_mlp_hidden_dim, int(features_dim)),
+                )
+            else:
+                # Backwards-compatible: simple linear projection like before.
+                self.out_proj = nn.Linear(in_dim, int(features_dim), bias=True)
+        else:
+            in_dim = self.d_model * (2 if self.pooling == "cls_mean" else 1)
+            # For non-flatten pooling modes, keep a simple linear projection.
+            self.out_proj = nn.Linear(in_dim, int(features_dim), bias=True)
 
     def _build_token_mask(self, tile_ids: torch.Tensor) -> Optional[torch.Tensor]:
         """
@@ -248,6 +286,17 @@ class TileViTExtractor(BaseFeaturesExtractor):
         # Attention masking: True means "ignore".
         x = self.encoder(x, src_key_padding_mask=token_mask)
 
+        if self.pooling == "flatten":
+            # For flatten we drop CLS (if present) and just flatten all spatial tokens.
+            if self.cls_token is not None:
+                tokens = x[:, 1:, :]  # [B, num_tokens, D]
+            else:
+                tokens = x  # [B, num_tokens, D]
+
+            flat = tokens.reshape(b, -1)  # [B, num_tokens * D]
+            return self.out_proj(flat)
+
+        # Default path: use pooling helper.
         pooled = pool_tokens(
             x,
             pooling=self.pooling,
