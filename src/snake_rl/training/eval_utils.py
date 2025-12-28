@@ -103,8 +103,10 @@ def _make_single_env_fn(*, cfg: Any, seed: int):
 
     def _init():
         level = EmptyLevel(height=height, width=width)
-        game = SnakeGame(level=level, food_count=food_count, seed=int(seed))
+        game = SnakeGame(level=level, food_count=food_count)
         env = env_cls(game, **env_params)  # type: ignore[arg-type]
+
+        # Env-level seeding (Gymnasium): BaseSnakeEnv.reset() binds game RNG to env.np_random.
         env.reset(seed=int(seed))
         return env
 
@@ -169,7 +171,12 @@ def evaluate_model(
     n_envs = max(1, int(num_envs))
     n_envs = min(n_envs, episodes)
 
-    ep_seeds = [int(seed_base) + ep for ep in range(episodes)]
+    ss = np.random.SeedSequence(int(seed_base))
+    children = ss.spawn(episodes)
+
+    # Convert each child SeedSequence into a single uint32 seed Gym can accept.
+    ep_seeds = [int(c.generate_state(1, dtype=np.uint32)[0]) for c in children]
+
     slot_seeds = ep_seeds[:n_envs]
     next_ep = n_envs
 

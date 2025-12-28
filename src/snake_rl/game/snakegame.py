@@ -1,7 +1,6 @@
 # src/snake_rl/game/snakegame.py
 from __future__ import annotations
 
-import random
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -43,18 +42,11 @@ class SnakeGame:
     """
     Core game state + rules (headless, RL-safe).
 
-    Data model
-    - BaseLevel grid is static-only (walls/empty).
-    - Snake + food are runtime state (spawn + food_count policy).
-
-    Rendering contract
-    - tile_grid    : (H,W) uint8 storing TileType.value
-    - pixel_buffer : (H*tile_size, W*tile_size) uint8 in [0,255]
-    - After a successful move, we only touch the handful of cells that changed.
-
-    Failure semantics
-    - On collisions / terminal results, the snake state does NOT advance.
-      Therefore we MUST NOT apply incremental updates in those cases.
+    RNG contract
+    - The env injects Gymnasium's per-env RNG via set_rng(env.np_random) inside env.reset().
+      This is the preferred training behavior.
+    - Standalone usage can pass an rng object (np.random.Generator) to __init__.
+    - This class does NOT store or accept integer seeds. Seed ownership belongs to the env.
     """
 
     def __init__(
@@ -62,7 +54,7 @@ class SnakeGame:
             level: BaseLevel,
             food_count: int | None = None,
             tileset: Tileset | None = None,
-            seed: int | None = None,
+            rng: np.random.Generator | None = None,
     ):
         # === Static config ===
         self.level = level
@@ -71,8 +63,8 @@ class SnakeGame:
         self.tileset = tileset or Tileset()
 
         # === RNG ===
-        self.seed_value = seed
-        self.rng = random.Random(seed)
+        # Default is fine for standalone construction; env will override on reset().
+        self.rng: np.random.Generator = rng if rng is not None else np.random.default_rng()
 
         # === Buffers ===
         self.pixel_buffer: np.ndarray = np.zeros((1, 1), dtype=np.uint8)
@@ -112,7 +104,16 @@ class SnakeGame:
         self._tile_cache: dict[TileType, np.ndarray] = {}
         self._empty_tile: np.ndarray = np.zeros((self.tileset.tile_size, self.tileset.tile_size), dtype=np.uint8)
 
-        self.reset()
+        # IMPORTANT:
+        # Do NOT auto-reset here. The environment should control reset timing and RNG injection.
+        # Callers must call reset() explicitly.
+
+    def set_rng(self, rng: np.random.Generator) -> None:
+        """
+        Inject an RNG (typically Gymnasium's env.np_random).
+        This is the preferred way to control randomness during training.
+        """
+        self.rng = rng
 
     def reset(self) -> None:
         """Reinitialize runtime state and rebuild buffers."""
@@ -169,7 +170,8 @@ class SnakeGame:
 
         # direction selection
         if sp.random_direction:
-            direction = self.rng.choice([Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT])
+            dirs = [Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT]
+            direction = dirs[int(self.rng.integers(0, len(dirs)))]
         else:
             direction = sp.direction if sp.direction is not None else Direction.RIGHT
 
@@ -188,12 +190,17 @@ class SnakeGame:
 
         if jitter > 0:
             for _ in range(64):
-                dx = self.rng.randint(-jitter, jitter)
-                dy = self.rng.randint(-jitter, jitter)
+                dx = int(self.rng.integers(-jitter, jitter + 1))
+                dy = int(self.rng.integers(-jitter, jitter + 1))
                 candidates.append(Point(base.x + dx, base.y + dy))
 
         for _ in range(64):
-            candidates.append(Point(self.rng.randrange(self.width), self.rng.randrange(self.height)))
+            candidates.append(
+                Point(
+                    int(self.rng.integers(0, self.width)),
+                    int(self.rng.integers(0, self.height)),
+                )
+            )
 
         # pick first valid
         for head in candidates:
@@ -215,10 +222,6 @@ class SnakeGame:
             f"spawn={sp}"
         )
 
-    def set_seed(self, seed: int | None) -> None:
-        self.seed_value = seed
-        self.rng = random.Random(seed)
-
     @property
     def max_playable_tiles(self) -> int:
         return self.width * self.height - len(self.wall_positions)
@@ -238,11 +241,18 @@ class SnakeGame:
         if need <= 0 or not self.spawnable_tiles:
             return 0
 
-        candidates = self.rng.sample(list(self.spawnable_tiles), k=min(need, len(self.spawnable_tiles)))
-        for p in candidates:
+        cands = list(self.spawnable_tiles)
+        k = min(int(need), len(cands))
+        if k <= 0:
+            return 0
+
+        # Sample without replacement via indices (deterministic under rng)
+        idx = self.rng.choice(len(cands), size=k, replace=False)
+        for i in np.asarray(idx).tolist():
+            p = cands[int(i)]
             self.food.append(p)
             self.spawnable_tiles.remove(p)
-        return len(candidates)
+        return int(k)
 
     # -------------------------------------------------------------------------
     # Rendering plumbing (tile cache -> tile_grid -> pixel_buffer)
@@ -278,7 +288,7 @@ class SnakeGame:
     def _blit_cell(self, p: Point, tt: TileType) -> None:
         td = int(self.tileset.tile_size)
         py, px = p.y * td, p.x * td
-        self.pixel_buffer[py:py + td, px:px + td] = self._tile_at(tt)
+        self.pixel_buffer[py: py + td, px: px + td] = self._tile_at(tt)
 
     def _render_full_from_tile_grid(self) -> None:
         td = int(self.tileset.tile_size)

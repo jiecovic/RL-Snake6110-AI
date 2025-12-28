@@ -180,34 +180,72 @@ def apply_frame_stack(*, vec_env: VecEnv, n_stack: int, pixel_key: str = "pixel"
 
 
 def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
+    """
+    Factory for a single Snake environment instance.
+
+    Seeding model:
+      - The Gymnasium environment owns the RNG and is seeded via env.reset(seed=...).
+      - The SnakeGame instance does not manage seeds; it consumes the env RNG
+        injected during env.reset().
+    """
     env_id = str(cfg.env.id)
     env_cls = get_env_cls(env_id)
 
     def _init():
-        level = EmptyLevel(height=int(cfg.level.height), width=int(cfg.level.width))
-        game = SnakeGame(level=level, food_count=int(cfg.level.food_count), seed=int(seed))
+        # Create static level
+        level = EmptyLevel(
+            height=int(cfg.level.height),
+            width=int(cfg.level.width),
+        )
+
+        # Create game WITHOUT a seed.
+        # RNG will be injected from the env's np_random during reset().
+        game = SnakeGame(
+            level=level,
+            food_count=int(cfg.level.food_count),
+        )
 
         env_params = _get_env_params_from_cfg(cfg)
 
-        # Registry-driven constructor: env params depend on env id (dynamic kwargs).
+        # Construct the Gymnasium environment
         env = env_cls(game, **env_params)  # type: ignore[call-arg]
 
-        # IMPORTANT: Do not add TimeLimit here.
-        # Our reward design assumes episodes end only by true environment termination.
+        # Seed the environment ONCE at creation time.
+        # This initializes env.np_random and, via BaseSnakeEnv.reset(),
+        # binds that RNG into the SnakeGame instance.
         env.reset(seed=int(seed))
+
         return env
 
     return _init
 
 
 def make_vec_env(*, cfg: Any):
+    """
+    Create a vectorized Snake environment.
+
+    Seeding model:
+      - A single master seed is expanded into independent per-env streams
+        using numpy.random.SeedSequence.
+      - Each environment receives exactly one deterministic seed at creation.
+      - Subsequent episode resets continue the RNG stream (no reseeding).
+    """
     base_seed = int(cfg.run.seed)
     num_envs = int(cfg.run.num_envs)
 
-    env_fns = [make_single_env(cfg=cfg, seed=base_seed + i) for i in range(num_envs)]
+    # Derive independent child seeds from a single master seed
+    ss = np.random.SeedSequence(base_seed)
+    child_seeds = [
+        int(s.generate_state(1, dtype=np.uint32)[0])
+        for s in ss.spawn(num_envs)
+    ]
 
-    # Use DummyVecEnv for single-env runs (faster + fewer Windows spawn quirks),
-    # and SubprocVecEnv only when we actually need parallelism.
+    env_fns = [
+        make_single_env(cfg=cfg, seed=child_seeds[i])
+        for i in range(num_envs)
+    ]
+
+    # Use DummyVecEnv for single-env runs to avoid subprocess overhead
     if num_envs <= 1:
         from stable_baselines3.common.vec_env import DummyVecEnv
 
@@ -218,6 +256,10 @@ def make_vec_env(*, cfg: Any):
     vec_env = VecMonitor(vec_env)
 
     n_stack = _get_n_stack_from_cfg(cfg)
-    vec_env = apply_frame_stack(vec_env=vec_env, n_stack=n_stack, pixel_key="pixel")
+    vec_env = apply_frame_stack(
+        vec_env=vec_env,
+        n_stack=n_stack,
+        pixel_key="pixel",
+    )
 
     return vec_env

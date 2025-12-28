@@ -74,6 +74,10 @@ class BaseSnakeEnv(gym.Env, ABC):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
+        # Bind the game's RNG to the env RNG. This makes seeding robust and
+        # consistent with Gymnasium/SB3 behavior (per-env streams).
+        self.game.set_rng(self.np_random)
+
         self.game.reset()
         self.initial_snake_length = len(self.game.snake)
 
@@ -90,15 +94,6 @@ class BaseSnakeEnv(gym.Env, ABC):
             return None
         return min(abs(head.x - f.x) + abs(head.y - f.y) for f in food)
 
-    def _compute_shaping_reward(self, before: int, after: int) -> float:
-        if before is None or after is None:
-            return 0.0
-        if after < before:
-            return 0.1 * self.tiny_reward
-        elif after > before:
-            return -0.1 * self.tiny_reward
-        return 0.0
-
     def step(self, action: int):
         reward = 0.0
         direction = RelativeDirection(action)
@@ -113,7 +108,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         is_truncated = self.current_step_since_last_food >= self.max_steps
 
         if is_win:
-            reward += 10.0
+            reward += 5.0
             terminated = True
             truncated = False
 
@@ -124,8 +119,8 @@ class BaseSnakeEnv(gym.Env, ABC):
             reward -= self.tiny_reward
 
             if is_food:
-                reward += 1.5
-                reward += 2 * (1.0 - (self.current_step_since_last_food / self.max_steps))
+                reward += 2.5
+                reward += 1.0 * (1.0 - (self.current_step_since_last_food / self.max_steps))
                 self.visited_nodes.clear()
                 self.current_step_since_last_food = 0
 

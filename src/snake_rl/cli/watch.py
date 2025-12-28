@@ -46,9 +46,12 @@ def _ts() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
 
 
-def _make_game_from_level_params(level: dict[str, int], *, seed: int) -> SnakeGame:
+def _make_game_from_level_params(level: dict[str, int]) -> SnakeGame:
     lvl = EmptyLevel(height=int(level["height"]), width=int(level["width"]))
-    return SnakeGame(level=lvl, food_count=int(level["food_count"]), seed=int(seed))
+    return SnakeGame(
+        level=lvl,
+        food_count=int(level["food_count"]),
+    )
 
 
 def _filter_env_kwargs(*, env_cls: type, params: dict[str, Any]) -> dict[str, Any]:
@@ -295,7 +298,7 @@ def main() -> None:
     logger.info(format_sb3_param_report(model))
 
     level = get_level_params(cfg)
-    game = _make_game_from_level_params(level, seed=int(args.seed))
+    game = _make_game_from_level_params(level)
 
     env_id = get_env_id(cfg)
     env_cls = get_env_cls(env_id)
@@ -308,6 +311,11 @@ def main() -> None:
         logger.info(f"[watch] ignoring non-constructor env params: {dropped}")
 
     base_env = env_cls(game, **env_kwargs)  # type: ignore[arg-type]
+
+    # IMPORTANT:
+    # Seeding happens at the ENV level, not the game.
+    # This will create env.np_random and inject it into SnakeGame via reset().
+    base_env.reset(seed=int(args.seed))
 
     vec_env = DummyVecEnv([lambda: base_env])
     vec_env = VecMonitor(vec_env)
