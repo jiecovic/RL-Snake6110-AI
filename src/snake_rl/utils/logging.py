@@ -26,13 +26,14 @@ def setup_logger(*, name: str, use_rich: bool, level: str) -> logging.Logger:
         try:
             from rich.logging import RichHandler  # type: ignore
 
-            handler = RichHandler(
+            rich_handler = RichHandler(
                 rich_tracebacks=True,
                 show_time=True,
                 show_level=True,
                 show_path=False,
             )
-            handler.setFormatter(logging.Formatter("%(message)s"))
+            rich_handler.setFormatter(logging.Formatter("%(message)s"))
+            handler = rich_handler
         except Exception:
             handler = None
 

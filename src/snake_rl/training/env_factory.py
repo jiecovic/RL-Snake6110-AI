@@ -1,7 +1,7 @@
 # src/snake_rl/training/env_factory.py
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 import numpy as np
 from gymnasium import spaces
@@ -90,11 +90,16 @@ class DictPixelVecFrameStack(VecEnvWrapper):
             return np.broadcast_to(arr, (c * self.n_stack, h, w))
 
         new_spaces = dict(self.venv.observation_space.spaces)
+        box_dtype = (
+            pix_space.dtype.type
+            if isinstance(pix_space.dtype, np.dtype)
+            else pix_space.dtype
+        )
         new_spaces[self.pixel_key] = spaces.Box(
             low=_stack_bounds(pix_space.low),
             high=_stack_bounds(pix_space.high),
             shape=stacked_shape,
-            dtype=pix_space.dtype,
+            dtype=box_dtype,
         )
         self.observation_space = spaces.Dict(new_spaces)
 
@@ -102,11 +107,11 @@ class DictPixelVecFrameStack(VecEnvWrapper):
 
     def reset(self):
         obs = self.venv.reset()
-        return self._reset_buf(obs)
+        return self._reset_buf(cast(dict[str, Any], obs))
 
     def step_wait(self):
         obs, rewards, dones, infos = self.venv.step_wait()
-        obs = self._update_buf(obs, dones)
+        obs = self._update_buf(cast(dict[str, Any], obs), dones)
         return obs, rewards, dones, infos
 
     def _reset_buf(self, obs: dict):
@@ -119,7 +124,11 @@ class DictPixelVecFrameStack(VecEnvWrapper):
 
         stacked_pix = np.concatenate([pix] * self.n_stack, axis=1)
 
-        if self._buf is None or self._buf.shape != stacked_pix.shape or self._buf.dtype != stacked_pix.dtype:
+        if (
+            self._buf is None
+            or self._buf.shape != stacked_pix.shape
+            or self._buf.dtype != stacked_pix.dtype
+        ):
             self._buf = np.zeros_like(stacked_pix)
 
         self._buf[...] = stacked_pix

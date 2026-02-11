@@ -137,8 +137,9 @@ class EvalCheckpointCallback(BaseCallback):
         if best_metric == "mean_score":
             if "final_score_mean" not in metrics:
                 raise KeyError(
-                    "best_metric='mean_score' requires env to expose info['final_score'] at episode end "
-                    "so eval can compute final_score_mean."
+                    "best_metric='mean_score' requires env to expose "
+                    "info['final_score'] at episode end so eval can compute "
+                    "final_score_mean."
                 )
             return float(metrics["final_score_mean"])
         raise ValueError("best_metric must be one of: 'mean_reward', 'mean_score'")
@@ -156,7 +157,10 @@ class EvalCheckpointCallback(BaseCallback):
         write_json(self.state_path, state)
 
         if self.verbose > 0:
-            print(f"[ckpt] latest @ {self.num_timesteps}: {self._rel(self.latest_path)}", flush=True)
+            print(
+                f"[ckpt] latest @ {self.num_timesteps}: {self._rel(self.latest_path)}",
+                flush=True,
+            )
 
         phase = getattr(self.cfg, "eval", None)
         intermediate = getattr(phase, "intermediate", None) if phase is not None else None
@@ -175,7 +179,7 @@ class EvalCheckpointCallback(BaseCallback):
                 flush=True,
             )
 
-        pbar: Optional[tqdm] = None
+        pbar: Optional[Any] = None
         if self.verbose > 0:
             pbar = tqdm(
                 total=episodes,
@@ -220,7 +224,8 @@ class EvalCheckpointCallback(BaseCallback):
             if "final_score_mean" in metrics:
                 extra = f" mean_score={metrics['final_score_mean']:.6g}"
             if "win_rate" in metrics:
-                extra += f" win_rate={metrics['win_rate']:.3f} ({int(metrics.get('wins', 0))}/{episodes})"
+                wins = int(metrics.get("wins", 0))
+                extra += f" win_rate={metrics['win_rate']:.3f} ({wins}/{episodes})"
             print(
                 f"[eval] done  intermediate @ {self.num_timesteps}: "
                 f"mean_reward={metrics['mean_reward']:.6g} std_reward={metrics['std_reward']:.6g} "

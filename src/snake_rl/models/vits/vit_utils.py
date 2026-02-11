@@ -55,6 +55,8 @@ class GridPositionalEncoding(nn.Module):
         cx = self.w // 2
         dy = (torch.arange(self.h) - cy).view(self.h, 1).expand(self.h, self.w)  # [H,W]
         dx = (torch.arange(self.w) - cx).view(1, self.w).expand(self.h, self.w)  # [H,W]
+        self._dy_base: torch.Tensor
+        self._dx_base: torch.Tensor
         self.register_buffer("_dy_base", dy.reshape(self.seq_len), persistent=False)  # [T]
         self.register_buffer("_dx_base", dx.reshape(self.seq_len), persistent=False)  # [T]
 
@@ -75,7 +77,9 @@ class GridPositionalEncoding(nn.Module):
         device = x.device
         row_idx = torch.arange(self.h, device=device)
         col_idx = torch.arange(self.w, device=device)
-        pe = (self.pos_row(row_idx)[:, None, :] + self.pos_col(col_idx)[None, :, :]).reshape(self.seq_len, self.d_model)
+        pe = (
+            self.pos_row(row_idx)[:, None, :] + self.pos_col(col_idx)[None, :, :]
+        ).reshape(self.seq_len, self.d_model)
         return x + pe.unsqueeze(0)
 
     def _add_abs_1d(self, x: torch.Tensor) -> torch.Tensor:
@@ -87,8 +91,8 @@ class GridPositionalEncoding(nn.Module):
 
     def _add_pov_center(self, x: torch.Tensor) -> torch.Tensor:
         assert self.rel_row is not None and self.rel_col is not None
-        dy = self._dy_base.view(1, -1)  # [1,T]
-        dx = self._dx_base.view(1, -1)  # [1,T]
+        dy = torch.reshape(self._dy_base, (1, -1))  # [1,T]
+        dx = torch.reshape(self._dx_base, (1, -1))  # [1,T]
         cy = self.h // 2
         cx = self.w // 2
         iy = (dy + cy).clamp(0, self.h - 1).to(dtype=torch.long)
@@ -127,9 +131,14 @@ def masked_max(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     mask: [B,T] bool (True => exclude)
     """
     if x.ndim != 3 or mask.ndim != 2:
-        raise ValueError(f"expected x [B,T,D] and mask [B,T], got x={tuple(x.shape)} mask={tuple(mask.shape)}")
+        raise ValueError(
+            "expected x [B,T,D] and mask [B,T], "
+            f"got x={tuple(x.shape)} mask={tuple(mask.shape)}"
+        )
     if x.shape[0] != mask.shape[0] or x.shape[1] != mask.shape[1]:
-        raise ValueError(f"shape mismatch: x={tuple(x.shape)} mask={tuple(mask.shape)}")
+        raise ValueError(
+            f"shape mismatch: x={tuple(x.shape)} mask={tuple(mask.shape)}"
+        )
 
     keep = ~mask  # True => keep
 
@@ -163,7 +172,8 @@ def pool_tokens(
     pooling = str(pooling)
     if pooling not in {"cls", "mean", "max", "cls_mean", "meanmax"}:
         raise ValueError(
-            f"pooling must be one of {{'cls','mean','max','cls_mean','meanmax'}}, got {pooling!r}"
+            "pooling must be one of {'cls','mean','max','cls_mean','meanmax'}, "
+            f"got {pooling!r}"
         )
 
     if pooling in {"cls", "cls_mean"} and not has_cls:

@@ -1,15 +1,15 @@
 # src/snake_rl/models/sb3/extractors.py
 from __future__ import annotations
 
-from typing import Dict, Optional, Type
+import inspect
+from typing import Any, Dict, Optional, Type
 
 import torch as th
 from gymnasium import spaces
-from torch import nn
-
 from stable_baselines3.common.preprocessing import get_flattened_obs_dim, is_image_space
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, NatureCNN
 from stable_baselines3.common.type_aliases import TensorDict
+from torch import nn
 
 
 class CustomCombinedExtractor(BaseFeaturesExtractor):
@@ -39,10 +39,13 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         for key, subspace in observation_space.spaces.items():
             if is_image_space(subspace, check_channels=False, normalized_image=normalized_image):
                 # CNN-style features extractor (must be BaseFeaturesExtractor-compatible)
+                sig = inspect.signature(cnn_extractor_class.__init__)
+                kwargs: Dict[str, Any] = {"features_dim": int(cnn_features_dim)}
+                if "normalized_image" in sig.parameters:
+                    kwargs["normalized_image"] = normalized_image
                 extractors[key] = cnn_extractor_class(
                     subspace,  # type: ignore[arg-type]
-                    features_dim=int(cnn_features_dim),
-                    normalized_image=normalized_image,
+                    **kwargs,
                 )
                 total_concat_size += int(cnn_features_dim)
             else:

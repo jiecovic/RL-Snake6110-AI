@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, cast
 
 import yaml
 
@@ -25,9 +25,10 @@ class Tileset:
     - Tiles are keyed by TileType (enum).
     - Glyphs are stored and we also build a reverse mapping glyph -> [TileType,...].
       This is needed now because glyph mapping is owned by the tileset YAML (not tile_types.py).
-    - Duplicate glyphs are allowed (e.g. vertical_up + vertical_down may both use '║').
-      For parsing, we provide a "canonical" choice: the first tile encountered for that glyph.
-      (This is fine because levels will soon be static-only and shouldn't contain snake glyphs anyway.)
+    - Duplicate glyphs are allowed (e.g. vertical_up + vertical_down may both use
+      '║'). For parsing, we provide a "canonical" choice: the first tile encountered
+      for that glyph. (This is fine because levels will soon be static-only and
+      shouldn't contain snake glyphs anyway.)
     - All TileTypes MUST be present in the tileset.
       (Intentional strictness: missing visual definitions should fail loudly.)
     """
@@ -105,6 +106,7 @@ class Tileset:
                     f"Invalid or inconsistent 'pixels' matrix for tile '{name}' "
                     f"(expected {self.tile_size}x{self.tile_size})"
                 )
+            pixels = cast(List[List[int]], pixels)
 
             # Optional: validate pixels are ints (YAML can load weird scalars)
             if not self._pixels_are_ints(pixels):

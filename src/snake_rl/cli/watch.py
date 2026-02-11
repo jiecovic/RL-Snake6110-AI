@@ -157,30 +157,70 @@ def _load_num_classes_from_env_params(env_params: dict[str, Any]) -> Optional[in
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Watch a trained PPO agent play Snake (pygame).")
     p.add_argument("--run", type=str, required=True)
-    p.add_argument("--which", type=str, default="best", choices=["auto", "latest", "best", "final"])
-    p.add_argument("--reload", type=float, default=0.0, help="If >0, poll for newer checkpoint every N seconds.")
+    p.add_argument(
+        "--which",
+        type=str,
+        default="best",
+        choices=["auto", "latest", "best", "final"],
+    )
+    p.add_argument(
+        "--reload",
+        type=float,
+        default=0.0,
+        help="If >0, poll for newer checkpoint every N seconds.",
+    )
     p.add_argument("--fps", type=int, default=25)
     p.add_argument("--pixel-size", type=int, default=8)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="auto")
 
-    p.add_argument("--no-rich", action="store_true", help="Disable Rich logging (fallback to plain logging).")
-    p.add_argument("--log-level", type=str, default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR).")
+    p.add_argument(
+        "--no-rich",
+        action="store_true",
+        help="Disable Rich logging (fallback to plain logging).",
+    )
+    p.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR).",
+    )
 
     p.add_argument("--print-obs", action="store_true")
     p.add_argument("--print-obs-every", type=int, default=1)
     p.add_argument("--print-obs-max", type=int, default=5)
 
     # Agent-view window
-    p.add_argument("--show-agent-view", action="store_true", help="Open a separate window that renders the agent's observation.")
-    p.add_argument("--agent-view-max-size", type=int, default=1080, help="Max window side in screen pixels (auto scale).")
-    p.add_argument("--agent-view-fps", type=int, default=0, help="If >0, cap agent-view updates to this FPS. 0 => send every tick.")
-    p.add_argument("--agent-view-keep-stderr", action="store_true", help="Keep agent-view subprocess stderr (useful for debugging).")
+    p.add_argument(
+        "--show-agent-view",
+        action="store_true",
+        help="Open a separate window that renders the agent's observation.",
+    )
+    p.add_argument(
+        "--agent-view-max-size",
+        type=int,
+        default=1080,
+        help="Max window side in screen pixels (auto scale).",
+    )
+    p.add_argument(
+        "--agent-view-fps",
+        type=int,
+        default=0,
+        help="If >0, cap agent-view updates to this FPS. 0 => send every tick.",
+    )
+    p.add_argument(
+        "--agent-view-keep-stderr",
+        action="store_true",
+        help="Keep agent-view subprocess stderr (useful for debugging).",
+    )
     p.add_argument(
         "--agent-view-pixel-size",
         type=int,
         default=0,
-        help="If >0, force pixel_size for agent-view window. 0 => auto. Defaults to --pixel-size if unset.",
+        help=(
+            "If >0, force pixel_size for agent-view window. 0 => auto. "
+            "Defaults to --pixel-size if unset."
+        ),
     )
 
     return p.parse_args()
@@ -247,7 +287,8 @@ class WatchController:
                 self.model = load_ppo(chosen, device=self.device)
                 self.current_ckpt = chosen
                 self.current_mtime = mtime
-                self.logger.info(f"reloaded checkpoint: {relpath(chosen, base=self.repo)} (mtime={int(mtime)})")
+                rel = relpath(chosen, base=self.repo)
+                self.logger.info(f"reloaded checkpoint: {rel} (mtime={int(mtime)})")
         except Exception:
             self.logger.exception("reload error")
 
@@ -266,7 +307,10 @@ class WatchController:
         action, _ = self.model.predict(obs_for_model, deterministic=True)
 
         if np.isscalar(action):
-            act = np.array([int(action)], dtype=np.int64)
+            if isinstance(action, (bool, int, np.integer, np.floating)):
+                act = np.array([int(action)], dtype=np.int64)
+            else:
+                raise TypeError(f"Unsupported scalar action type: {type(action)!r}")
         else:
             act = np.asarray(action, dtype=np.int64).reshape((1,))
 

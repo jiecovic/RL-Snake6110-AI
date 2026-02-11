@@ -108,7 +108,8 @@ class AgentViewStream:
         max_fps:
             If >0, throttle sends to this FPS.
         """
-        if not self.is_alive():
+        proc = self.proc
+        if proc is None or proc.poll() is not None:
             return
 
         if max_fps > 0:
@@ -132,7 +133,7 @@ class AgentViewStream:
                     raise ValueError("send_frame(mode='ids') requires num_classes")
                 msg["num_classes"] = int(num_classes)
 
-            _send_msg(self.proc, msg)
+            _send_msg(proc, msg)
         except Exception:
             # Never crash the main loop because of the debug window
             pass
