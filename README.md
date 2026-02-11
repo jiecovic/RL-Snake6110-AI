@@ -103,6 +103,12 @@ Common overrides:
 snake-train --config-name main_pov_pixel_ppo run.seed=123 run.num_envs=8 run.total_timesteps=5_000_000
 ```
 
+To enable the Rust vectorized core (faster step throughput), add:
+
+```
+env.params.engine=rust
+```
+
 🔒 **Reproducibility note**  
 At training start, configuration artifacts are written to:
 
@@ -204,10 +210,21 @@ Legacy runs under `experiments/` are still supported for loading.
 
 ## 📦 Installation
 
+Requires:
+- Python 3.10+
+- Rust toolchain (cargo/rustc) for the native core
+
+Build and install (compiles the Rust core):
+
 ```
 pip install .
 ```
 
+Developer editable build:
+
+```
+maturin develop -m rust/Cargo.toml
+```
 
 PyTorch install:
 https://pytorch.org/get-started/locally/
