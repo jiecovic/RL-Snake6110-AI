@@ -44,9 +44,7 @@ class BaseLevel:
                 "y": self.spawn.y,
                 "length": self.spawn.length,
                 "direction": (
-                    self.spawn.direction.name
-                    if self.spawn.direction is not None
-                    else None
+                    self.spawn.direction.name if self.spawn.direction is not None else None
                 ),
                 "random_direction": self.spawn.random_direction,
                 "jitter": self.spawn.jitter,
@@ -117,16 +115,16 @@ class EmptyLevel(BaseLevel):
     """
 
     def __init__(
-            self,
-            height: int,
-            width: int,
-            *,
-            spawn_x: int | None = None,
-            spawn_y: int | None = None,
-            spawn_length: int = 3,
-            spawn_direction: str | None = "RIGHT",
-            random_direction: bool = False,
-            jitter: int = 0,
+        self,
+        height: int,
+        width: int,
+        *,
+        spawn_x: int | None = None,
+        spawn_y: int | None = None,
+        spawn_length: int = 3,
+        spawn_direction: str | None = "RIGHT",
+        random_direction: bool = False,
+        jitter: int = 0,
     ):
         grid: list[list[TileType]] = [[TileType.EMPTY for _ in range(width)] for _ in range(height)]
 

@@ -48,11 +48,11 @@ class SnakeGame:
     """
 
     def __init__(
-            self,
-            level: BaseLevel,
-            food_count: int | None = None,
-            tileset: Tileset | None = None,
-            rng: np.random.Generator | None = None,
+        self,
+        level: BaseLevel,
+        food_count: int | None = None,
+        tileset: Tileset | None = None,
+        rng: np.random.Generator | None = None,
     ):
         # === Static config ===
         self.level = level
@@ -190,10 +190,10 @@ class SnakeGame:
         for head in candidates:
             cells = compute_spawn_cells(head_pos=head, length=sp.length, direction=direction)
             if is_straight_spawn_valid(
-                    cells=cells,
-                    width=self.width,
-                    height=self.height,
-                    wall_positions=self.wall_positions,
+                cells=cells,
+                width=self.width,
+                height=self.height,
+                wall_positions=self.wall_positions,
             ):
                 self.snake = cells
                 self.snake_set = set(cells)
@@ -272,7 +272,7 @@ class SnakeGame:
     def _blit_cell(self, p: Point, tt: TileType) -> None:
         td = int(self.tileset.tile_size)
         py, px = p.y * td, p.x * td
-        self.pixel_buffer[py: py + td, px: px + td] = self._tile_at(tt)
+        self.pixel_buffer[py : py + td, px : px + td] = self._tile_at(tt)
 
     def _render_full_from_tile_grid(self) -> None:
         td = int(self.tileset.tile_size)

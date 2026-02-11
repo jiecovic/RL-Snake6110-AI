@@ -62,9 +62,7 @@ class Tileset:
             data = yaml.safe_load(f)
 
         if not isinstance(data, dict):
-            raise TypeError(
-                f"Tileset YAML must be a mapping, got {type(data).__name__}: {path}"
-            )
+            raise TypeError(f"Tileset YAML must be a mapping, got {type(data).__name__}: {path}")
         return data
 
     def _load(self, data: dict) -> None:
@@ -96,8 +94,7 @@ class Tileset:
             except KeyError as e:
                 valid = ", ".join(t.name for t in TileType)
                 raise ValueError(
-                    f"Unknown tile name '{name}' in tileset. "
-                    f"Valid TileTypes: {valid}"
+                    f"Unknown tile name '{name}' in tileset. Valid TileTypes: {valid}"
                 ) from e
 
             pixels = spec.get("pixels")
@@ -132,8 +129,7 @@ class Tileset:
         # Ensure EMPTY exists (even if author forgot it)
         if TileType.EMPTY not in self.tiles:
             self.tiles[TileType.EMPTY] = [
-                [0 for _ in range(self.tile_size)]
-                for _ in range(self.tile_size)
+                [0 for _ in range(self.tile_size)] for _ in range(self.tile_size)
             ]
             self.glyphs.setdefault(TileType.EMPTY, " ")
             self.glyph_to_tiles.setdefault(" ", []).append(TileType.EMPTY)
@@ -144,9 +140,7 @@ class Tileset:
         missing = set(TileType) - defined_types
         if missing:
             names = ", ".join(t.name for t in sorted(missing, key=lambda x: x.value))
-            raise ValueError(
-                f"Tileset is missing definitions for TileTypes: {names}"
-            )
+            raise ValueError(f"Tileset is missing definitions for TileTypes: {names}")
 
     # ------------------------------------------------------------------ #
     # Helpers

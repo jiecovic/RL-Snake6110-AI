@@ -21,11 +21,11 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
     """
 
     def __init__(
-            self,
-            observation_space: spaces.Dict,
-            cnn_features_dim: int = 512,
-            normalized_image: bool = False,
-            cnn_extractor_class: Optional[Type[BaseFeaturesExtractor]] = None,
+        self,
+        observation_space: spaces.Dict,
+        cnn_features_dim: int = 512,
+        normalized_image: bool = False,
+        cnn_extractor_class: Optional[Type[BaseFeaturesExtractor]] = None,
     ) -> None:
         # features_dim is set after we build sub-extractors
         super().__init__(observation_space, features_dim=1)

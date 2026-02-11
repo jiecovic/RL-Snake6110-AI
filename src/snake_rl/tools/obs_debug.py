@@ -69,11 +69,11 @@ def _extract_first_grid_from_array(arr: np.ndarray) -> Optional[np.ndarray]:
 
 
 def debug_print_obs(
-        obs: Any,
-        *,
-        header: str = "[obs_debug] raw observation:",
-        print_grid: bool = True,
-        grid_keys: tuple[str, ...] = ("tiles", "tile", "grid", "pixel"),
+    obs: Any,
+    *,
+    header: str = "[obs_debug] raw observation:",
+    print_grid: bool = True,
+    grid_keys: tuple[str, ...] = ("tiles", "tile", "grid", "pixel"),
 ) -> None:
     """
     Print raw VecEnv observation in a robust way.

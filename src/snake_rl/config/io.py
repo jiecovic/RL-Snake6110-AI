@@ -121,13 +121,21 @@ def _parse_eval_phase(d: Any, ctx: str, defaults: EvalPhaseConfig) -> EvalPhaseC
     if not isinstance(d, dict):
         raise TypeError(f"Expected '{ctx}' to be a dict")
 
-    enabled = defaults.enabled if "enabled" not in d else _as_bool(
-        d["enabled"],
-        f"{ctx}.enabled",
+    enabled = (
+        defaults.enabled
+        if "enabled" not in d
+        else _as_bool(
+            d["enabled"],
+            f"{ctx}.enabled",
+        )
     )
-    episodes = defaults.episodes if "episodes" not in d else _as_int(
-        d["episodes"],
-        f"{ctx}.episodes",
+    episodes = (
+        defaults.episodes
+        if "episodes" not in d
+        else _as_int(
+            d["episodes"],
+            f"{ctx}.episodes",
+        )
     )
     deterministic = (
         defaults.deterministic
@@ -377,13 +385,13 @@ def load_config(path: str | Path) -> TrainConfig:
 
 
 def apply_overrides(
-        cfg: TrainConfig,
-        *,
-        seed: Optional[int] = None,
-        num_envs: Optional[int] = None,
-        total_timesteps: Optional[int] = None,
-        checkpoint_freq: Optional[int] = None,
-        resume_checkpoint: Optional[str] = None,
+    cfg: TrainConfig,
+    *,
+    seed: Optional[int] = None,
+    num_envs: Optional[int] = None,
+    total_timesteps: Optional[int] = None,
+    checkpoint_freq: Optional[int] = None,
+    resume_checkpoint: Optional[str] = None,
 ) -> TrainConfig:
     run = cfg.run
     if seed is not None:

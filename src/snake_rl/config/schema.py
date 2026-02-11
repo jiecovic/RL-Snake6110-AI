@@ -36,6 +36,7 @@ class FrameStackConfig:
 
     n_frames = 1 means no stacking.
     """
+
     n_frames: int = 1
 
 
@@ -50,6 +51,7 @@ class ObservationConfig:
 # ---------------------------------------------------------------------------
 # Model configuration (generic feature extractor, CNN or Transformer)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class FeaturesExtractorConfig:
@@ -71,6 +73,7 @@ class FeaturesExtractorConfig:
       Free-form extractor-specific parameters (passed through to the
       feature extractor constructor).
     """
+
     type: str
     features_dim: int
     params: dict[str, Any] = field(default_factory=dict)
@@ -86,6 +89,7 @@ class ModelConfig:
 # PPO configuration (pass-through SB3 kwargs)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class PPOConfig:
     """
@@ -94,12 +98,14 @@ class PPOConfig:
     Users can add any SB3 PPO kwargs in YAML without changing Python code.
     Missing keys are fine: SB3 defaults apply.
     """
+
     params: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
 # Evaluation configuration
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class EvalPhaseConfig:
@@ -120,6 +126,7 @@ class EvalConfig:
 # ---------------------------------------------------------------------------
 # Top-level training configuration
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class TrainConfig:

@@ -22,11 +22,11 @@ from snake_rl.utils.paths import repo_root
 
 
 def train(
-        *,
-        cfg: TrainConfig,
-        resume_override: Optional[str] = None,
-        use_rich: bool = True,
-        log_level: str = "INFO",
+    *,
+    cfg: TrainConfig,
+    resume_override: Optional[str] = None,
+    use_rich: bool = True,
+    log_level: str = "INFO",
 ) -> RunPaths:
     logger = setup_logger(name="snake_rl.train", use_rich=use_rich, level=log_level)
 

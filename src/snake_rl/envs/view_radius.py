@@ -31,6 +31,5 @@ def parse_view_radius(v: Any) -> Tuple[int, int]:
         return (ry, rx)
 
     raise TypeError(
-        "view_radius must be an int or a pair (ry, rx) / [ry, rx], "
-        f"got {type(v).__name__}: {v}"
+        f"view_radius must be an int or a pair (ry, rx) / [ry, rx], got {type(v).__name__}: {v}"
     )

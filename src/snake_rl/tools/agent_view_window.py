@@ -69,13 +69,13 @@ def _ids_to_gray255(ids2d: np.ndarray, *, num_classes: int) -> np.ndarray:
 
 
 def _render_ids_overlay(
-        *,
-        screen: pygame.Surface,
-        ids2d: np.ndarray,
-        ps: int,
-        font: pygame.font.Font,
-        font_color=(255, 255, 255),
-        outline_color=(0, 0, 0),
+    *,
+    screen: pygame.Surface,
+    ids2d: np.ndarray,
+    ps: int,
+    font: pygame.font.Font,
+    font_color=(255, 255, 255),
+    outline_color=(0, 0, 0),
 ) -> None:
     # ids2d is [H,W]
     h, w = int(ids2d.shape[0]), int(ids2d.shape[1])
@@ -109,9 +109,7 @@ def _render_ids_overlay(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="Agent-view window helper (spawned by snake-watch)."
-    )
+    ap = argparse.ArgumentParser(description="Agent-view window helper (spawned by snake-watch).")
     ap.add_argument("--caption", type=str, default="Snake (agent view)")
     ap.add_argument(
         "--max-size",

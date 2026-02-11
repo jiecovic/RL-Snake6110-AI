@@ -91,9 +91,7 @@ class DictPixelVecFrameStack(VecEnvWrapper):
 
         new_spaces = dict(self.venv.observation_space.spaces)
         box_dtype = (
-            pix_space.dtype.type
-            if isinstance(pix_space.dtype, np.dtype)
-            else pix_space.dtype
+            pix_space.dtype.type if isinstance(pix_space.dtype, np.dtype) else pix_space.dtype
         )
         new_spaces[self.pixel_key] = spaces.Box(
             low=_stack_bounds(pix_space.low),
@@ -153,8 +151,8 @@ class DictPixelVecFrameStack(VecEnvWrapper):
         if dones is not None:
             d = np.asarray(dones, dtype=bool)
             for i in np.where(d)[0]:
-                rep = np.concatenate([pix[i: i + 1]] * self.n_stack, axis=1)
-                self._buf[i: i + 1, :, :, :] = rep
+                rep = np.concatenate([pix[i : i + 1]] * self.n_stack, axis=1)
+                self._buf[i : i + 1, :, :, :] = rep
 
         out = dict(obs)
         out[self.pixel_key] = self._buf.copy()
@@ -244,15 +242,9 @@ def make_vec_env(*, cfg: Any):
 
     # Derive independent child seeds from a single master seed
     ss = np.random.SeedSequence(base_seed)
-    child_seeds = [
-        int(s.generate_state(1, dtype=np.uint32)[0])
-        for s in ss.spawn(num_envs)
-    ]
+    child_seeds = [int(s.generate_state(1, dtype=np.uint32)[0]) for s in ss.spawn(num_envs)]
 
-    env_fns = [
-        make_single_env(cfg=cfg, seed=child_seeds[i])
-        for i in range(num_envs)
-    ]
+    env_fns = [make_single_env(cfg=cfg, seed=child_seeds[i]) for i in range(num_envs)]
 
     # Use DummyVecEnv for single-env runs to avoid subprocess overhead
     if num_envs <= 1:

@@ -66,27 +66,27 @@ class TileViTExtractor(BaseFeaturesExtractor):
     POS_MODES = POS_MODES
 
     def __init__(
-            self,
-            observation_space: spaces.Box,
-            *,
-            num_tiles: int,
-            features_dim: int = 512,
-            d_model: int = 128,
-            n_layers: int = 4,
-            n_heads: int = 4,
-            ffn_dim: int | None = None,
-            dropout: float = 0.1,
-            use_cls_token: bool = True,
-            pooling: str = "cls",  # "cls" | "mean" | "cls_mean" | "flatten"
-            use_frame_embed: bool = True,
-            frame_fuse: str = "sum",  # "sum" or "concat"
-            pos_mode: str = "abs_2d",
-            # token masking
-            use_token_mask: bool = False,
-            mask_token_id: int = 0,
-            mask_pool: bool = True,
-            # extra config for flatten aggregation
-            flatten_mlp_hidden_dim: int | None = None,
+        self,
+        observation_space: spaces.Box,
+        *,
+        num_tiles: int,
+        features_dim: int = 512,
+        d_model: int = 128,
+        n_layers: int = 4,
+        n_heads: int = 4,
+        ffn_dim: int | None = None,
+        dropout: float = 0.1,
+        use_cls_token: bool = True,
+        pooling: str = "cls",  # "cls" | "mean" | "cls_mean" | "flatten"
+        use_frame_embed: bool = True,
+        frame_fuse: str = "sum",  # "sum" or "concat"
+        pos_mode: str = "abs_2d",
+        # token masking
+        use_token_mask: bool = False,
+        mask_token_id: int = 0,
+        mask_pool: bool = True,
+        # extra config for flatten aggregation
+        flatten_mlp_hidden_dim: int | None = None,
     ) -> None:
         super().__init__(observation_space, features_dim)
 

@@ -132,15 +132,15 @@ class _SlotState:
 
 
 def evaluate_model(
-        *,
-        model,
-        cfg: Any,
-        episodes: int,
-        deterministic: bool,
-        seed_base: int,
-        num_envs: int = 1,
-        pixel_key: str = "pixel",
-        on_episode: Optional[Callable[[int, int, Optional[float]], None]] = None,
+    *,
+    model,
+    cfg: Any,
+    episodes: int,
+    deterministic: bool,
+    seed_base: int,
+    num_envs: int = 1,
+    pixel_key: str = "pixel",
+    on_episode: Optional[Callable[[int, int, Optional[float]], None]] = None,
 ) -> Dict[str, Any]:
     episodes = int(episodes)
     if episodes <= 0:
@@ -163,8 +163,7 @@ def evaluate_model(
         obs = vec_env.reset()
 
         slots: list[_SlotState] = [
-            _SlotState(episode_idx=i, seed=slot_seeds[i])
-            for i in range(n_envs)
+            _SlotState(episode_idx=i, seed=slot_seeds[i]) for i in range(n_envs)
         ]
 
         rewards_by_ep = np.zeros((episodes,), dtype=np.float64)
@@ -202,9 +201,7 @@ def evaluate_model(
                     continue
 
                 info_i = (
-                    infos_list[i]
-                    if i < len(infos_list) and isinstance(infos_list[i], dict)
-                    else {}
+                    infos_list[i] if i < len(infos_list) and isinstance(infos_list[i], dict) else {}
                 )
                 ep_idx = int(s.episode_idx)
 

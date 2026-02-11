@@ -37,12 +37,12 @@ class EvalCheckpointCallback(BaseCallback):
     """
 
     def __init__(
-            self,
-            *,
-            cfg: Any,
-            checkpoint_dir: Path,
-            checkpoint_freq_steps: int,
-            verbose: int = 0,
+        self,
+        *,
+        cfg: Any,
+        checkpoint_dir: Path,
+        checkpoint_freq_steps: int,
+        verbose: int = 0,
     ) -> None:
         super().__init__(verbose=verbose)
         self.cfg = cfg
@@ -234,9 +234,9 @@ class EvalCheckpointCallback(BaseCallback):
             )
 
         is_best = (
-                self._best_value is None
-                or self._best_metric != best_metric
-                or chosen_value > float(self._best_value)
+            self._best_value is None
+            or self._best_metric != best_metric
+            or chosen_value > float(self._best_value)
         )
 
         if is_best:

@@ -62,33 +62,31 @@ class PixelObsEnvBase:
 
     @overload
     def _pov_pixel_frame(
-            self,
-            *,
-            view_radius: Radius,
-            rotate_to_head: bool = True,
-            oob_fill_value: int = 0,
-            return_valid: Literal[True],
-    ) -> tuple[np.ndarray, np.ndarray]:
-        ...
+        self,
+        *,
+        view_radius: Radius,
+        rotate_to_head: bool = True,
+        oob_fill_value: int = 0,
+        return_valid: Literal[True],
+    ) -> tuple[np.ndarray, np.ndarray]: ...
 
     @overload
     def _pov_pixel_frame(
-            self,
-            *,
-            view_radius: Radius,
-            rotate_to_head: bool = True,
-            oob_fill_value: int = 0,
-            return_valid: Literal[False] = False,
-    ) -> np.ndarray:
-        ...
+        self,
+        *,
+        view_radius: Radius,
+        rotate_to_head: bool = True,
+        oob_fill_value: int = 0,
+        return_valid: Literal[False] = False,
+    ) -> np.ndarray: ...
 
     def _pov_pixel_frame(
-            self,
-            *,
-            view_radius: Radius,
-            rotate_to_head: bool = True,
-            oob_fill_value: int = 0,
-            return_valid: bool = False,
+        self,
+        *,
+        view_radius: Radius,
+        rotate_to_head: bool = True,
+        oob_fill_value: int = 0,
+        return_valid: bool = False,
     ):
         """
         Return a single POV pixel frame centered on the head.

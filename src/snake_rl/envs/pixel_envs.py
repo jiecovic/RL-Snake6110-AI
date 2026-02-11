@@ -24,8 +24,7 @@ def _global_pixel_dims(game: SnakeGame, *, remove_border: bool) -> tuple[int, in
     ts = int(game.tileset.tile_size)
     if h <= 2 * ts or w <= 2 * ts:
         raise ValueError(
-            "remove_border=True requires pixel dims > 2*tile_size; "
-            f"got h={h} w={w} tile_size={ts}"
+            f"remove_border=True requires pixel dims > 2*tile_size; got h={h} w={w} tile_size={ts}"
         )
     return int(h - 2 * ts), int(w - 2 * ts)
 
@@ -128,15 +127,15 @@ class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
     """
 
     def __init__(
-            self,
-            game: SnakeGame,
-            *,
-            view_radius: int,
-            rotate_to_head: bool = True,
-            add_oob_mask: bool = False,
-            pixel_oob_value: int = 255,
-            mask_valid_value: int = 255,
-            mask_oob_value: int = 0,
+        self,
+        game: SnakeGame,
+        *,
+        view_radius: int,
+        rotate_to_head: bool = True,
+        add_oob_mask: bool = False,
+        pixel_oob_value: int = 255,
+        mask_valid_value: int = 255,
+        mask_oob_value: int = 0,
     ):
         BaseSnakeEnv.__init__(self, game)
         PixelObsEnvBase.__init__(self, game)
@@ -213,16 +212,16 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
     """
 
     def __init__(
-            self,
-            game: SnakeGame,
-            *,
-            view_radius: int,
-            fill_bins: Optional[int] = None,
-            rotate_to_head: bool = True,
-            add_oob_mask: bool = False,
-            pixel_oob_value: int = 255,
-            mask_valid_value: int = 255,
-            mask_oob_value: int = 0,
+        self,
+        game: SnakeGame,
+        *,
+        view_radius: int,
+        fill_bins: Optional[int] = None,
+        rotate_to_head: bool = True,
+        add_oob_mask: bool = False,
+        pixel_oob_value: int = 255,
+        mask_valid_value: int = 255,
+        mask_oob_value: int = 0,
     ):
         BaseSnakeEnv.__init__(self, game)
         PixelObsEnvBase.__init__(self, game)

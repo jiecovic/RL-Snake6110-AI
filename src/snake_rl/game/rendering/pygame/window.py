@@ -20,15 +20,15 @@ class PygameRenderContext:
 
 
 def create_pygame_context(
-        *,
-        game: SnakeGame,
-        pixel_size: int,
-        caption: str,
-        hud_height: int = 26,
-        hud_padding_x: int = 10,
-        hud_padding_y: int = 4,
-        font_name: str = "Consolas",
-        font_size: int = 18,
+    *,
+    game: SnakeGame,
+    pixel_size: int,
+    caption: str,
+    hud_height: int = 26,
+    hud_padding_x: int = 10,
+    hud_padding_y: int = 4,
+    font_name: str = "Consolas",
+    font_size: int = 18,
 ) -> PygameRenderContext:
     # pygame.init() is owned by run_pygame_app (app.py)
     pygame.display.set_caption(caption)

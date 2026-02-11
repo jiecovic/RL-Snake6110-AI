@@ -25,6 +25,7 @@ class TileVocab:
     - lut: numpy array of shape [raw_vocab_size], mapping raw_id -> class_id
     - num_classes: number of classes (K)
     """
+
     name: str
     path: Path
     sha256: str
@@ -186,8 +187,7 @@ def _parse_classes(d: Any, *, ctx: str, path: Path) -> List[Tuple[str, List[Tile
             except KeyError as e:
                 valid = ", ".join(t.name for t in TileType)
                 raise ValueError(
-                    f"Unknown TileType {s!r} in '{ctx}.{cname}' in {path}. "
-                    f"Valid TileTypes: {valid}"
+                    f"Unknown TileType {s!r} in '{ctx}.{cname}' in {path}. Valid TileTypes: {valid}"
                 ) from e
 
         out.append((cname, members))

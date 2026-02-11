@@ -88,27 +88,27 @@ class TileMLPExtractor(BaseFeaturesExtractor):
     POOLING = {"flatten_mlp", "mean"}
 
     def __init__(
-            self,
-            observation_space: spaces.Box,
-            *,
-            num_tiles: int,
-            features_dim: int = 512,
-            d_emb: int = 128,
-            mlp_hidden: list[int] | tuple[int, ...] = (1024, 512),
-            dropout: float = 0.0,
-            # positional encoding
-            pos_mode: str = "abs_2d",
-            # frames
-            use_frame_embed: bool = False,
-            frame_fuse: str = "sum",  # "sum" or "concat"
-            # normalization
-            pre_ln: bool = True,
-            # pooling
-            pooling: str = "flatten_mlp",
-            # token masking (mean pooling only)
-            use_token_mask: bool = False,
-            mask_token_id: int = 0,
-            mask_pool: bool = True,
+        self,
+        observation_space: spaces.Box,
+        *,
+        num_tiles: int,
+        features_dim: int = 512,
+        d_emb: int = 128,
+        mlp_hidden: list[int] | tuple[int, ...] = (1024, 512),
+        dropout: float = 0.0,
+        # positional encoding
+        pos_mode: str = "abs_2d",
+        # frames
+        use_frame_embed: bool = False,
+        frame_fuse: str = "sum",  # "sum" or "concat"
+        # normalization
+        pre_ln: bool = True,
+        # pooling
+        pooling: str = "flatten_mlp",
+        # token masking (mean pooling only)
+        use_token_mask: bool = False,
+        mask_token_id: int = 0,
+        mask_pool: bool = True,
     ) -> None:
         super().__init__(observation_space, int(features_dim))
 

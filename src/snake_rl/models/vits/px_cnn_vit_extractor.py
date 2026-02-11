@@ -56,8 +56,7 @@ def _build_stem_from_key(*, key: str, observation_space: spaces.Box, c_mult: int
         cls = reg[k]
     except KeyError as e:
         raise ValueError(
-            f"Unknown cnn_stem={key!r}. "
-            f"Available CNN stems: {_available_stems_from_registry()}"
+            f"Unknown cnn_stem={key!r}. Available CNN stems: {_available_stems_from_registry()}"
         ) from e
 
     if not isinstance(cls, type) or not issubclass(cls, BaseCNNExtractor):
@@ -114,22 +113,22 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
     POS_MODES = POS_MODES
 
     def __init__(
-            self,
-            observation_space: spaces.Box,
-            *,
-            features_dim: int = 512,
-            cnn_stem: str = "px_strided_cnn_l1k4",
-            c_mult: int = 1,
-            d_model: int = 128,
-            n_layers: int = 4,
-            n_heads: int = 4,
-            ffn_dim: int | None = None,
-            dropout: float = 0.1,
-            use_cls_token: bool = True,
-            pooling: str = "cls",  # "cls" | "mean" | "max" | "cls_mean" | "meanmax"
-            pos_mode: str = "abs_2d",
-            normalized_image: bool = False,
-            force_in_proj: bool = False,
+        self,
+        observation_space: spaces.Box,
+        *,
+        features_dim: int = 512,
+        cnn_stem: str = "px_strided_cnn_l1k4",
+        c_mult: int = 1,
+        d_model: int = 128,
+        n_layers: int = 4,
+        n_heads: int = 4,
+        ffn_dim: int | None = None,
+        dropout: float = 0.1,
+        use_cls_token: bool = True,
+        pooling: str = "cls",  # "cls" | "mean" | "max" | "cls_mean" | "meanmax"
+        pos_mode: str = "abs_2d",
+        normalized_image: bool = False,
+        force_in_proj: bool = False,
     ) -> None:
         super().__init__(observation_space, int(features_dim))
 
@@ -142,8 +141,7 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
             normalized_image=bool(normalized_image),
         ):
             raise ValueError(
-                "CnnViTExtractor requires an image Box space, "
-                f"got: {observation_space}"
+                f"CnnViTExtractor requires an image Box space, got: {observation_space}"
             )
 
         if int(c_mult) < 1:

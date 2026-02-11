@@ -26,6 +26,7 @@ class SpawnSpec:
       - jitter: optional random perturbation radius (Manhattan/box is up to SnakeGame;
         we just carry the number).
     """
+
     x: Optional[int]
     y: Optional[int]
     length: int
@@ -37,9 +38,7 @@ class SpawnSpec:
 def _has_any_dynamic_tiles(grid: list[list[TileType]]) -> bool:
     # NEW world: snake + food are runtime-only, therefore forbidden in level grids.
     return any(
-        is_head(t) or is_body(t) or is_tail(t) or (t == TileType.FOOD)
-        for row in grid
-        for t in row
+        is_head(t) or is_body(t) or is_tail(t) or (t == TileType.FOOD) for row in grid for t in row
     )
 
 
@@ -48,10 +47,10 @@ def _is_static_level_tile(t: TileType) -> bool:
 
 
 def load_level_yaml(
-        path: str | Path,
-        *,
-        tileset: Tileset | None = None,
-        strict_glyphs: bool = True,
+    path: str | Path,
+    *,
+    tileset: Tileset | None = None,
+    strict_glyphs: bool = True,
 ) -> tuple[int, int, list[list[TileType]], SpawnSpec]:
     """
     Load a YAML level file (NEW world only).

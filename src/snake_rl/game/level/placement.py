@@ -47,12 +47,12 @@ def compute_spawn_cells(*, head_pos: Point, length: int, direction: Direction) -
 
 
 def is_straight_spawn_valid(
-        *,
-        cells: Iterable[Point],
-        width: int,
-        height: int,
-        wall_positions: set[Point],
-        require_interior: bool = True,
+    *,
+    cells: Iterable[Point],
+    width: int,
+    height: int,
+    wall_positions: set[Point],
+    require_interior: bool = True,
 ) -> bool:
     """
     Validate a candidate straight spawn.

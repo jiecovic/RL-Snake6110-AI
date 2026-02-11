@@ -28,10 +28,8 @@ FEATURE_EXTRACTOR_REGISTRY: dict[str, Type[BaseFeaturesExtractor]] = {
     "px_strided_cnn_l3k8": PxStridedCNN_L3K8,
     "px_nature_cnn": PxNatureCNN,
     "px_snake_global": PxSnakeGlobal,
-
     # hybrid CNN → ViT
     "px_cnn_vit": PxCnnViTExtractor,
-
     # symbolic tile-id models
     "tile_vit": TileViTExtractor,
     "tile_mlp": TileMLPExtractor,

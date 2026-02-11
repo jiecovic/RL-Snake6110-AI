@@ -30,10 +30,10 @@ def _is_binary01_u8(frame: np.ndarray) -> bool:
 
 
 def obs_last_frame_and_kind(
-        obs: Any,
-        *,
-        pixel_key: str = "pixel",
-        kind_hint: str | None = None,
+    obs: Any,
+    *,
+    pixel_key: str = "pixel",
+    kind_hint: str | None = None,
 ) -> Tuple[np.ndarray, str]:
     """
     Extract the *last* stacked frame from a VecEnv observation.
@@ -97,9 +97,9 @@ def obs_last_frame_and_kind(
 
 
 def tile_id_frame_to_pixels(
-        tile_ids: np.ndarray,  # (H,W) uint8 of TileType.value
-        *,
-        tileset: Tileset,
+    tile_ids: np.ndarray,  # (H,W) uint8 of TileType.value
+    *,
+    tileset: Tileset,
 ) -> np.ndarray:
     """
     Convert a (H,W) tile-id grid into a (H*td, W*td) uint8 pixel image using the project's Tileset.
@@ -128,16 +128,16 @@ def tile_id_frame_to_pixels(
             if tile is None:
                 continue
             y0, x0 = y * td, x * td
-            out[y0: y0 + td, x0: x0 + td] = tile
+            out[y0 : y0 + td, x0 : x0 + td] = tile
 
     return out
 
 
 def obs_frame_to_pixels(
-        obs: Any,
-        *,
-        tileset: Optional[Tileset] = None,
-        pixel_key: str = "pixel",
+    obs: Any,
+    *,
+    tileset: Optional[Tileset] = None,
+    pixel_key: str = "pixel",
 ) -> np.ndarray:
     """
     Extract last frame and convert to pixels if needed.

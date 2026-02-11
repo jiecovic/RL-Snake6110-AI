@@ -77,9 +77,9 @@ class GridPositionalEncoding(nn.Module):
         device = x.device
         row_idx = torch.arange(self.h, device=device)
         col_idx = torch.arange(self.w, device=device)
-        pe = (
-            self.pos_row(row_idx)[:, None, :] + self.pos_col(col_idx)[None, :, :]
-        ).reshape(self.seq_len, self.d_model)
+        pe = (self.pos_row(row_idx)[:, None, :] + self.pos_col(col_idx)[None, :, :]).reshape(
+            self.seq_len, self.d_model
+        )
         return x + pe.unsqueeze(0)
 
     def _add_abs_1d(self, x: torch.Tensor) -> torch.Tensor:
@@ -132,13 +132,10 @@ def masked_max(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     """
     if x.ndim != 3 or mask.ndim != 2:
         raise ValueError(
-            "expected x [B,T,D] and mask [B,T], "
-            f"got x={tuple(x.shape)} mask={tuple(mask.shape)}"
+            f"expected x [B,T,D] and mask [B,T], got x={tuple(x.shape)} mask={tuple(mask.shape)}"
         )
     if x.shape[0] != mask.shape[0] or x.shape[1] != mask.shape[1]:
-        raise ValueError(
-            f"shape mismatch: x={tuple(x.shape)} mask={tuple(mask.shape)}"
-        )
+        raise ValueError(f"shape mismatch: x={tuple(x.shape)} mask={tuple(mask.shape)}")
 
     keep = ~mask  # True => keep
 
@@ -155,12 +152,12 @@ def masked_max(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
 
 
 def pool_tokens(
-        tokens: torch.Tensor,
-        *,
-        pooling: str,
-        has_cls: bool,
-        token_mask: Optional[torch.Tensor] = None,
-        mask_pool: bool = True,
+    tokens: torch.Tensor,
+    *,
+    pooling: str,
+    has_cls: bool,
+    token_mask: Optional[torch.Tensor] = None,
+    mask_pool: bool = True,
 ) -> torch.Tensor:
     """
     Pool transformer outputs into [B,D] (or concatenations).
@@ -172,8 +169,7 @@ def pool_tokens(
     pooling = str(pooling)
     if pooling not in {"cls", "mean", "max", "cls_mean", "meanmax"}:
         raise ValueError(
-            "pooling must be one of {'cls','mean','max','cls_mean','meanmax'}, "
-            f"got {pooling!r}"
+            f"pooling must be one of {{'cls','mean','max','cls_mean','meanmax'}}, got {pooling!r}"
         )
 
     if pooling in {"cls", "cls_mean"} and not has_cls:

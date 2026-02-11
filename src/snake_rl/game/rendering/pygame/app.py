@@ -36,10 +36,10 @@ _END_RESULTS: set[MoveResult] = {
 
 
 def run_pygame_app(
-        *,
-        game: SnakeGame,
-        cfg: AppConfig,
-        step_fn: Optional[StepFn] = None,
+    *,
+    game: SnakeGame,
+    cfg: AppConfig,
+    step_fn: Optional[StepFn] = None,
 ) -> None:
     """
     pygame UI loop.

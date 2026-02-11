@@ -89,11 +89,11 @@ def _select_policy(observation_space) -> str | type[MultiInputActorCriticPolicy]
 
 
 def make_or_load_model(
-        *,
-        cfg: TrainConfig,
-        vec_env,
-        tensorboard_log: Path,
-        resume_path: Optional[Path],
+    *,
+    cfg: TrainConfig,
+    vec_env,
+    tensorboard_log: Path,
+    resume_path: Optional[Path],
 ) -> PPO:
     if resume_path is not None:
         return PPO.load(str(resume_path), env=vec_env)

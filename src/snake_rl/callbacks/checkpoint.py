@@ -12,12 +12,12 @@ class SingleFileCheckpointCallback(BaseCallback):
     """
 
     def __init__(
-            self,
-            *,
-            save_freq: int,
-            save_path: str | Path,
-            filename: str = "latest",
-            verbose: int = 0,
+        self,
+        *,
+        save_freq: int,
+        save_path: str | Path,
+        filename: str = "latest",
+        verbose: int = 0,
     ):
         super().__init__(verbose)
         self.save_freq = int(save_freq)

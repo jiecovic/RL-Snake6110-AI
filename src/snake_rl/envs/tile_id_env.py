@@ -34,11 +34,11 @@ class GlobalTileIdEnv(BaseSnakeEnv):
     """
 
     def __init__(
-            self,
-            game: SnakeGame,
-            *,
-            remove_border: bool = True,
-            tile_vocab: str | None = None,
+        self,
+        game: SnakeGame,
+        *,
+        remove_border: bool = True,
+        tile_vocab: str | None = None,
     ):
         BaseSnakeEnv.__init__(self, game)
 
@@ -132,13 +132,13 @@ class PovTileIdEnv(BaseSnakeEnv):
     """
 
     def __init__(
-            self,
-            game: SnakeGame,
-            *,
-            view_radius: int | tuple[int, int],
-            tile_vocab: str | None = None,
-            rotate_to_head: bool = True,
-            mask_oob: bool = False,
+        self,
+        game: SnakeGame,
+        *,
+        view_radius: int | tuple[int, int],
+        tile_vocab: str | None = None,
+        rotate_to_head: bool = True,
+        mask_oob: bool = False,
     ):
         BaseSnakeEnv.__init__(self, game)
 

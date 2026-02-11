@@ -37,13 +37,13 @@ class AgentViewStream:
     last_send_t: float = 0.0
 
     def start(
-            self,
-            *,
-            caption: str,
-            max_size: int,
-            fps: int,
-            keep_stderr: bool = False,
-            pixel_size: int = 0,  # 0 => auto
+        self,
+        *,
+        caption: str,
+        max_size: int,
+        fps: int,
+        keep_stderr: bool = False,
+        pixel_size: int = 0,  # 0 => auto
     ) -> None:
         cmd = [
             sys.executable,
@@ -86,12 +86,12 @@ class AgentViewStream:
         self.proc = None
 
     def send_frame(
-            self,
-            frame: np.ndarray,
-            *,
-            mode: str = "gray255",
-            num_classes: Optional[int] = None,
-            max_fps: int = 0,
+        self,
+        frame: np.ndarray,
+        *,
+        mode: str = "gray255",
+        num_classes: Optional[int] = None,
+        max_fps: int = 0,
     ) -> None:
         """
         Send a frame to the agent-view window.

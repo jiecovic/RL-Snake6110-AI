@@ -36,5 +36,3 @@ def sanitize_observation(obs: Any) -> Any:
     if isinstance(obs, dict):
         return {k: sanitize_np(v) for k, v in obs.items()}
     return sanitize_np(obs)
-
-
