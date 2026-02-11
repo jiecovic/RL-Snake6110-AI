@@ -1,8 +1,11 @@
 defaults:
-  - config
-  - env: pov_tile_id
-  - model: tile_vit
+  - run: standard
   - level: small
+  - reward: standard
+  - env: pov_tile_id
+  - feature_extractor: tile_vit
+  - train: ppo
+  - logging: standard
   - _self_
 
 run:

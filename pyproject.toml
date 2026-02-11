@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "snake-rl"
 version = "0.1.0"
-description = "Snake game with RL experiments"
+description = "Snake game with RL runs"
 requires-python = ">=3.10"
 readme = "README.md"
 
@@ -57,11 +57,12 @@ extend-exclude = [
     "configs",
     "demo-videos",
     "experiments",
+    "runs",
     "old_*",
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B"]
+select = ["E", "F", "I", "B", "UP", "C4", "SIM", "PIE"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
@@ -73,6 +74,7 @@ exclude = [
     "configs",
     "demo-videos",
     "experiments",
+    "runs",
     "old_*",
     ".venv",
     "venv",

@@ -89,7 +89,7 @@ All entry points are installed as **CLI tools** via `pyproject.toml`.
 
 Training uses **Hydra + Pydantic** configs under `configs/`.
 
-Note: only PPO is implemented today (train.algo=ppo).
+Note: only PPO is implemented today (train.algo.type=ppo).
 
 Run an example main config:
 
@@ -107,9 +107,9 @@ snake-train --config-name main_pov_pixel_ppo run.seed=123 run.num_envs=8 run.tot
 At training start, configuration artifacts are written to:
 
 ```
-experiments/<run_id>/config_snapshot.yaml
-experiments/<run_id>/config_hydra.yaml
-experiments/<run_id>/config_validated.yaml
+runs/<run_id>/config_snapshot.yaml
+runs/<run_id>/config_hydra.yaml
+runs/<run_id>/config_validated.yaml
 ```
 
 `config_snapshot.yaml` is the **single source of truth** for:
@@ -164,15 +164,17 @@ snake-play --width 30 --height 20 --fps 15
 ## 🧪 Configuration Files
 
 Hydra config groups live in `configs/`:
-- `env/` (env id + params; defaults to level/observation/reward)
+- `env/` (env id + params + observation)
 - `level/` (grid sizes)
-- `observation/` (frame stacking)
 - `reward/` (reward shaping)
-- `model/` (feature extractor + policy MLP)
+- `feature_extractor/` (feature extractor params)
 - `train/` (algorithm + eval scheduling)
 - `run/` (seed, num_envs, total_timesteps, checkpointing)
 
 Main configs live at the top level: `configs/main_*.yaml`.
+
+Policy MLP `net_arch` now lives in `train.algo.params.policy_kwargs.net_arch`.
+`train.eval` applies to both periodic evals during training and the final eval pass.
 
 ⚠️ **Important**  
 The provided example configs are **experimental** and intended as research starting points.
@@ -182,7 +184,7 @@ The provided example configs are **experimental** and intended as research start
 ## 📂 Run Structure
 
 ```
-experiments/
+runs/
 └── snake_ppo_001/
     ├── config_snapshot.yaml
     ├── config_hydra.yaml
@@ -195,6 +197,8 @@ experiments/
     ├── eval_final.json
     └── status.txt
 ```
+
+Legacy runs under `experiments/` are still supported for loading.
 
 ---
 

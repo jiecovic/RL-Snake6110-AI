@@ -217,7 +217,12 @@ __marimo__/
 *.iml
 
 
-# snake_rl experiment outputs (never commit run artifacts)
+# snake_rl run outputs (never commit run artifacts)
+runs/
+runs/**/tb/
+runs/**/tb/**
+
+# Legacy experiments outputs
 experiments/
 experiments/**/tb/
 experiments/**/tb/**
@@ -233,9 +238,13 @@ old_*/
 events.out.tfevents*
 
 # Per-run resolved configs + eval summaries (generated artifacts)
+runs/**/config_resolved.json
+runs/**/eval_final.json
 experiments/**/config_resolved.json
 experiments/**/eval_final.json
 
 # Checkpoints / metadata (generated artifacts)
+runs/**/checkpoints/
+runs/**/checkpoints/**
 experiments/**/checkpoints/
 experiments/**/checkpoints/**

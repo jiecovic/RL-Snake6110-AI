@@ -1,7 +1,9 @@
 defaults:
   - run: standard
+  - level: classic
+  - reward: standard
   - env: pov_pixel
-  - model: px_strided_cnn_l1k4
+  - feature_extractor: px_strided_cnn_l1k4
   - train: ppo
   - logging: standard
   - _self_

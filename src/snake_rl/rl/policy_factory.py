@@ -1,4 +1,4 @@
-# src/snake_rl/training/policy_factory.py
+# src/snake_rl/rl/policy_factory.py
 from __future__ import annotations
 
 import inspect
@@ -55,7 +55,7 @@ def _filter_valid_extractor_kwargs(
     valid = set(sig.parameters.keys())
     valid.discard("self")
 
-    unknown = sorted(k for k in kwargs.keys() if k not in valid)
+    unknown = sorted(k for k in kwargs if k not in valid)
     if unknown:
         raise ValueError(
             f"Extractor {extractor_cls.__name__} got unknown params: {unknown}. "
@@ -65,7 +65,22 @@ def _filter_valid_extractor_kwargs(
     return dict(kwargs)
 
 
-def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) -> dict[str, Any]:
+def _extract_policy_kwargs_from_train(cfg: TrainConfig) -> dict[str, Any]:
+    params = cfg.train.algo.params
+    if not isinstance(params, dict):
+        return {}
+    policy_kwargs = params.get("policy_kwargs")
+    if not isinstance(policy_kwargs, dict):
+        return {}
+    return dict(policy_kwargs)
+
+
+def build_policy_kwargs(
+    *,
+    cfg: TrainConfig,
+    observation_space: spaces.Space,
+    extra_policy_kwargs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Build SB3 policy_kwargs from TrainConfig.
 
@@ -73,7 +88,7 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
     default (ActorCritic*Policy), optionally with a post-extractor MLP (net_arch).
 
     Selection:
-      cfg.model.features_extractor.type must be a key in FEATURE_EXTRACTOR_REGISTRY.
+      cfg.feature_extractor.type must be a key in FEATURE_EXTRACTOR_REGISTRY.
 
     Conventions:
       - px_* extractors: pixel-based (typically CNN); kwargs: {features_dim}
@@ -84,10 +99,16 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
       If the user provides num_tiles in config params, we validate it matches to avoid
       silent mismatches when swapping vocabs.
     """
-    fe = cfg.model.features_extractor
+    fe = cfg.feature_extractor
     extractor_key = str(fe.type).strip().lower()
     features_dim = int(fe.features_dim)
     extra_params = dict(fe.params)
+
+    policy_extra = _extract_policy_kwargs_from_train(cfg)
+    if extra_policy_kwargs:
+        policy_extra.update(extra_policy_kwargs)
+
+    net_arch = policy_extra.get("net_arch", [])
 
     try:
         extractor_cls = FEATURE_EXTRACTOR_REGISTRY[extractor_key]
@@ -98,10 +119,15 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
         ) from e
 
     policy_kwargs: dict[str, Any] = {
-        "net_arch": list(cfg.model.net_arch),
+        "net_arch": list(net_arch) if isinstance(net_arch, list) else list(net_arch or []),
         "activation_fn": nn.GELU,  # oder nn.ReLU
         "features_extractor_class": extractor_cls,
     }
+
+    for k, v in policy_extra.items():
+        if k in {"features_extractor_class", "features_extractor_kwargs"}:
+            continue
+        policy_kwargs[k] = v
 
     # Tile-id models need vocab size inferred from the observation space.
     if extractor_key.startswith("tile_"):
@@ -114,7 +140,7 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
             raise ValueError(
                 f"Config provided num_tiles={user_num_tiles}, but observation_space implies "
                 f"num_tiles={inferred_num_tiles}. "
-                "Remove num_tiles from model.features_extractor.params or fix your env/vocab."
+                "Remove num_tiles from feature_extractor.params or fix your env/vocab."
             )
 
         policy_kwargs["features_extractor_kwargs"] = {

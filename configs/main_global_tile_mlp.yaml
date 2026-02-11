@@ -1,8 +1,11 @@
 defaults:
-  - config
+  - run: standard
+  - level: small
+  - reward: standard
   - env: global_tile_id
-  - model: tile_mlp
-  - level: large
+  - feature_extractor: tile_mlp
+  - train: ppo
+  - logging: standard
   - _self_
 
 run:

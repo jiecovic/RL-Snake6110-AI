@@ -1,9 +1,10 @@
-# src/snake_rl/training/model_factory.py
+# src/snake_rl/rl/model_factory.py
 from __future__ import annotations
 
 import inspect
+from contextlib import suppress
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from gymnasium import spaces
 from stable_baselines3 import PPO
@@ -11,7 +12,7 @@ from stable_baselines3.common.policies import MultiInputActorCriticPolicy
 from stable_baselines3.common.preprocessing import is_image_space
 
 from snake_rl.config.schema import TrainConfig
-from snake_rl.training.policy_factory import build_policy_kwargs
+from snake_rl.rl.policy_factory import build_policy_kwargs
 
 
 def _ensure_str_keys(d: dict[Any, Any]) -> dict[str, Any]:
@@ -57,15 +58,11 @@ def _coerce_ppo_types(d: dict[str, Any]) -> dict[str, Any]:
         if isinstance(v, str):
             s = v.strip()
             if k in float_keys:
-                try:
+                with suppress(ValueError):
                     out[k] = float(s)
-                except ValueError:
-                    pass
             elif k in int_keys:
-                try:
+                with suppress(ValueError):
                     out[k] = int(s)
-                except ValueError:
-                    pass
             elif k in bool_keys:
                 if s.lower() in {"true", "yes", "1", "on"}:
                     out[k] = True
@@ -93,20 +90,30 @@ def make_or_load_model(
     cfg: TrainConfig,
     vec_env,
     tensorboard_log: Path,
-    resume_path: Optional[Path],
+    resume_path: Path | None,
 ) -> PPO:
     if resume_path is not None:
         return PPO.load(str(resume_path), env=vec_env)
 
-    algo = str(cfg.train.algo).strip().lower()
+    algo = str(cfg.train.algo.type).strip().lower()
     if algo != "ppo":
-        raise NotImplementedError(f"Unsupported train.algo={algo!r}. Only 'ppo' is supported.")
+        raise NotImplementedError(f"Unsupported train.algo.type={algo!r}. Only 'ppo' is supported.")
 
-    policy_kwargs = build_policy_kwargs(cfg=cfg, observation_space=vec_env.observation_space)
+    user_ppo_kwargs = _ensure_str_keys(dict(cfg.train.algo.params))
+    user_policy_kwargs = {}
+    if "policy_kwargs" in user_ppo_kwargs:
+        raw = user_ppo_kwargs.pop("policy_kwargs")
+        if isinstance(raw, dict):
+            user_policy_kwargs = dict(raw)
+
+    policy_kwargs = build_policy_kwargs(
+        cfg=cfg,
+        observation_space=vec_env.observation_space,
+        extra_policy_kwargs=user_policy_kwargs,
+    )
     policy = _select_policy(vec_env.observation_space)
 
     # Pass-through PPO kwargs from YAML (filtered to ctor signature + mild type coercion).
-    user_ppo_kwargs = _ensure_str_keys(dict(cfg.train.algo_params))
     user_ppo_kwargs = _coerce_ppo_types(user_ppo_kwargs)
     user_ppo_kwargs = _filter_valid_ppo_kwargs(user_ppo_kwargs)
 

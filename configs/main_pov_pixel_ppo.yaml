@@ -1,5 +1,11 @@
 defaults:
-  - config
+  - run: standard
+  - level: small
+  - reward: standard
+  - env: pov_pixel
+  - feature_extractor: px_strided_cnn_l1k4
+  - train: ppo
+  - logging: standard
   - _self_
 
 run:

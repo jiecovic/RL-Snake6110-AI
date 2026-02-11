@@ -1,7 +1,8 @@
-# src/snake_rl/training/env_factory.py
+# src/snake_rl/rl/env_factory.py
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import numpy as np
 from gymnasium import spaces
@@ -13,53 +14,15 @@ from stable_baselines3.common.vec_env import (
 )
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
+from snake_rl.config.access import cfg_get, get_env_params, get_frame_stack_n, require_int
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.registry import get_env_cls
 from snake_rl.game.level import EmptyLevel
 from snake_rl.game.snakegame import SnakeGame
 
 
-def _cfg_get(cfg: Any, path: str, default: Any = None) -> Any:
-    cur: Any = cfg
-    for part in path.split("."):
-        if isinstance(cur, dict):
-            if part not in cur:
-                return default
-            cur = cur[part]
-        else:
-            if not hasattr(cur, part):
-                return default
-            cur = getattr(cur, part)
-    return cur
-
-
-def _require_int(cfg: Any, path: str) -> int:
-    v = _cfg_get(cfg, path, None)
-    if v is None:
-        raise KeyError(f"Config missing {path}")
-    return int(v)
-
-
-def _get_n_stack_from_cfg(cfg: Any) -> int:
-    n = _cfg_get(cfg, "observation.frame_stack.n_frames", 1)
-    try:
-        n = int(n)
-    except (TypeError, ValueError):
-        n = 1
-    return max(1, n)
-
-
-def _get_env_params_from_cfg(cfg: Any) -> dict[str, Any]:
-    params = _cfg_get(cfg, "env.params", None)
-    if params is None:
-        return {}
-    if not isinstance(params, dict):
-        raise TypeError(f"cfg.env.params must be a dict, got {type(params).__name__}")
-    return dict(params)
-
-
 def _get_reward_from_cfg(cfg: Any) -> RewardConfig:
-    reward = _cfg_get(cfg, "reward", None)
+    reward = cfg_get(cfg, "reward", None)
     if reward is None:
         return RewardConfig()
     if isinstance(reward, RewardConfig):
@@ -131,7 +94,7 @@ class DictPixelVecFrameStack(VecEnvWrapper):
         )
         self.observation_space = spaces.Dict(new_spaces)
 
-        self._buf: Optional[np.ndarray] = None  # (n_envs, C*n_stack, H, W)
+        self._buf: np.ndarray | None = None  # (n_envs, C*n_stack, H, W)
 
     def reset(self):
         obs = self.venv.reset()
@@ -225,7 +188,7 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
       - The SnakeGame instance does not manage seeds; it consumes the env RNG
         injected during env.reset().
     """
-    env_id = _cfg_get(cfg, "env.id", None)
+    env_id = cfg_get(cfg, "env.id", None)
     if env_id is None:
         raise KeyError("Config missing env.id")
     env_id = str(env_id)
@@ -234,18 +197,18 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
     def _init():
         # Create static level
         level = EmptyLevel(
-            height=_require_int(cfg, "level.height"),
-            width=_require_int(cfg, "level.width"),
+            height=require_int(cfg, "level.height"),
+            width=require_int(cfg, "level.width"),
         )
 
         # Create game WITHOUT a seed.
         # RNG will be injected from the env's np_random during reset().
         game = SnakeGame(
             level=level,
-            food_count=_require_int(cfg, "level.food_count"),
+            food_count=require_int(cfg, "level.food_count"),
         )
 
-        env_params = _get_env_params_from_cfg(cfg)
+        env_params = get_env_params(cfg)
         reward_cfg = _get_reward_from_cfg(cfg)
         if "reward" in env_params:
             raise ValueError("env.params must not contain 'reward'; use top-level reward config.")
@@ -273,8 +236,8 @@ def make_vec_env(*, cfg: Any):
       - Each environment receives exactly one deterministic seed at creation.
       - Subsequent episode resets continue the RNG stream (no reseeding).
     """
-    base_seed = _require_int(cfg, "run.seed")
-    num_envs = _require_int(cfg, "run.num_envs")
+    base_seed = require_int(cfg, "run.seed")
+    num_envs = require_int(cfg, "run.num_envs")
 
     # Derive independent child seeds from a single master seed
     ss = np.random.SeedSequence(base_seed)
@@ -292,7 +255,7 @@ def make_vec_env(*, cfg: Any):
 
     vec_env = VecMonitor(vec_env)
 
-    n_stack = _get_n_stack_from_cfg(cfg)
+    n_stack = get_frame_stack_n(cfg)
     vec_env = apply_frame_stack(
         vec_env=vec_env,
         n_stack=n_stack,

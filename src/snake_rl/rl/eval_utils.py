@@ -1,73 +1,24 @@
-# src/snake_rl/training/eval_utils.py
+# src/snake_rl/rl/eval_utils.py
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 import numpy as np
 from gymnasium import Env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-from snake_rl.training.env_factory import apply_frame_stack, make_single_env
+from snake_rl.config.access import get_env_id, get_env_params, get_frame_stack_n
+from snake_rl.rl.env_factory import apply_frame_stack, make_single_env
 from snake_rl.utils.obs import sanitize_observation
 
 
 class EpisodeEndInfo(TypedDict, total=False):
     termination_cause: str
     final_score: float
-
-
-def _cfg_get(cfg: Any, path: str, default: Any = None) -> Any:
-    """
-    Read nested config values from either:
-      - TrainConfig-like objects (attr access)
-      - dict configs (key access)
-    path like: "env.id" or "level.height"
-    """
-    cur: Any = cfg
-    for part in path.split("."):
-        if isinstance(cur, dict):
-            if part not in cur:
-                return default
-            cur = cur[part]
-        else:
-            if not hasattr(cur, part):
-                return default
-            cur = getattr(cur, part)
-    return cur
-
-
-def _get_env_id(cfg: Any) -> str:
-    env_id = _cfg_get(cfg, "env.id", None)
-    if env_id is None:
-        raise KeyError("Config missing env.id")
-    return str(env_id)
-
-
-def _get_env_params_from_cfg(cfg: Any) -> dict[str, Any]:
-    params = _cfg_get(cfg, "env.params", None)
-    if params is None:
-        return {}
-    if not isinstance(params, dict):
-        raise TypeError(f"cfg.env.params must be a dict, got {type(params).__name__}")
-    return dict(params)
-
-
-def _get_level_int(cfg: Any, key: str) -> int:
-    v = _cfg_get(cfg, f"level.{key}", None)
-    if v is None:
-        raise KeyError(f"Config missing level.{key}")
-    return int(v)
-
-
-def _get_n_stack_from_cfg(cfg: Any) -> int:
-    n = _cfg_get(cfg, "observation.frame_stack.n_frames", 1)
-    try:
-        n = int(n)
-    except (TypeError, ValueError):
-        n = 1
-    return max(1, n)
 
 
 def _is_win_from_info(info: dict[str, Any]) -> bool:
@@ -101,7 +52,7 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
     else:
         vec = SubprocVecEnv(env_fns)
 
-    n_stack = _get_n_stack_from_cfg(cfg)
+    n_stack = get_frame_stack_n(cfg)
     vec = apply_frame_stack(vec_env=vec, n_stack=n_stack, pixel_key=str(pixel_key))
     return vec
 
@@ -140,8 +91,8 @@ def evaluate_model(
     seed_base: int,
     num_envs: int = 1,
     pixel_key: str = "pixel",
-    on_episode: Optional[Callable[[int, int, Optional[float]], None]] = None,
-) -> Dict[str, Any]:
+    on_episode: Callable[[int, int, float | None], None] | None = None,
+) -> dict[str, Any]:
     episodes = int(episodes)
     if episodes <= 0:
         raise ValueError(f"episodes must be > 0, got {episodes}")
@@ -170,7 +121,7 @@ def evaluate_model(
         lengths_by_ep = np.zeros((episodes,), dtype=np.int64)
         wins_by_ep = np.zeros((episodes,), dtype=np.int64)
 
-        termination_counts: Dict[str, int] = {}
+        termination_counts: dict[str, int] = {}
         final_scores: list[float] = []
 
         finished = 0
@@ -217,10 +168,8 @@ def evaluate_model(
                     termination_counts[key] = termination_counts.get(key, 0) + 1
 
                 if "final_score" in info_i:
-                    try:
+                    with suppress(Exception):
                         final_scores.append(float(info_i["final_score"]))
-                    except Exception:
-                        pass
 
                 finished += 1
                 if on_episode is not None:
@@ -252,25 +201,23 @@ def evaluate_model(
     lengths = lengths_by_ep.astype(np.float64)
 
     wins = int(wins_by_ep.sum())
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "episodes": int(episodes),
         "deterministic": bool(deterministic),
         "seed_base": int(seed_base),
         "num_envs": int(n_envs),
-        "n_frames": int(_get_n_stack_from_cfg(cfg)),
+        "n_frames": int(get_frame_stack_n(cfg)),
         "mean_reward": float(r.mean()),
         "std_reward": float(r.std(ddof=0)),
         "mean_length": float(lengths.mean()),
         "std_length": float(lengths.std(ddof=0)),
         "wins": wins,
         "win_rate": float(wins / float(episodes)),
-        "env_id": _get_env_id(cfg),
+        "env_id": get_env_id(cfg),
     }
 
-    try:
-        out["env_params"] = dict(_get_env_params_from_cfg(cfg))
-    except Exception:
-        pass
+    with suppress(Exception):
+        out["env_params"] = dict(get_env_params(cfg))
 
     if termination_counts:
         out["termination_counts"] = dict(sorted(termination_counts.items(), key=lambda kv: kv[0]))

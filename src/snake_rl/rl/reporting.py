@@ -1,10 +1,9 @@
-# src/snake_rl/training/reporting.py
+# src/snake_rl/rl/reporting.py
 from __future__ import annotations
 
 import inspect
-import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 from stable_baselines3 import PPO
@@ -40,7 +39,7 @@ def _try_relpath(value: Any, *, base: Path) -> str:
 
 def _effective_ppo_init_kwargs(model: PPO) -> dict[str, Any]:
     sig = inspect.signature(PPO.__init__)
-    keys = [k for k in sig.parameters.keys() if k != "self"]
+    keys = [k for k in sig.parameters if k != "self"]
 
     out: dict[str, Any] = {}
     for k in keys:
@@ -116,14 +115,14 @@ def log_ppo_params(*, model: PPO, cfg: Any, paths: Any, logger) -> None:
     log_policy_network_detailed(model=model, logger=logger)
 
 
-def _resolve_tile_vocab_meta(cfg: TrainConfig) -> Optional[dict[str, Any]]:
+def _resolve_tile_vocab_meta(cfg: TrainConfig) -> dict[str, Any] | None:
     """
     If env.params.tile_vocab is set, resolve it to reproducible metadata.
 
     Returns None if no tile_vocab was configured.
     """
     params = dict(cfg.env.params)
-    name_v = params.get("tile_vocab", None)
+    name_v = params.get("tile_vocab")
     if name_v is None:
         return None
 
@@ -149,7 +148,7 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
     reproducibility across train/eval/watch. If you add a new config field that should
     be reproducible, add it here.
     """
-    fe = cfg.model.features_extractor
+    fe = cfg.feature_extractor
 
     env_params = dict(cfg.env.params)
     vocab_meta = _resolve_tile_vocab_meta(cfg)
@@ -189,32 +188,22 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
                 "n_frames": int(cfg.observation.frame_stack.n_frames),
             },
         },
-        "model": {
-            "features_extractor": {
-                "type": str(fe.type),
-                "features_dim": int(fe.features_dim),
-                "params": dict(fe.params),
-            },
-            "net_arch": [int(x) for x in cfg.model.net_arch],
+        "feature_extractor": {
+            "type": str(fe.type),
+            "features_dim": int(fe.features_dim),
+            "params": dict(fe.params),
         },
         "train": {
-            "algo": str(cfg.train.algo),
-            "algo_params": dict(cfg.train.algo_params),
+            "algo": {
+                "type": str(cfg.train.algo.type),
+                "params": dict(cfg.train.algo.params),
+            },
             "eval": {
-                "intermediate": {
-                    "enabled": bool(cfg.train.eval.intermediate.enabled),
-                    "episodes": int(cfg.train.eval.intermediate.episodes),
-                    "best_metric": str(cfg.train.eval.intermediate.best_metric),
-                    "deterministic": bool(cfg.train.eval.intermediate.deterministic),
-                    "seed_offset": int(cfg.train.eval.intermediate.seed_offset),
-                },
-                "final": {
-                    "enabled": bool(cfg.train.eval.final.enabled),
-                    "episodes": int(cfg.train.eval.final.episodes),
-                    "best_metric": str(cfg.train.eval.final.best_metric),
-                    "deterministic": bool(cfg.train.eval.final.deterministic),
-                    "seed_offset": int(cfg.train.eval.final.seed_offset),
-                },
+                "enabled": bool(cfg.train.eval.enabled),
+                "episodes": int(cfg.train.eval.episodes),
+                "best_metric": str(cfg.train.eval.best_metric),
+                "deterministic": bool(cfg.train.eval.deterministic),
+                "seed_offset": int(cfg.train.eval.seed_offset),
             },
         },
     }
@@ -229,8 +218,8 @@ def save_manifest(
     *,
     run_dir: Path,
     cfg: TrainConfig,
-    hydra_yaml: Optional[str] = None,
-    validated_cfg: Optional[dict[str, Any]] = None,
+    hydra_yaml: str | None = None,
+    validated_cfg: dict[str, Any] | None = None,
 ) -> None:
     """
     Persist the snapshot training configuration plus resolved config artifacts.
@@ -262,9 +251,3 @@ def save_manifest(
         ),
         encoding="utf-8",
     )
-
-
-def append_jsonl(path: Path, record: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")

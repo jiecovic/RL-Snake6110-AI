@@ -1,34 +1,34 @@
-# src/snake_rl/training/train_loop.py
+# src/snake_rl/rl/train_loop.py
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from stable_baselines3.common.utils import set_random_seed
 
 from snake_rl.config.schema import TrainConfig
-from snake_rl.training.callbacks_factory import make_callbacks
-from snake_rl.training.env_factory import make_vec_env
-from snake_rl.training.eval_utils import evaluate_model
-from snake_rl.training.model_factory import make_or_load_model
-from snake_rl.training.reporting import append_jsonl, log_ppo_params, save_manifest
-from snake_rl.training.resume import resolve_resume_arg
-from snake_rl.training.run_paths import RunPaths, make_run_paths
-from snake_rl.utils.checkpoints import atomic_save_zip
+from snake_rl.rl.callbacks_factory import make_callbacks
+from snake_rl.rl.env_factory import make_vec_env
+from snake_rl.rl.eval_utils import evaluate_model
+from snake_rl.rl.model_factory import make_or_load_model
+from snake_rl.rl.reporting import log_ppo_params, save_manifest
+from snake_rl.utils.checkpoints import append_jsonl, atomic_save_zip
 from snake_rl.utils.logging import setup_logger
-from snake_rl.utils.paths import repo_root
+from snake_rl.utils.run_paths import RunPaths
 
 
 def train(
     *,
     cfg: TrainConfig,
-    resume_override: Optional[str] = None,
+    paths: RunPaths,
+    resume_path: Path | None = None,
     use_rich: bool = True,
     log_level: str = "INFO",
-    config_hydra_yaml: Optional[str] = None,
-    config_validated: Optional[dict[str, Any]] = None,
+    config_hydra_yaml: str | None = None,
+    config_validated: dict[str, Any] | None = None,
 ) -> RunPaths:
     logger = setup_logger(name="snake_rl.train", use_rich=use_rich, level=log_level)
 
@@ -37,19 +37,9 @@ def train(
 
     vec_env = make_vec_env(cfg=cfg)
 
-    paths: Optional[RunPaths] = None
     finished_ok = False
 
     try:
-        # Resolve resume path without needing RunPaths yet.
-        experiments_root = repo_root() / "experiments"
-        resume_path: Optional[Path] = None
-        resume_value = resume_override if resume_override is not None else cfg.run.resume_checkpoint
-        if resume_value:
-            resume_path = resolve_resume_arg(str(resume_value), experiments_root)
-
-        # Only now create the run directory + snapshot.
-        paths = make_run_paths(run_name=str(cfg.run.name))
         save_manifest(
             run_dir=paths.run_dir,
             cfg=cfg,
@@ -86,13 +76,13 @@ def train(
         final_path = paths.checkpoint_dir / "final.zip"
         atomic_save_zip(model=model, dst=final_path)
 
-        if bool(cfg.train.eval.final.enabled):
-            seed_base = int(cfg.run.seed) + int(cfg.train.eval.final.seed_offset)
+        if bool(cfg.train.eval.enabled):
+            seed_base = int(cfg.run.seed) + int(cfg.train.eval.seed_offset)
             metrics = evaluate_model(
                 model=model,
                 cfg=cfg,
-                episodes=int(cfg.train.eval.final.episodes),
-                deterministic=bool(cfg.train.eval.final.deterministic),
+                episodes=int(cfg.train.eval.episodes),
+                deterministic=bool(cfg.train.eval.deterministic),
                 seed_base=seed_base,
                 num_envs=1,
             )
@@ -118,11 +108,8 @@ def train(
     finally:
         vec_env.close()
         # If anything fails after run dir creation, leave a minimal marker.
-        if paths is not None:
-            try:
-                (paths.run_dir / "status.txt").write_text(
-                    "finished\n" if finished_ok else "failed\n",
-                    encoding="utf-8",
-                )
-            except Exception:
-                pass
+        with suppress(Exception):
+            (paths.run_dir / "status.txt").write_text(
+                "finished\n" if finished_ok else "failed\n",
+                encoding="utf-8",
+            )

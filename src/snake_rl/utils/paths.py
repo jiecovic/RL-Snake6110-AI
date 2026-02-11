@@ -59,6 +59,21 @@ def assets_dir() -> Path:
     return p
 
 
+def runs_root() -> Path:
+    """
+    Return the runs directory (repo_root/runs), with optional override.
+    """
+    env = os.environ.get("SNAKE_RL_RUNS_DIR")
+    if env:
+        p = Path(env).expanduser().resolve()
+        if not p.is_dir():
+            raise FileNotFoundError(f"SNAKE_RL_RUNS_DIR points to a non-directory: {p}")
+        return p
+
+    p = repo_root() / "runs"
+    return p
+
+
 def asset_path(rel: str) -> Path:
     """
     Resolve an asset path relative to assets_dir().
@@ -72,9 +87,12 @@ def resolve_run_dir(repo: Path, run: str) -> Path:
     Resolve a run identifier.
 
     `run` may be:
-      - a run name (resolved as <repo>/experiments/<run>)
+      - a run name (resolved as <repo>/runs/<run>)
       - a run directory containing checkpoints/
       - a checkpoints/ directory (parent is the run dir)
+
+    Legacy fallback:
+      - <repo>/experiments/<run>
     """
     p = Path(run)
     if p.exists():
@@ -84,7 +102,15 @@ def resolve_run_dir(repo: Path, run: str) -> Path:
             if p.name == "checkpoints":
                 return p.parent
         raise FileNotFoundError(f"--run points to an existing path but not a run dir: {p}")
-    return repo / "experiments" / run
+    runs_dir = runs_root() / run
+    if runs_dir.exists():
+        return runs_dir
+
+    legacy = repo / "experiments" / run
+    if legacy.exists():
+        return legacy
+
+    return runs_dir
 
 
 def relpath(p: Path, *, base: Path) -> str:

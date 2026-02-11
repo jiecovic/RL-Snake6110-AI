@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -12,7 +12,7 @@ class RunConfig:
     num_envs: int
     total_timesteps: int
     checkpoint_freq: int
-    resume_checkpoint: Optional[str] = None
+    resume_checkpoint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -73,17 +73,17 @@ class ObservationConfig:
 
 
 # ---------------------------------------------------------------------------
-# Model configuration (generic feature extractor, CNN or Transformer)
+# Feature extractor configuration (generic, CNN or Transformer)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class FeaturesExtractorConfig:
     """
-    Feature extractor ("model") configuration.
+    Feature extractor configuration.
 
-    In snake_rl, models are SB3 feature extractors that map observations to
-    feature vectors. The PPO policy head (action/value networks) is kept fixed.
+    In snake_rl, feature extractors map observations to feature vectors.
+    The PPO policy head (action/value networks) is kept fixed.
 
     type:
       Feature extractor key (see models/registry.py), e.g.:
@@ -103,25 +103,13 @@ class FeaturesExtractorConfig:
     params: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class ModelConfig:
-    features_extractor: FeaturesExtractorConfig
-    net_arch: list[int]
-
-
-# ---------------------------------------------------------------------------
-# PPO configuration (pass-through SB3 kwargs)
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
 # ---------------------------------------------------------------------------
 # Evaluation configuration
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
-class EvalPhaseConfig:
+class EvalConfig:
     enabled: bool = False
     episodes: int = 10
     best_metric: str = "mean_reward"
@@ -129,12 +117,15 @@ class EvalPhaseConfig:
     seed_offset: int = 10_000
 
 
+# ---------------------------------------------------------------------------
+# Training algorithm configuration
+# ---------------------------------------------------------------------------
+
+
 @dataclass(frozen=True)
-class EvalConfig:
-    intermediate: EvalPhaseConfig = field(default_factory=EvalPhaseConfig)
-    final: EvalPhaseConfig = field(
-        default_factory=lambda: EvalPhaseConfig(enabled=True, episodes=100, seed_offset=20_000)
-    )
+class AlgoConfig:
+    type: str = "ppo"
+    params: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -144,8 +135,7 @@ class EvalConfig:
 
 @dataclass(frozen=True)
 class TrainLoopConfig:
-    algo: str = "ppo"
-    algo_params: dict[str, Any] = field(default_factory=dict)
+    algo: AlgoConfig = field(default_factory=AlgoConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
 
 
@@ -160,6 +150,6 @@ class TrainConfig:
     level: LevelConfig
     env: EnvConfig
     observation: ObservationConfig
-    model: ModelConfig
+    feature_extractor: FeaturesExtractorConfig
     reward: RewardConfig = field(default_factory=RewardConfig)
     train: TrainLoopConfig = field(default_factory=TrainLoopConfig)

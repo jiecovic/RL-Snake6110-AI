@@ -1,4 +1,4 @@
-# src/snake_rl/training/resume.py
+# src/snake_rl/utils/resume.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,12 +23,26 @@ def _resolve_latest_checkpoint(checkpoint_dir: Path) -> Path:
     return zips[-1].resolve()
 
 
-def resolve_resume_arg(resume: str, experiments_root: Path) -> Path:
+def _iter_candidate_runs(root: Path, prefix: str | None) -> list[Path]:
+    if prefix:
+        return [d for d in root.glob(f"{prefix}_*") if d.is_dir()]
+    if root.is_dir():
+        return [d for d in root.iterdir() if d.is_dir()]
+    return []
+
+
+def resolve_resume_arg(
+    resume: str,
+    *,
+    runs_root: Path,
+    legacy_root: Path | None = None,
+) -> Path:
     """
     Accept:
       - path/to/model.zip
-      - <run_id>                  -> experiments/<run_id>/checkpoints/latest.zip
-      - latest:<run_name_prefix>  -> newest experiments/<run_name_prefix>_*/checkpoints/latest.zip
+      - <run_id>                  -> runs/<run_id>/checkpoints/latest.zip (fallback legacy_root)
+      - latest:<run_name_prefix>  -> newest runs/<run_name_prefix>_*/checkpoints/latest.zip
+                                    (fallback legacy_root)
     """
     p = Path(resume).expanduser()
 
@@ -42,21 +56,24 @@ def resolve_resume_arg(resume: str, experiments_root: Path) -> Path:
         if not prefix:
             raise ValueError("Invalid --resume value. Expected latest:<run_name_prefix>.")
 
-        candidates = sorted(
-            [d for d in experiments_root.glob(f"{prefix}_*") if d.is_dir()],
-            key=lambda d: d.stat().st_mtime,
-        )
-        if not candidates:
-            raise FileNotFoundError(
-                f"No experiment runs found in {experiments_root} matching prefix: {prefix!r}"
-            )
+        candidates = _iter_candidate_runs(runs_root, prefix)
+        if legacy_root is not None:
+            candidates.extend(_iter_candidate_runs(legacy_root, prefix))
 
-        newest_run = candidates[-1]
+        if not candidates:
+            raise FileNotFoundError(f"No runs found in {runs_root} matching prefix: {prefix!r}")
+
+        newest_run = sorted(candidates, key=lambda d: d.stat().st_mtime)[-1]
         return _resolve_latest_checkpoint(newest_run / "checkpoints")
 
     # <run_id>
-    run_dir = experiments_root / resume
+    run_dir = runs_root / resume
     if run_dir.is_dir():
         return _resolve_latest_checkpoint(run_dir / "checkpoints")
+
+    if legacy_root is not None:
+        legacy_run = legacy_root / resume
+        if legacy_run.is_dir():
+            return _resolve_latest_checkpoint(legacy_run / "checkpoints")
 
     raise FileNotFoundError(f"Could not interpret --resume argument: {resume!r}")

@@ -1,9 +1,10 @@
-# src/snake_rl/callbacks/eval_checkpoint.py
+# src/snake_rl/rl/callbacks/eval_checkpoint.py
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from stable_baselines3.common.callbacks import BaseCallback
 
@@ -14,7 +15,7 @@ try:
 except Exception:  # pragma: no cover
     from tqdm.auto import tqdm
 
-from snake_rl.training.eval_utils import evaluate_model
+from snake_rl.rl.eval_utils import evaluate_model
 from snake_rl.utils.checkpoints import append_jsonl, atomic_save_zip, read_json, write_json
 
 
@@ -26,7 +27,7 @@ class EvalCheckpointCallback(BaseCallback):
     """
     Unified callback:
       - saves checkpoints/latest.zip every checkpoint_freq_steps (global env steps)
-      - optionally runs intermediate eval (synced with checkpoint cadence)
+      - optionally runs periodic eval (synced with checkpoint cadence)
       - maintains checkpoints/best.zip based on configurable best_metric
       - appends eval history to checkpoints/eval_history.jsonl
       - writes checkpoints/state.json with latest/best metadata
@@ -54,8 +55,8 @@ class EvalCheckpointCallback(BaseCallback):
         self.state_path = self.checkpoint_dir / "state.json"
         self.history_path = self.checkpoint_dir / "eval_history.jsonl"
 
-        self._best_value: Optional[float] = None
-        self._best_metric: Optional[str] = None
+        self._best_value: float | None = None
+        self._best_metric: str | None = None
         self._last_ckpt_at: int = 0
 
     def _rel(self, p: Path) -> str:
@@ -105,7 +106,7 @@ class EvalCheckpointCallback(BaseCallback):
         }
         return state
 
-    def _log_eval_to_tb(self, metrics: Dict[str, Any]) -> None:
+    def _log_eval_to_tb(self, metrics: dict[str, Any]) -> None:
         self.logger.record("eval/mean_reward", float(metrics["mean_reward"]))
         self.logger.record("eval/std_reward", float(metrics["std_reward"]))
         self.logger.record("eval/mean_length", float(metrics["mean_length"]))
@@ -126,12 +127,10 @@ class EvalCheckpointCallback(BaseCallback):
         term = metrics.get("termination_counts")
         if isinstance(term, dict):
             for k, v in term.items():
-                try:
+                with suppress(Exception):
                     self.logger.record(f"eval/termination/{k}", int(v))
-                except Exception:
-                    pass
 
-    def _pick_best_value(self, metrics: Dict[str, Any], *, best_metric: str) -> float:
+    def _pick_best_value(self, metrics: dict[str, Any], *, best_metric: str) -> float:
         if best_metric == "mean_reward":
             return float(metrics["mean_reward"])
         if best_metric == "mean_score":
@@ -163,24 +162,23 @@ class EvalCheckpointCallback(BaseCallback):
             )
 
         train_cfg = getattr(self.cfg, "train", None)
-        phase = getattr(train_cfg, "eval", None) if train_cfg is not None else None
-        intermediate = getattr(phase, "intermediate", None) if phase is not None else None
-        if intermediate is None or not bool(getattr(intermediate, "enabled", False)):
+        eval_cfg = getattr(train_cfg, "eval", None) if train_cfg is not None else None
+        if eval_cfg is None or not bool(getattr(eval_cfg, "enabled", False)):
             return True
 
-        seed_base = int(self.cfg.run.seed) + int(getattr(intermediate, "seed_offset", 10_000))
-        episodes = int(getattr(intermediate, "episodes", 10))
-        deterministic = bool(getattr(intermediate, "deterministic", True))
-        best_metric = str(getattr(intermediate, "best_metric", "mean_reward"))
+        seed_base = int(self.cfg.run.seed) + int(getattr(eval_cfg, "seed_offset", 10_000))
+        episodes = int(getattr(eval_cfg, "episodes", 10))
+        deterministic = bool(getattr(eval_cfg, "deterministic", True))
+        best_metric = str(getattr(eval_cfg, "best_metric", "mean_reward"))
 
         if self.verbose > 0:
             print(
-                f"[eval] start intermediate @ {self.num_timesteps}: "
+                f"[eval] start @ {self.num_timesteps}: "
                 f"episodes={episodes} deterministic={deterministic} best_metric={best_metric}",
                 flush=True,
             )
 
-        pbar: Optional[Any] = None
+        pbar: Any | None = None
         if self.verbose > 0:
             pbar = tqdm(
                 total=episodes,
@@ -190,7 +188,7 @@ class EvalCheckpointCallback(BaseCallback):
                 position=1,
             )
 
-        def _on_episode(_i: int, _n: int, reward: Optional[float]) -> None:
+        def _on_episode(_i: int, _n: int, reward: float | None) -> None:
             if reward is None:
                 return
             if pbar is not None:
@@ -210,7 +208,7 @@ class EvalCheckpointCallback(BaseCallback):
             if pbar is not None:
                 pbar.close()
 
-        metrics["phase"] = "intermediate"
+        metrics["phase"] = "periodic"
         metrics["timesteps"] = int(self.num_timesteps)
         metrics["wall_time"] = _utc_now_iso()
         metrics["best_metric"] = best_metric
@@ -228,7 +226,7 @@ class EvalCheckpointCallback(BaseCallback):
                 wins = int(metrics.get("wins", 0))
                 extra += f" win_rate={metrics['win_rate']:.3f} ({wins}/{episodes})"
             print(
-                f"[eval] done  intermediate @ {self.num_timesteps}: "
+                f"[eval] done  @ {self.num_timesteps}: "
                 f"mean_reward={metrics['mean_reward']:.6g} std_reward={metrics['std_reward']:.6g} "
                 f"mean_len={metrics['mean_length']:.3f}{extra}",
                 flush=True,

@@ -1,12 +1,12 @@
-# src/snake_rl/training/callbacks_factory.py
+# src/snake_rl/rl/callbacks_factory.py
 from __future__ import annotations
 
 from pathlib import Path
 
 from stable_baselines3.common.callbacks import CallbackList
 
-from snake_rl.callbacks.eval_checkpoint import EvalCheckpointCallback
-from snake_rl.callbacks.termination_logger import TerminationCauseLogger
+from snake_rl.rl.callbacks.eval_checkpoint import EvalCheckpointCallback
+from snake_rl.rl.callbacks.termination_logger import TerminationCauseLogger
 
 
 def make_callbacks(*, cfg, checkpoint_dir: str | Path):

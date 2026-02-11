@@ -1,8 +1,7 @@
-# src/snake_rl/callbacks/termination_logger.py
+# src/snake_rl/rl/callbacks/termination_logger.py
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import DefaultDict, List
 
 from stable_baselines3.common.callbacks import BaseCallback
 
@@ -10,12 +9,12 @@ from stable_baselines3.common.callbacks import BaseCallback
 class TerminationCauseLogger(BaseCallback):
     def __init__(self, verbose: int = 0) -> None:
         super().__init__(verbose=verbose)
-        self.cause_counts: DefaultDict[str, int] = defaultdict(int)
+        self.cause_counts: defaultdict[str, int] = defaultdict(int)
         self.episode_count = 0
-        self.final_scores: List[float] = []
+        self.final_scores: list[float] = []
 
     def _on_step(self) -> bool:
-        infos: List[dict] = self.locals.get("infos", [])
+        infos: list[dict] = self.locals.get("infos", [])
 
         for info in infos:
             if "termination_cause" not in info:

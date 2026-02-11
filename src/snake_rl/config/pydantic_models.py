@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from snake_rl.config.schema import (
+    AlgoConfig,
     EnvConfig,
     EvalConfig,
-    EvalPhaseConfig,
     FeaturesExtractorConfig,
     FrameStackConfig,
     LevelConfig,
-    ModelConfig,
     ObservationConfig,
     RewardConfig,
     RunConfig,
@@ -30,7 +29,7 @@ class RunConfigModel(_BaseConfigModel):
     num_envs: int
     total_timesteps: int
     checkpoint_freq: int
-    resume_checkpoint: Optional[str] = None
+    resume_checkpoint: str | None = None
 
 
 class LevelConfigModel(_BaseConfigModel):
@@ -51,7 +50,7 @@ class RewardConfigModel(_BaseConfigModel):
 
 class EnvConfigModel(_BaseConfigModel):
     id: str
-    params: Dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class FrameStackConfigModel(_BaseConfigModel):
@@ -66,14 +65,14 @@ class FrameStackConfigModel(_BaseConfigModel):
 
 
 class ObservationConfigModel(_BaseConfigModel):
-    params: Dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
     frame_stack: FrameStackConfigModel = Field(default_factory=FrameStackConfigModel)
 
 
 class FeaturesExtractorConfigModel(_BaseConfigModel):
     type: str
     features_dim: int
-    params: Dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -95,12 +94,32 @@ class FeaturesExtractorConfigModel(_BaseConfigModel):
         return data
 
 
-class ModelConfigModel(_BaseConfigModel):
-    features_extractor: FeaturesExtractorConfigModel
-    net_arch: List[int]
+class AlgoConfigModel(_BaseConfigModel):
+    type: str = "ppo"
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, data: Any) -> Any:
+        if isinstance(data, str):
+            return {"type": data, "params": {}}
+        if not isinstance(data, dict):
+            return data
+
+        if "type" in data and "params" not in data:
+            extra = {k: v for k, v in data.items() if k != "type"}
+            if extra:
+                return {"type": data.get("type"), "params": extra}
+        if "params" in data:
+            params = data.get("params")
+            if params is None:
+                params = {}
+            if isinstance(params, dict):
+                return {"type": data.get("type", "ppo"), "params": dict(params)}
+        return data
 
 
-class EvalPhaseConfigModel(_BaseConfigModel):
+class EvalConfigModel(_BaseConfigModel):
     enabled: bool = False
     episodes: int = 10
     best_metric: str = "mean_reward"
@@ -112,47 +131,55 @@ class EvalPhaseConfigModel(_BaseConfigModel):
     def _best_metric_allowed(cls, v: str) -> str:
         s = str(v)
         if s not in {"mean_reward", "mean_score"}:
-            raise ValueError("eval.*.best_metric must be one of: mean_reward, mean_score")
+            raise ValueError("eval.best_metric must be one of: mean_reward, mean_score")
         return s
 
 
-class EvalConfigModel(_BaseConfigModel):
-    intermediate: EvalPhaseConfigModel = Field(default_factory=EvalPhaseConfigModel)
-    final: EvalPhaseConfigModel = Field(
-        default_factory=lambda: EvalPhaseConfigModel(
-            enabled=True,
-            episodes=100,
-            best_metric="mean_reward",
-            seed_offset=20_000,
-        )
-    )
-
-
 class TrainLoopConfigModel(_BaseConfigModel):
-    algo: str = "ppo"
-    algo_params: Dict[str, Any] = Field(default_factory=dict)
+    algo: AlgoConfigModel = Field(default_factory=AlgoConfigModel)
     eval: EvalConfigModel = Field(default_factory=EvalConfigModel)
 
     @model_validator(mode="before")
     @classmethod
-    def _wrap_flat_params(cls, data: Any) -> Any:
+    def _normalize_train_algo(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
-        if "algo_params" not in data and ("algo" in data or "eval" in data):
-            return data
-        if "algo_params" in data:
-            params = data.get("algo_params")
-            if params is None:
-                params = {}
-            if not isinstance(params, dict):
-                return data
-            extra = {k: v for k, v in data.items() if k != "algo_params"}
-            if not extra:
-                return {"algo_params": dict(params)}
-            merged = dict(params)
-            merged.update(extra)
-            return {"algo_params": merged}
-        return {"algo_params": dict(data)}
+
+        out: dict[str, Any] = dict(data)
+        algo_val = out.get("algo")
+        eval_val = out.get("eval")
+
+        # Back-compat: eval with {intermediate, final} -> pick final, else intermediate.
+        if isinstance(eval_val, dict) and ("intermediate" in eval_val or "final" in eval_val):
+            if "final" in eval_val and isinstance(eval_val.get("final"), dict):
+                out["eval"] = eval_val.get("final")
+            elif "intermediate" in eval_val and isinstance(eval_val.get("intermediate"), dict):
+                out["eval"] = eval_val.get("intermediate")
+
+        # Back-compat: algo: "ppo" + algo_params: {...}
+        if "algo_params" in out:
+            raw_params = out.pop("algo_params")
+            params = raw_params if isinstance(raw_params, dict) else {}
+            if isinstance(algo_val, dict):
+                algo_dict: dict[str, Any] = dict(algo_val)
+            elif isinstance(algo_val, str):
+                algo_dict = {"type": algo_val}
+            else:
+                algo_dict = {}
+            existing_params = algo_dict.get("params")
+            merged = dict(existing_params) if isinstance(existing_params, dict) else {}
+            merged.update(params)
+            algo_dict["params"] = merged
+            out["algo"] = algo_dict
+            return out
+
+        # Back-compat: algo: "ppo" with flat params at train level
+        if isinstance(algo_val, str):
+            extra = {k: v for k, v in out.items() if k not in {"algo", "eval"}}
+            if extra:
+                out = {k: v for k, v in out.items() if k in {"algo", "eval"}}
+                out["algo"] = {"type": algo_val, "params": extra}
+        return out
 
 
 class TrainConfigModel(_BaseConfigModel):
@@ -161,8 +188,54 @@ class TrainConfigModel(_BaseConfigModel):
     reward: RewardConfigModel = Field(default_factory=RewardConfigModel)
     env: EnvConfigModel
     observation: ObservationConfigModel
-    model: ModelConfigModel
+    feature_extractor: FeaturesExtractorConfigModel
     train: TrainLoopConfigModel = Field(default_factory=TrainLoopConfigModel)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _map_model_to_feature_extractor(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        if "feature_extractor" in data or "model" not in data:
+            return data
+
+        model = data.get("model")
+        if not isinstance(model, dict):
+            return data
+
+        out: dict[str, Any] = dict(data)
+        out.pop("model", None)
+
+        fe = model.get("features_extractor")
+        if fe is None:
+            fe = {k: v for k, v in model.items() if k != "net_arch"}
+        out["feature_extractor"] = fe
+
+        net_arch = model.get("net_arch")
+        if net_arch is not None:
+            train = out.get("train")
+            train_dict: dict[str, Any] = dict(train) if isinstance(train, dict) else {}
+
+            algo_val = train_dict.get("algo")
+            if isinstance(algo_val, dict):
+                algo_dict: dict[str, Any] = dict(algo_val)
+            elif isinstance(algo_val, str):
+                algo_dict = {"type": algo_val}
+            else:
+                algo_dict = {}
+
+            params = algo_dict.get("params")
+            params_dict = dict(params) if isinstance(params, dict) else {}
+            policy_kwargs = params_dict.get("policy_kwargs")
+            policy_dict = dict(policy_kwargs) if isinstance(policy_kwargs, dict) else {}
+            policy_dict.setdefault("net_arch", net_arch)
+            params_dict["policy_kwargs"] = policy_dict
+            algo_dict["params"] = params_dict
+            train_dict["algo"] = algo_dict
+            out["train"] = train_dict
+
+        return out
 
     @model_validator(mode="before")
     @classmethod
@@ -227,45 +300,34 @@ class TrainConfigModel(_BaseConfigModel):
                     n_frames=int(self.observation.frame_stack.n_frames),
                 ),
             ),
-            model=ModelConfig(
-                features_extractor=FeaturesExtractorConfig(
-                    type=str(self.model.features_extractor.type),
-                    features_dim=int(self.model.features_extractor.features_dim),
-                    params=dict(self.model.features_extractor.params),
-                ),
-                net_arch=list(self.model.net_arch),
+            feature_extractor=FeaturesExtractorConfig(
+                type=str(self.feature_extractor.type),
+                features_dim=int(self.feature_extractor.features_dim),
+                params=dict(self.feature_extractor.params),
             ),
             train=TrainLoopConfig(
-                algo=str(self.train.algo),
-                algo_params=dict(self.train.algo_params),
+                algo=AlgoConfig(
+                    type=str(self.train.algo.type),
+                    params=dict(self.train.algo.params),
+                ),
                 eval=EvalConfig(
-                    intermediate=EvalPhaseConfig(
-                        enabled=bool(self.train.eval.intermediate.enabled),
-                        episodes=int(self.train.eval.intermediate.episodes),
-                        best_metric=str(self.train.eval.intermediate.best_metric),
-                        deterministic=bool(self.train.eval.intermediate.deterministic),
-                        seed_offset=int(self.train.eval.intermediate.seed_offset),
-                    ),
-                    final=EvalPhaseConfig(
-                        enabled=bool(self.train.eval.final.enabled),
-                        episodes=int(self.train.eval.final.episodes),
-                        best_metric=str(self.train.eval.final.best_metric),
-                        deterministic=bool(self.train.eval.final.deterministic),
-                        seed_offset=int(self.train.eval.final.seed_offset),
-                    ),
+                    enabled=bool(self.train.eval.enabled),
+                    episodes=int(self.train.eval.episodes),
+                    best_metric=str(self.train.eval.best_metric),
+                    deterministic=bool(self.train.eval.deterministic),
+                    seed_offset=int(self.train.eval.seed_offset),
                 ),
             ),
         )
 
 
 __all__ = [
+    "AlgoConfigModel",
     "EnvConfigModel",
     "EvalConfigModel",
-    "EvalPhaseConfigModel",
     "FeaturesExtractorConfigModel",
     "FrameStackConfigModel",
     "LevelConfigModel",
-    "ModelConfigModel",
     "ObservationConfigModel",
     "RunConfigModel",
     "RewardConfigModel",
