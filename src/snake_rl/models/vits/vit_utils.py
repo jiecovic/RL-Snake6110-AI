@@ -120,6 +120,31 @@ def masked_mean(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     return (x * keep_f).sum(dim=1) / denom.unsqueeze(-1)
 
 
+def masked_max(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    """
+    Max over tokens excluding masked positions.
+    x:    [B,T,D]
+    mask: [B,T] bool (True => exclude)
+    """
+    if x.ndim != 3 or mask.ndim != 2:
+        raise ValueError(f"expected x [B,T,D] and mask [B,T], got x={tuple(x.shape)} mask={tuple(mask.shape)}")
+    if x.shape[0] != mask.shape[0] or x.shape[1] != mask.shape[1]:
+        raise ValueError(f"shape mismatch: x={tuple(x.shape)} mask={tuple(mask.shape)}")
+
+    keep = ~mask  # True => keep
+
+    # Excluded positions become very negative so they never win the max.
+    neg = torch.finfo(x.dtype).min
+    x_masked = x.masked_fill(~keep.unsqueeze(-1), neg)
+    out = x_masked.max(dim=1).values  # [B,D]
+
+    # If a row has no kept tokens, return zeros instead of -inf.
+    any_keep = keep.any(dim=1)  # [B]
+    if not bool(any_keep.all()):
+        out = torch.where(any_keep.unsqueeze(-1), out, torch.zeros_like(out))
+    return out
+
+
 def pool_tokens(
         tokens: torch.Tensor,
         *,
@@ -129,15 +154,17 @@ def pool_tokens(
         mask_pool: bool = True,
 ) -> torch.Tensor:
     """
-    Pool transformer outputs into [B,D].
+    Pool transformer outputs into [B,D] (or concatenations).
 
     tokens:    [B, T, D] (T includes CLS if has_cls=True)
-    pooling:   "cls" | "mean" | "cls_mean"
+    pooling:   "cls" | "mean" | "max" | "cls_mean" | "meanmax"
     token_mask: [B, T] bool where True means "ignore" (optional)
     """
     pooling = str(pooling)
-    if pooling not in {"cls", "mean", "cls_mean"}:
-        raise ValueError(f"pooling must be one of {{'cls','mean','cls_mean'}}, got {pooling!r}")
+    if pooling not in {"cls", "mean", "max", "cls_mean", "meanmax"}:
+        raise ValueError(
+            f"pooling must be one of {{'cls','mean','max','cls_mean','meanmax'}}, got {pooling!r}"
+        )
 
     if pooling in {"cls", "cls_mean"} and not has_cls:
         raise ValueError(f"pooling={pooling!r} requires has_cls=True")
@@ -154,7 +181,28 @@ def pool_tokens(
             m = token_mask if (token_mask is not None and mask_pool) else None
         return masked_mean(tok, m) if m is not None else tok.mean(dim=1)
 
-    # cls_mean
+    if pooling == "max":
+        if has_cls:
+            tok = tokens[:, 1:, :]
+            m = token_mask[:, 1:] if (token_mask is not None and mask_pool) else None
+        else:
+            tok = tokens
+            m = token_mask if (token_mask is not None and mask_pool) else None
+        return masked_max(tok, m) if m is not None else tok.max(dim=1).values
+
+    if pooling == "meanmax":
+        if has_cls:
+            tok = tokens[:, 1:, :]
+            m = token_mask[:, 1:] if (token_mask is not None and mask_pool) else None
+        else:
+            tok = tokens
+            m = token_mask if (token_mask is not None and mask_pool) else None
+
+        mean = masked_mean(tok, m) if m is not None else tok.mean(dim=1)
+        mx = masked_max(tok, m) if m is not None else tok.max(dim=1).values
+        return torch.cat([mean, mx], dim=-1)
+
+    # cls_mean (existing)
     cls = tokens[:, 0, :]
     tok = tokens[:, 1:, :]
     m = token_mask[:, 1:] if (token_mask is not None and mask_pool) else None

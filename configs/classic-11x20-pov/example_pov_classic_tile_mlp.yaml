@@ -1,8 +1,7 @@
-# configs/example_pov_small_tile_vit.yaml
-# PPO on symbolic tile-id grid with ViT-style transformer feature extractor
+# configs/example_pov_classic_tile_mlp.yaml
 
 run:
-  name: snake_ppo_vit
+  name: snake_11x20_ppo_pov_mlp
   seed: 42
   num_envs: 16
   total_timesteps: 100_000_000
@@ -10,14 +9,16 @@ run:
   resume_checkpoint: null
 
 level:
-  height: 7
-  width: 12
-  food_count: 1
+  height: 13
+  width: 22
+  food_count: 3
 
 env:
-  id: global_tile_id
+  id: pov_tile_id
   params:
-    tile_vocab: global_v1
+    tile_vocab: pov_v1
+    view_radius: 10
+    rotate_to_head: true
 
 # No frame stacking needed: direction & orientation are encoded in tile IDs
 observation:
@@ -26,16 +27,15 @@ observation:
 
 model:
   features_extractor:
-    type: tile_vit
-    features_dim: 64
+    type: tile_mlp
+    features_dim: 512
     params:
-      d_model: 64
-      n_layers: 3
-      n_heads: 8
+      d_emb: 8
+      mlp_hidden: []
       dropout: 0.0
-      pooling: cls_mean
-      pos_mode : pov_center_rot
-  net_arch: []
+      pos_mode: abs_2d
+      pre_ln: true
+  net_arch: [512]
 
 
 ppo:
@@ -46,11 +46,11 @@ ppo:
   ent_coef: 0.03
   learning_rate: 1e-4
 
-#  gae_lambda: 0.95
+#  gae_lambda: 0.98
 #  clip_range: 0.1
 #  vf_coef: 0.5
 #  max_grad_norm: 0.5
-#  target_kl: 0.1
+#  target_kl: 0.03
   normalize_advantage: true
 
   verbose: 0

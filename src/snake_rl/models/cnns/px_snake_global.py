@@ -7,7 +7,7 @@ from torch import nn
 from snake_rl.models.cnns.base import BaseCNNExtractor
 
 
-class PxStridedCNN_L3K4(BaseCNNExtractor):
+class PxSnakeGlobal(BaseCNNExtractor):
     """
     Strided pixel CNN with tile-aligned downsampling.
 
@@ -34,10 +34,12 @@ class PxStridedCNN_L3K4(BaseCNNExtractor):
         c = self.c(1)
 
         return nn.Sequential(
-            nn.Conv2d(self.in_ch, c, kernel_size=4, stride=4),
+            nn.Conv2d(self.in_ch, c, kernel_size=8, stride=4, padding=2),
             nn.ReLU(),
-            nn.Conv2d(c, 2 * c, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(c, 64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(2 * c, 2 * c, kernel_size=3, stride=1, padding=1),
+            # nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            # nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
         )

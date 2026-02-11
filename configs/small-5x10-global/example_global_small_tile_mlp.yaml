@@ -1,5 +1,4 @@
-# configs/example_pov_small_tile_mlp.yaml
-# PPO on symbolic tile-id grid with ViT-style transformer feature extractor
+# configs/example_global_small_tile_mlp.yaml
 
 run:
   name: snake_ppo_mlp
@@ -15,11 +14,10 @@ level:
   food_count: 1
 
 env:
-  id: pov_tile_id
+  id: global_tile_id
   params:
-    tile_vocab: pov_v1
-    view_radius: 6
-    rotate_to_head: true
+    tile_vocab: global_no_border_v1
+    remove_border: true
 
 # No frame stacking needed: direction & orientation are encoded in tile IDs
 observation:
@@ -29,14 +27,14 @@ observation:
 model:
   features_extractor:
     type: tile_mlp
-    features_dim: 256
+    features_dim: 512
     params:
-      d_emb: 8
+      d_emb: 16
       mlp_hidden: []
       dropout: 0.0
-      use_2d_positional: true
+      pos_mode: abs_2d
       pre_ln: true
-  net_arch: [512]
+  net_arch: [512, 128]
 
 
 ppo:

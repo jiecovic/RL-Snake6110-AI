@@ -6,6 +6,8 @@ import inspect
 
 from gymnasium import spaces
 
+from torch import nn
+
 from snake_rl.config.schema import TrainConfig
 from snake_rl.models.registry import FEATURE_EXTRACTOR_REGISTRY, available_feature_extractors
 
@@ -94,6 +96,7 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
 
     policy_kwargs: dict[str, Any] = {
         "net_arch": list(cfg.model.net_arch),
+        "activation_fn": nn.GELU,  # oder nn.ReLU
         "features_extractor_class": extractor_cls,
     }
 

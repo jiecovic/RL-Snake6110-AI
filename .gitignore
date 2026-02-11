@@ -226,6 +226,9 @@ old_experiments/
 old_experiments/**/tb/
 old_experiments/**/tb/**
 
+# Ignore any folder starting with old_
+old_*/
+
 # TensorBoard event files (just in case they appear elsewhere too)
 events.out.tfevents*
 

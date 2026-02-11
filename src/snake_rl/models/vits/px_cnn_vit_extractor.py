@@ -120,10 +120,10 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
             ffn_dim: int | None = None,
             dropout: float = 0.1,
             use_cls_token: bool = True,
-            pooling: str = "cls",  # "cls" | "mean" | "cls_mean"
+            pooling: str = "cls",  # "cls" | "mean" | "max" | "cls_mean" | "meanmax"
             pos_mode: str = "abs_2d",
             normalized_image: bool = False,
-            force_in_proj: bool = True,
+            force_in_proj: bool = False,
     ) -> None:
         super().__init__(observation_space, int(features_dim))
 
@@ -144,8 +144,10 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
             raise ValueError(f"d_model={d_model} must be divisible by n_heads={n_heads}")
 
         pooling = str(pooling)
-        if pooling not in {"cls", "mean", "cls_mean"}:
-            raise ValueError(f"pooling must be one of {{'cls','mean','cls_mean'}}, got {pooling!r}")
+        if pooling not in {"cls", "mean", "max", "cls_mean", "meanmax"}:
+            raise ValueError(
+                f"pooling must be one of {{'cls','mean','max','cls_mean','meanmax'}}, got {pooling!r}"
+            )
         if pooling in {"cls", "cls_mean"} and not use_cls_token:
             raise ValueError(f"pooling={pooling!r} requires use_cls_token=True")
 
@@ -228,8 +230,12 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
         self.encoder = nn.TransformerEncoder(enc_layer, num_layers=self.n_layers)
 
         # Pool projection to SB3 features_dim.
-        in_dim = self.d_model * (2 if self.pooling == "cls_mean" else 1)
-        self.out_proj = nn.Linear(in_dim, int(features_dim), bias=True)
+        in_dim = self.d_model * (2 if self.pooling in {"cls_mean", "meanmax"} else 1)
+
+        if in_dim == int(features_dim):
+            self.out_proj: nn.Module = nn.Identity()
+        else:
+            self.out_proj = nn.Linear(in_dim, int(features_dim), bias=True)
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         if observations.ndim != 4:

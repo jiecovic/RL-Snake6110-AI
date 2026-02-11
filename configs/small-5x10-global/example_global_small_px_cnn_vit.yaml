@@ -5,49 +5,51 @@ run:
   name: snake_ppo_vit
   seed: 42
   num_envs: 16
-  total_timesteps: 20_000_000
+  total_timesteps: 100_000_000
   checkpoint_freq: 250_000
   resume_checkpoint: null
 
 level:
-  height: 7
-  width: 12
-  food_count: 1
+  height: 13
+  width: 22
+  food_count: 2
 
 env:
-  id: pov_tile_id
+  id: global_pixel
   params:
-    tile_vocab: pov_v1
-    view_radius: 6
-    rotate_to_head: true
+#    tile_vocab: global_no_border_v1
+#    remove_border: true
 
 # No frame stacking needed: direction & orientation are encoded in tile IDs
 observation:
   frame_stack:
-    n_frames: 1
+    n_frames: 2
+
 
 model:
   features_extractor:
-    type: tile_vit
-    features_dim: 64
+    type: px_cnn_vit
+    features_dim: 256
     params:
-      d_model: 64
-      n_layers: 3
-#      ffn_dim: 64
-      n_heads: 8
+      cnn_stem: px_snake_global
+      c_mult: 32
+      d_model: 256
+      n_layers: 4
+      n_heads: 4
       dropout: 0.0
-      pooling: cls_mean
-      pos_mode : pov_center
-      use_token_mask: true
+      pooling: mean
+      pos_mode : abs_2d
+#      flatten_mlp_hidden_dim: 1024
+      use_cls_token: false
   net_arch: []
 
 
 ppo:
-  n_steps: 2048
-  batch_size: 128
-  n_epochs: 2
-  gamma: 0.998
-  ent_coef: 0.03
+  n_steps: 8192
+  batch_size: 256
+  n_epochs: 3
+  gamma: 0.997
+  ent_coef: 0.02
   learning_rate: 1e-4
 
 #  gae_lambda: 0.95

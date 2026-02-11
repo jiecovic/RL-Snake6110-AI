@@ -11,6 +11,7 @@ from snake_rl.models.cnns.px_strided_cnn_l1k4 import PxStridedCNN_L1K4
 from snake_rl.models.cnns.px_strided_cnn_l2_s2s2_k4 import PxStridedCNN_L2_S2S2_K4
 from snake_rl.models.cnns.px_strided_cnn_l3k4 import PxStridedCNN_L3K4
 from snake_rl.models.cnns.px_strided_cnn_l3k8 import PxStridedCNN_L3K8
+from snake_rl.models.cnns.px_snake_global import PxSnakeGlobal
 
 # hybrid CNN → ViT
 from snake_rl.models.vits.px_cnn_vit_extractor import PxCnnViTExtractor
@@ -26,6 +27,7 @@ FEATURE_EXTRACTOR_REGISTRY: dict[str, Type[BaseFeaturesExtractor]] = {
     "px_strided_cnn_l3k4": PxStridedCNN_L3K4,
     "px_strided_cnn_l3k8": PxStridedCNN_L3K8,
     "px_nature_cnn": PxNatureCNN,
+    "px_snake_global": PxSnakeGlobal,
 
     # hybrid CNN → ViT
     "px_cnn_vit": PxCnnViTExtractor,
