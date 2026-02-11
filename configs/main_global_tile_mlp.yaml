@@ -1,0 +1,9 @@
+defaults:
+  - config
+  - env: global_tile_id
+  - model: tile_mlp
+  - level: large
+  - _self_
+
+run:
+  name: global_tile_mlp_large

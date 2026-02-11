@@ -162,7 +162,8 @@ class EvalCheckpointCallback(BaseCallback):
                 flush=True,
             )
 
-        phase = getattr(self.cfg, "eval", None)
+        train_cfg = getattr(self.cfg, "train", None)
+        phase = getattr(train_cfg, "eval", None) if train_cfg is not None else None
         intermediate = getattr(phase, "intermediate", None) if phase is not None else None
         if intermediate is None or not bool(getattr(intermediate, "enabled", False)):
             return True

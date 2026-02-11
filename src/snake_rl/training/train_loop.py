@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 from stable_baselines3.common.utils import set_random_seed
@@ -27,6 +27,8 @@ def train(
     resume_override: Optional[str] = None,
     use_rich: bool = True,
     log_level: str = "INFO",
+    config_hydra_yaml: Optional[str] = None,
+    config_validated: Optional[dict[str, Any]] = None,
 ) -> RunPaths:
     logger = setup_logger(name="snake_rl.train", use_rich=use_rich, level=log_level)
 
@@ -48,7 +50,12 @@ def train(
 
         # Only now create the run directory + snapshot.
         paths = make_run_paths(run_name=str(cfg.run.name))
-        save_manifest(run_dir=paths.run_dir, cfg=cfg)
+        save_manifest(
+            run_dir=paths.run_dir,
+            cfg=cfg,
+            hydra_yaml=config_hydra_yaml,
+            validated_cfg=config_validated,
+        )
 
         model = make_or_load_model(
             cfg=cfg,
@@ -79,13 +86,13 @@ def train(
         final_path = paths.checkpoint_dir / "final.zip"
         atomic_save_zip(model=model, dst=final_path)
 
-        if bool(cfg.eval.final.enabled):
-            seed_base = int(cfg.run.seed) + int(cfg.eval.final.seed_offset)
+        if bool(cfg.train.eval.final.enabled):
+            seed_base = int(cfg.run.seed) + int(cfg.train.eval.final.seed_offset)
             metrics = evaluate_model(
                 model=model,
                 cfg=cfg,
-                episodes=int(cfg.eval.final.episodes),
-                deterministic=bool(cfg.eval.final.deterministic),
+                episodes=int(cfg.train.eval.final.episodes),
+                deterministic=bool(cfg.train.eval.final.deterministic),
                 seed_base=seed_base,
                 num_envs=1,
             )

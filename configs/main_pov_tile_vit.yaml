@@ -1,0 +1,9 @@
+defaults:
+  - config
+  - env: pov_tile_id
+  - model: tile_vit
+  - level: small
+  - _self_
+
+run:
+  name: pov_tile_vit_small

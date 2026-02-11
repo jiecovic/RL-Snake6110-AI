@@ -7,6 +7,7 @@ from typing import Any, Optional
 import gymnasium as gym
 from gymnasium import spaces
 
+from snake_rl.config.schema import RewardConfig
 from snake_rl.game.geometry import RelativeDirection
 from snake_rl.game.snakegame import MoveResult, SnakeGame
 
@@ -47,7 +48,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         MoveResult.TIMEOUT: "timeout",
     }
 
-    def __init__(self, game: SnakeGame):
+    def __init__(self, game: SnakeGame, *, reward: RewardConfig | dict[str, Any] | None = None):
         # Avoid cooperative super() because subclasses also mix in PixelObsEnvBase.
         gym.Env.__init__(self)
 
@@ -56,14 +57,26 @@ class BaseSnakeEnv(gym.Env, ABC):
         # 0 = forward, 1 = left, 2 = right
         self.action_space: spaces.Discrete = spaces.Discrete(3)
 
+        if reward is None:
+            reward_cfg = RewardConfig()
+        elif isinstance(reward, RewardConfig):
+            reward_cfg = reward
+        elif isinstance(reward, dict):
+            reward_cfg = RewardConfig(**reward)
+        else:
+            raise TypeError(f"reward must be RewardConfig|dict|None, got {type(reward).__name__}")
+
+        self.reward: RewardConfig = reward_cfg
+
         # Limits and rewards based on level dimensions (RL logic: keep unchanged)
-        self.max_steps: int = int(self.game.max_playable_tiles * 1.3)
+        max_steps = int(self.game.max_playable_tiles * float(self.reward.max_steps_factor))
+        self.max_steps: int = max(1, max_steps)
         self.max_snake_length: int = self.game.max_playable_tiles
 
         # Snake length is runtime state (spawn), so capture it on reset().
         self.initial_snake_length: int = 0
 
-        self.tiny_reward: float = 1.0 / self.max_steps
+        self.tiny_reward: float = float(self.reward.step_penalty_scale) / float(self.max_steps)
 
         self.current_step_since_last_food: int = 0
 
@@ -103,7 +116,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         is_truncated = self.current_step_since_last_food >= self.max_steps
 
         if is_win:
-            reward += 5.0
+            reward += float(self.reward.win_reward)
             terminated = True
             truncated = False
 
@@ -113,17 +126,19 @@ class BaseSnakeEnv(gym.Env, ABC):
             reward -= self.tiny_reward
 
             if is_food:
-                reward += 2.5
-                reward += 1.0 * (1.0 - (self.current_step_since_last_food / self.max_steps))
+                reward += float(self.reward.food_reward)
+                reward += float(self.reward.food_speed_bonus) * (
+                    1.0 - (self.current_step_since_last_food / self.max_steps)
+                )
                 self.current_step_since_last_food = 0
 
             if is_fatal:
-                reward -= 5.0
+                reward -= float(self.reward.fatal_penalty)
 
             terminated = is_fatal
             truncated = not terminated and is_truncated
-            # if truncated:
-            #     reward -= 0.2  # small truncation loss
+            if truncated:
+                reward -= float(self.reward.timeout_penalty)
 
         info: dict[str, Any] = {"move_results": results}
 

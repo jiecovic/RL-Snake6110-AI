@@ -1,0 +1,14 @@
+defaults:
+  - run: standard
+  - env: pov_pixel
+  - model: px_strided_cnn_l1k4
+  - train: ppo
+  - logging: standard
+  - _self_
+
+hydra:
+  run:
+    dir: .
+  job:
+    chdir: false
+  output_subdir: null

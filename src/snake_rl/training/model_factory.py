@@ -98,11 +98,15 @@ def make_or_load_model(
     if resume_path is not None:
         return PPO.load(str(resume_path), env=vec_env)
 
+    algo = str(cfg.train.algo).strip().lower()
+    if algo != "ppo":
+        raise NotImplementedError(f"Unsupported train.algo={algo!r}. Only 'ppo' is supported.")
+
     policy_kwargs = build_policy_kwargs(cfg=cfg, observation_space=vec_env.observation_space)
     policy = _select_policy(vec_env.observation_space)
 
     # Pass-through PPO kwargs from YAML (filtered to ctor signature + mild type coercion).
-    user_ppo_kwargs = _ensure_str_keys(dict(cfg.ppo.params))
+    user_ppo_kwargs = _ensure_str_keys(dict(cfg.train.algo_params))
     user_ppo_kwargs = _coerce_ppo_types(user_ppo_kwargs)
     user_ppo_kwargs = _filter_valid_ppo_kwargs(user_ppo_kwargs)
 

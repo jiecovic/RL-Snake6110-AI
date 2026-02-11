@@ -1,0 +1,6 @@
+defaults:
+  - config
+  - _self_
+
+run:
+  name: pov_pixel_ppo

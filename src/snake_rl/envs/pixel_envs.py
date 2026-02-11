@@ -6,6 +6,7 @@ from typing import Optional
 import numpy as np
 from gymnasium import spaces
 
+from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.base import BaseSnakeEnv
 from snake_rl.envs.pixel_obs import FillFeature, PixelObsEnvBase
 from snake_rl.game.snakegame import SnakeGame
@@ -47,8 +48,14 @@ class GlobalPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
     This mirrors GlobalTileIdEnv behavior for symbolic obs.
     """
 
-    def __init__(self, game: SnakeGame, *, remove_border: bool = True):
-        BaseSnakeEnv.__init__(self, game)
+    def __init__(
+        self,
+        game: SnakeGame,
+        *,
+        remove_border: bool = True,
+        reward: RewardConfig | dict | None = None,
+    ):
+        BaseSnakeEnv.__init__(self, game, reward=reward)
         PixelObsEnvBase.__init__(self, game)
 
         self.remove_border = bool(remove_border)
@@ -77,8 +84,14 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
     Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
     """
 
-    def __init__(self, game: SnakeGame, *, remove_border: bool = True):
-        BaseSnakeEnv.__init__(self, game)
+    def __init__(
+        self,
+        game: SnakeGame,
+        *,
+        remove_border: bool = True,
+        reward: RewardConfig | dict | None = None,
+    ):
+        BaseSnakeEnv.__init__(self, game, reward=reward)
         PixelObsEnvBase.__init__(self, game)
 
         self.remove_border = bool(remove_border)
@@ -136,8 +149,9 @@ class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
         pixel_oob_value: int = 255,
         mask_valid_value: int = 255,
         mask_oob_value: int = 0,
+        reward: RewardConfig | dict | None = None,
     ):
-        BaseSnakeEnv.__init__(self, game)
+        BaseSnakeEnv.__init__(self, game, reward=reward)
         PixelObsEnvBase.__init__(self, game)
 
         self.view_radius = int(view_radius)
@@ -222,8 +236,9 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
         pixel_oob_value: int = 255,
         mask_valid_value: int = 255,
         mask_oob_value: int = 0,
+        reward: RewardConfig | dict | None = None,
     ):
-        BaseSnakeEnv.__init__(self, game)
+        BaseSnakeEnv.__init__(self, game, reward=reward)
         PixelObsEnvBase.__init__(self, game)
 
         self.view_radius = int(view_radius)

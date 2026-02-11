@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 from gymnasium import spaces
 
+from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.base import BaseSnakeEnv
 from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.geometry import Direction, Point
@@ -39,8 +40,9 @@ class GlobalTileIdEnv(BaseSnakeEnv):
         *,
         remove_border: bool = True,
         tile_vocab: str | None = None,
+        reward: RewardConfig | dict | None = None,
     ):
-        BaseSnakeEnv.__init__(self, game)
+        BaseSnakeEnv.__init__(self, game, reward=reward)
 
         self.remove_border = bool(remove_border)
 
@@ -139,8 +141,9 @@ class PovTileIdEnv(BaseSnakeEnv):
         tile_vocab: str | None = None,
         rotate_to_head: bool = True,
         mask_oob: bool = False,
+        reward: RewardConfig | dict | None = None,
     ):
-        BaseSnakeEnv.__init__(self, game)
+        BaseSnakeEnv.__init__(self, game, reward=reward)
 
         self.view_radius_y, self.view_radius_x = parse_view_radius(view_radius)
         self.rotate_to_head = bool(rotate_to_head)

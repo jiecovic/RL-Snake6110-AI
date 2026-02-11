@@ -1,0 +1,3 @@
+observation:
+  frame_stack:
+    n_frames: 4

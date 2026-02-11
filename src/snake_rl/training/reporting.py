@@ -170,6 +170,15 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "width": int(cfg.level.width),
             "food_count": int(cfg.level.food_count),
         },
+        "reward": {
+            "max_steps_factor": float(cfg.reward.max_steps_factor),
+            "win_reward": float(cfg.reward.win_reward),
+            "food_reward": float(cfg.reward.food_reward),
+            "food_speed_bonus": float(cfg.reward.food_speed_bonus),
+            "fatal_penalty": float(cfg.reward.fatal_penalty),
+            "step_penalty_scale": float(cfg.reward.step_penalty_scale),
+            "timeout_penalty": float(cfg.reward.timeout_penalty),
+        },
         "env": {
             "id": str(cfg.env.id),
             "params": env_params,
@@ -188,19 +197,24 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             },
             "net_arch": [int(x) for x in cfg.model.net_arch],
         },
-        "ppo": dict(cfg.ppo.params),
-        "eval": {
-            "intermediate": {
-                "enabled": bool(cfg.eval.intermediate.enabled),
-                "episodes": int(cfg.eval.intermediate.episodes),
-                "deterministic": bool(cfg.eval.intermediate.deterministic),
-                "seed_offset": int(cfg.eval.intermediate.seed_offset),
-            },
-            "final": {
-                "enabled": bool(cfg.eval.final.enabled),
-                "episodes": int(cfg.eval.final.episodes),
-                "deterministic": bool(cfg.eval.final.deterministic),
-                "seed_offset": int(cfg.eval.final.seed_offset),
+        "train": {
+            "algo": str(cfg.train.algo),
+            "algo_params": dict(cfg.train.algo_params),
+            "eval": {
+                "intermediate": {
+                    "enabled": bool(cfg.train.eval.intermediate.enabled),
+                    "episodes": int(cfg.train.eval.intermediate.episodes),
+                    "best_metric": str(cfg.train.eval.intermediate.best_metric),
+                    "deterministic": bool(cfg.train.eval.intermediate.deterministic),
+                    "seed_offset": int(cfg.train.eval.intermediate.seed_offset),
+                },
+                "final": {
+                    "enabled": bool(cfg.train.eval.final.enabled),
+                    "episodes": int(cfg.train.eval.final.episodes),
+                    "best_metric": str(cfg.train.eval.final.best_metric),
+                    "deterministic": bool(cfg.train.eval.final.deterministic),
+                    "seed_offset": int(cfg.train.eval.final.seed_offset),
+                },
             },
         },
     }
@@ -211,13 +225,33 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
     return d
 
 
-def save_manifest(*, run_dir: Path, cfg: TrainConfig) -> None:
+def save_manifest(
+    *,
+    run_dir: Path,
+    cfg: TrainConfig,
+    hydra_yaml: Optional[str] = None,
+    validated_cfg: Optional[dict[str, Any]] = None,
+) -> None:
     """
-    Persist ONLY the snapshot training configuration.
+    Persist the snapshot training configuration plus resolved config artifacts.
 
     config_snapshot.yaml is the single source of truth for reproducing a run.
     """
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    if hydra_yaml:
+        (run_dir / "config_hydra.yaml").write_text(hydra_yaml, encoding="utf-8")
+
+    if validated_cfg is not None:
+        (run_dir / "config_validated.yaml").write_text(
+            yaml.safe_dump(
+                validated_cfg,
+                sort_keys=False,
+                default_flow_style=False,
+                allow_unicode=True,
+            ),
+            encoding="utf-8",
+        )
 
     (run_dir / "config_snapshot.yaml").write_text(
         yaml.safe_dump(

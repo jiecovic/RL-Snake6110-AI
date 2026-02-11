@@ -23,6 +23,30 @@ class LevelConfig:
 
 
 @dataclass(frozen=True)
+class RewardConfig:
+    """
+    Reward shaping configuration for Snake environments.
+
+    Values are interpreted as:
+      - win_reward: added on win
+      - food_reward: added per food eaten
+      - food_speed_bonus: added scaled by speed-to-food (1.0 - steps_since_food/max_steps)
+      - fatal_penalty: subtracted on death
+      - step_penalty_scale: scaled by 1/max_steps and subtracted each step
+      - timeout_penalty: subtracted on timeout truncation
+      - max_steps_factor: multiplier for max_steps = max_playable_tiles * factor
+    """
+
+    max_steps_factor: float = 1.3
+    win_reward: float = 5.0
+    food_reward: float = 2.5
+    food_speed_bonus: float = 1.0
+    fatal_penalty: float = 5.0
+    step_penalty_scale: float = 1.0
+    timeout_penalty: float = 0.0
+
+
+@dataclass(frozen=True)
 class EnvConfig:
     id: str
     # Parameters passed to the selected env constructor (e.g. view_radius for POV envs).
@@ -91,17 +115,6 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
-class PPOConfig:
-    """
-    Pass-through Stable-Baselines3 PPO kwargs.
-
-    Users can add any SB3 PPO kwargs in YAML without changing Python code.
-    Missing keys are fine: SB3 defaults apply.
-    """
-
-    params: dict[str, Any] = field(default_factory=dict)
-
-
 # ---------------------------------------------------------------------------
 # Evaluation configuration
 # ---------------------------------------------------------------------------
@@ -111,6 +124,7 @@ class PPOConfig:
 class EvalPhaseConfig:
     enabled: bool = False
     episodes: int = 10
+    best_metric: str = "mean_reward"
     deterministic: bool = True
     seed_offset: int = 10_000
 
@@ -121,6 +135,18 @@ class EvalConfig:
     final: EvalPhaseConfig = field(
         default_factory=lambda: EvalPhaseConfig(enabled=True, episodes=100, seed_offset=20_000)
     )
+
+
+# ---------------------------------------------------------------------------
+# Training configuration (algorithm + eval)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TrainLoopConfig:
+    algo: str = "ppo"
+    algo_params: dict[str, Any] = field(default_factory=dict)
+    eval: EvalConfig = field(default_factory=EvalConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -135,5 +161,5 @@ class TrainConfig:
     env: EnvConfig
     observation: ObservationConfig
     model: ModelConfig
-    ppo: PPOConfig
-    eval: EvalConfig = field(default_factory=EvalConfig)
+    reward: RewardConfig = field(default_factory=RewardConfig)
+    train: TrainLoopConfig = field(default_factory=TrainLoopConfig)

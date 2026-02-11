@@ -1,71 +1,49 @@
 # src/snake_rl/cli/train.py
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
+from typing import Any, Dict, cast
 
-from snake_rl.config.io import apply_overrides, load_config
+import hydra
+from omegaconf import DictConfig, OmegaConf
+
+from snake_rl.config.pydantic_models import TrainConfigModel
 from snake_rl.training.train_loop import train
 
+CONFIG_DIR = Path(__file__).resolve().parents[3] / "configs"
 
-def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Train PPO on Snake (headless).")
-    p.add_argument("--config", type=str, required=True, help="Path to YAML config.")
-    p.add_argument("--seed", type=int, default=None, help="Override run.seed.")
-    p.add_argument("--num-envs", type=int, default=None, help="Override run.num_envs.")
-    p.add_argument(
-        "--total-timesteps",
-        type=int,
-        default=None,
-        help="Override run.total_timesteps.",
+
+def _pop_logging(data: Dict[str, Any]) -> Dict[str, Any]:
+    raw = data.pop("logging", {})
+    if isinstance(raw, dict):
+        return raw
+    return {}
+
+
+@hydra.main(version_base=None, config_path=str(CONFIG_DIR), config_name="config")
+def main(cfg: DictConfig) -> None:
+    raw_yaml = OmegaConf.to_yaml(cfg, resolve=True)
+    raw = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(raw, dict):
+        raise TypeError(f"Expected hydra config to resolve to dict, got {type(raw).__name__}")
+
+    raw = cast(Dict[str, Any], raw)
+    raw.pop("hydra", None)
+    logging_cfg = _pop_logging(raw)
+
+    model = TrainConfigModel.model_validate(raw)
+    train_cfg = model.to_dataclass()
+
+    no_rich = bool(logging_cfg.get("no_rich", False))
+    log_level = str(logging_cfg.get("level", "INFO"))
+    train(
+        cfg=train_cfg,
+        use_rich=not no_rich,
+        log_level=log_level,
+        config_hydra_yaml=raw_yaml,
+        config_validated=model.model_dump(mode="python"),
     )
-    p.add_argument(
-        "--checkpoint-freq",
-        type=int,
-        default=None,
-        help="Override run.checkpoint_freq.",
-    )
-    p.add_argument(
-        "--resume",
-        type=str,
-        default=None,
-        help=(
-            "Checkpoint .zip path OR a run id OR 'latest:<run_name>'. "
-            "Overrides run.resume_checkpoint."
-        ),
-    )
-
-    # Logging cosmetics (match watch.py ergonomics)
-    p.add_argument(
-        "--no-rich",
-        action="store_true",
-        help="Disable Rich logging (fallback to plain logging).",
-    )
-    p.add_argument(
-        "--log-level",
-        type=str,
-        default="INFO",
-        help="Logging level (DEBUG, INFO, WARNING, ERROR).",
-    )
-
-    return p.parse_args()
-
-
-def main() -> None:
-    args = _parse_args()
-
-    cfg = load_config(Path(args.config))
-    cfg = apply_overrides(
-        cfg,
-        seed=args.seed,
-        num_envs=args.num_envs,
-        total_timesteps=args.total_timesteps,
-        checkpoint_freq=args.checkpoint_freq,
-        resume_checkpoint=args.resume,
-    )
-
-    train(cfg=cfg, use_rich=not bool(args.no_rich), log_level=str(args.log_level))
 
 
 if __name__ == "__main__":
-    main()
+    main()  # type: ignore[call-arg]
