@@ -10,9 +10,9 @@ import yaml
 from stable_baselines3 import PPO
 
 from snake_rl.config.schema import TrainConfig
-from snake_rl.vocab import load_tile_vocab
 from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
 from snake_rl.utils.paths import relpath
+from snake_rl.vocab import load_tile_vocab
 
 
 def _fmt_int(x: int) -> str:

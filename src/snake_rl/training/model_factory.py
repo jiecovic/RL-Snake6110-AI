@@ -76,10 +76,14 @@ def _coerce_ppo_types(d: dict[str, Any]) -> dict[str, Any]:
 
 def _select_policy(observation_space) -> str | type[MultiInputActorCriticPolicy]:
     # SB3 uses "CnnPolicy" for image-like Box spaces and MultiInput* for Dict.
-    # For non-image Box (e.g., symbolic tile-id grids), prefer MlpPolicy (the feature extractor handles structure).
+    # For non-image Box (e.g., symbolic tile-id grids), prefer MlpPolicy
+    # (the feature extractor handles structure).
     if isinstance(observation_space, spaces.Dict):
         return MultiInputActorCriticPolicy
-    if isinstance(observation_space, spaces.Box) and is_image_space(observation_space, check_channels=False):
+    if isinstance(observation_space, spaces.Box) and is_image_space(
+        observation_space,
+        check_channels=False,
+    ):
         return "CnnPolicy"
     return "MlpPolicy"
 

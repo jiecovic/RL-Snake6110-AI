@@ -152,7 +152,12 @@ class TileViTExtractor(BaseFeaturesExtractor):
             nn.init.normal_(self.frame_emb.weight, mean=0.0, std=0.02)
 
         # Shared positional encoding on the tile grid (H,W)
-        self.pos_enc = GridPositionalEncoding(h=self.h, w=self.w, d_model=self.d_model, pos_mode=self.pos_mode)
+        self.pos_enc = GridPositionalEncoding(
+            h=self.h,
+            w=self.w,
+            d_model=self.d_model,
+            pos_mode=self.pos_mode,
+        )
 
         # Optional CLS token.
         self.cls_token: Optional[torch.Tensor] = None
@@ -233,7 +238,9 @@ class TileViTExtractor(BaseFeaturesExtractor):
         elif observations.ndim == 4:
             obs = observations
         else:
-            raise ValueError(f"expected obs [B,H,W] or [B,C,H,W], got shape={tuple(observations.shape)}")
+            raise ValueError(
+                f"expected obs [B,H,W] or [B,C,H,W], got shape={tuple(observations.shape)}"
+            )
 
         b, c, h, w = obs.shape
         if h != self.h or w != self.w:
@@ -252,7 +259,11 @@ class TileViTExtractor(BaseFeaturesExtractor):
 
         # Add optional frame embedding.
         if self.frame_emb is not None:
-            frame_ids = torch.arange(c, device=obs.device, dtype=torch.long).view(1, c, 1)  # [1,C,1]
+            frame_ids = torch.arange(
+                c,
+                device=obs.device,
+                dtype=torch.long,
+            ).view(1, c, 1)  # [1,C,1]
             t = t + self.frame_emb(frame_ids).expand(b, c, self.seq_len, self.d_model)
 
         # Fuse frames into a single token sequence [B, T, D] or [B, C*T, D].

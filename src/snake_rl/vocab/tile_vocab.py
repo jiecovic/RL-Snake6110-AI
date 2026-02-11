@@ -59,7 +59,9 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):
-        raise TypeError(f"Tile vocab YAML top-level must be a dict, got {type(data).__name__}: {path}")
+        raise TypeError(
+            f"Tile vocab YAML top-level must be a dict, got {type(data).__name__}: {path}"
+        )
     return data
 
 

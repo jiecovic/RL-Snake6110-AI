@@ -8,7 +8,7 @@ from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from torch import nn
 
-from snake_rl.models.vits.vit_utils import GridPositionalEncoding, POS_MODES
+from snake_rl.models.vits.vit_utils import POS_MODES, GridPositionalEncoding
 
 
 def _infer_chw(space: spaces.Box) -> Tuple[int, int, int]:
@@ -79,7 +79,8 @@ class TileMLPExtractor(BaseFeaturesExtractor):
       - "mean":        mean over tokens then MLP
 
     Token masking (optional):
-      - if use_token_mask=True, tokens with tile_id == mask_token_id can be excluded from mean pooling
+      - if use_token_mask=True, tokens with tile_id == mask_token_id can be
+        excluded from mean pooling
       - masking affects "mean" only (not flatten)
     """
 
@@ -156,7 +157,12 @@ class TileMLPExtractor(BaseFeaturesExtractor):
             nn.init.normal_(self.frame_emb.weight, mean=0.0, std=0.02)
 
         # shared grid positional encoding (same helper as ViT)
-        self.pos_enc = GridPositionalEncoding(h=self.h, w=self.w, d_model=self.d_emb, pos_mode=self.pos_mode)
+        self.pos_enc = GridPositionalEncoding(
+            h=self.h,
+            w=self.w,
+            d_model=self.d_emb,
+            pos_mode=self.pos_mode,
+        )
 
         self.ln = nn.LayerNorm(self.d_emb) if self.pre_ln else nn.Identity()
 
@@ -213,7 +219,11 @@ class TileMLPExtractor(BaseFeaturesExtractor):
         t = self.tile_emb(ids)  # [B,C,T,D]
 
         if self.frame_emb is not None:
-            frame_ids = torch.arange(c, device=obs.device, dtype=torch.long).view(1, c, 1)  # [1,C,1]
+            frame_ids = torch.arange(
+                c,
+                device=obs.device,
+                dtype=torch.long,
+            ).view(1, c, 1)  # [1,C,1]
             t = t + self.frame_emb(frame_ids).expand(b, c, self.seq_len, self.d_emb)
 
         # fuse frames into token sequence x: [B,T,D] or [B,C*T,D]

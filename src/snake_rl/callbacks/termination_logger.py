@@ -39,7 +39,8 @@ class TerminationCauseLogger(BaseCallback):
             self.logger.record(f"custom/termination_freq/{cause}", count / self.episode_count)
 
         if self.final_scores:
-            self.logger.record("custom/final_score/mean", sum(self.final_scores) / len(self.final_scores))
+            mean_score = sum(self.final_scores) / len(self.final_scores)
+            self.logger.record("custom/final_score/mean", mean_score)
             self.logger.record("custom/final_score/max", max(self.final_scores))
             self.logger.record("custom/final_score/min", min(self.final_scores))
 

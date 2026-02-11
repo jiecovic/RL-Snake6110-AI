@@ -63,9 +63,9 @@ def is_straight_spawn_valid(
       - no duplicates
 
     If require_interior=True (default):
-      - additionally require every cell to be strictly inside the border (not on x=0/x=w-1/y=0/y=h-1)
-        This matches the common "walls are border" convention and avoids awkward spawns if the level
-        ever has non-border holes.
+      - additionally require every cell to be strictly inside the border
+        (not on x=0/x=w-1/y=0/y=h-1). This matches the common "walls are border"
+        convention and avoids awkward spawns if the level ever has non-border holes.
     """
     seen: set[Point] = set()
     for p in cells:

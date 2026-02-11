@@ -30,8 +30,18 @@ class _EvalPaths:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Evaluate a trained Snake PPO checkpoint/model.")
-    p.add_argument("--run", type=str, required=True, help="Run id / run folder name under experiments/")
-    p.add_argument("--which", type=str, default="latest", choices=["auto", "latest", "best", "final"])
+    p.add_argument(
+        "--run",
+        type=str,
+        required=True,
+        help="Run id / run folder name under experiments/",
+    )
+    p.add_argument(
+        "--which",
+        type=str,
+        default="latest",
+        choices=["auto", "latest", "best", "final"],
+    )
     p.add_argument("--episodes", type=int, default=20)
 
     # None => default from config_snapshot.yaml (run.num_envs), clamped to <= episodes
@@ -163,7 +173,11 @@ def main() -> None:
             return
         if reward is None:
             return
-        progress.update(task_id, completed=int(done), description=f"eval (last_return={float(reward):.3g})")
+        progress.update(
+            task_id,
+            completed=int(done),
+            description=f"eval (last_return={float(reward):.3g})",
+        )
 
     try:
         metrics = evaluate_model(

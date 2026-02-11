@@ -1,9 +1,9 @@
 # src/snake_rl/models/vits/px_cnn_vit_extractor.py
 from __future__ import annotations
 
+import importlib
 from typing import Tuple
 
-import importlib
 import numpy as np
 import torch
 from gymnasium import spaces
@@ -12,7 +12,7 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from torch import nn
 
 from snake_rl.models.cnns.base import BaseCNNExtractor
-from snake_rl.models.vits.vit_utils import GridPositionalEncoding, POS_MODES, pool_tokens
+from snake_rl.models.vits.vit_utils import POS_MODES, GridPositionalEncoding, pool_tokens
 
 
 def _infer_chw(space: spaces.Box) -> Tuple[int, int, int]:
@@ -31,7 +31,7 @@ def _available_stems_from_registry() -> list[str]:
     Done lazily to avoid circular imports.
     """
     mod = importlib.import_module("snake_rl.models.registry")
-    reg = getattr(mod, "FEATURE_EXTRACTOR_REGISTRY")
+    reg = mod.FEATURE_EXTRACTOR_REGISTRY
     keys: list[str] = []
     for k, cls in reg.items():
         try:
@@ -50,12 +50,15 @@ def _build_stem_from_key(*, key: str, observation_space: spaces.Box, c_mult: int
     k = str(key).strip().lower()
 
     mod = importlib.import_module("snake_rl.models.registry")
-    reg = getattr(mod, "FEATURE_EXTRACTOR_REGISTRY")
+    reg = mod.FEATURE_EXTRACTOR_REGISTRY
 
     try:
         cls = reg[k]
     except KeyError as e:
-        raise ValueError(f"Unknown cnn_stem={key!r}. Available CNN stems: {_available_stems_from_registry()}") from e
+        raise ValueError(
+            f"Unknown cnn_stem={key!r}. "
+            f"Available CNN stems: {_available_stems_from_registry()}"
+        ) from e
 
     if not isinstance(cls, type) or not issubclass(cls, BaseCNNExtractor):
         raise TypeError(
@@ -100,9 +103,12 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
       - If force_in_proj=False, use Identity when C' == d_model, otherwise apply 1x1 projection.
 
     Notes:
-      - "pov_center" assumes the observation is head-centered (POV); the anchor is token-grid center.
-      - This extractor does not try to infer direction from pixels; rotate egocentrically in the env.
-      - No token masking here (pixels don’t have a natural “mask token”); if you need it, add it upstream.
+      - "pov_center" assumes the observation is head-centered (POV); the anchor is
+        token-grid center.
+      - This extractor does not try to infer direction from pixels; rotate egocentrically
+        in the env.
+      - No token masking here (pixels don't have a natural "mask token"); if you
+        need it, add it upstream.
     """
 
     POS_MODES = POS_MODES
@@ -130,8 +136,15 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
         if not isinstance(observation_space, spaces.Box):
             raise TypeError(f"CnnViTExtractor expects Box, got {type(observation_space)!r}")
 
-        if not is_image_space(observation_space, check_channels=False, normalized_image=bool(normalized_image)):
-            raise ValueError(f"CnnViTExtractor requires an image Box space, got: {observation_space}")
+        if not is_image_space(
+            observation_space,
+            check_channels=False,
+            normalized_image=bool(normalized_image),
+        ):
+            raise ValueError(
+                "CnnViTExtractor requires an image Box space, "
+                f"got: {observation_space}"
+            )
 
         if int(c_mult) < 1:
             raise ValueError("c_mult must be >= 1")
@@ -146,7 +159,9 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
         pooling = str(pooling)
         if pooling not in {"cls", "mean", "max", "cls_mean", "meanmax"}:
             raise ValueError(
-                f"pooling must be one of {{'cls','mean','max','cls_mean','meanmax'}}, got {pooling!r}"
+                "pooling must be one of "
+                "{'cls','mean','max','cls_mean','meanmax'}, "
+                f"got {pooling!r}"
             )
         if pooling in {"cls", "cls_mean"} and not use_cls_token:
             raise ValueError(f"pooling={pooling!r} requires use_cls_token=True")
@@ -183,7 +198,8 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
             y0 = self.stem(x0)
             if not isinstance(y0, torch.Tensor) or y0.ndim != 4:
                 raise RuntimeError(
-                    f"cnn_stem must return [B,C',H',W'], got {type(y0)} shape={getattr(y0, 'shape', None)}"
+                    "cnn_stem must return [B,C',H',W'], "
+                    f"got {type(y0)} shape={getattr(y0, 'shape', None)}"
                 )
             _, c_out, h_out, w_out = y0.shape
 
@@ -209,7 +225,12 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
             self.in_proj = nn.Identity()
 
         # Shared positional encoding over the CNN token grid (H',W')
-        self.pos_enc = GridPositionalEncoding(h=self.h, w=self.w, d_model=self.d_model, pos_mode=self.pos_mode)
+        self.pos_enc = GridPositionalEncoding(
+            h=self.h,
+            w=self.w,
+            d_model=self.d_model,
+            pos_mode=self.pos_mode,
+        )
 
         self.cls_token = None
         if self.use_cls_token:

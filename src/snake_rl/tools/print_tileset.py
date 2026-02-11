@@ -1,8 +1,8 @@
 # src/snake_rl/tools/print_tileset.py
 from __future__ import annotations
 
-from snake_rl.game.tileset import Tileset
 from snake_rl.game.tile_types import TileType
+from snake_rl.game.tileset import Tileset
 
 
 def main() -> None:

@@ -13,18 +13,40 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--config", type=str, required=True, help="Path to YAML config.")
     p.add_argument("--seed", type=int, default=None, help="Override run.seed.")
     p.add_argument("--num-envs", type=int, default=None, help="Override run.num_envs.")
-    p.add_argument("--total-timesteps", type=int, default=None, help="Override run.total_timesteps.")
-    p.add_argument("--checkpoint-freq", type=int, default=None, help="Override run.checkpoint_freq.")
+    p.add_argument(
+        "--total-timesteps",
+        type=int,
+        default=None,
+        help="Override run.total_timesteps.",
+    )
+    p.add_argument(
+        "--checkpoint-freq",
+        type=int,
+        default=None,
+        help="Override run.checkpoint_freq.",
+    )
     p.add_argument(
         "--resume",
         type=str,
         default=None,
-        help="Checkpoint .zip path OR a run id OR 'latest:<run_name>'. Overrides run.resume_checkpoint.",
+        help=(
+            "Checkpoint .zip path OR a run id OR 'latest:<run_name>'. "
+            "Overrides run.resume_checkpoint."
+        ),
     )
 
     # Logging cosmetics (match watch.py ergonomics)
-    p.add_argument("--no-rich", action="store_true", help="Disable Rich logging (fallback to plain logging).")
-    p.add_argument("--log-level", type=str, default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR).")
+    p.add_argument(
+        "--no-rich",
+        action="store_true",
+        help="Disable Rich logging (fallback to plain logging).",
+    )
+    p.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR).",
+    )
 
     return p.parse_args()
 

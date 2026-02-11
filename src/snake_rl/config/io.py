@@ -121,8 +121,14 @@ def _parse_eval_phase(d: Any, ctx: str, defaults: EvalPhaseConfig) -> EvalPhaseC
     if not isinstance(d, dict):
         raise TypeError(f"Expected '{ctx}' to be a dict")
 
-    enabled = defaults.enabled if "enabled" not in d else _as_bool(d["enabled"], f"{ctx}.enabled")
-    episodes = defaults.episodes if "episodes" not in d else _as_int(d["episodes"], f"{ctx}.episodes")
+    enabled = defaults.enabled if "enabled" not in d else _as_bool(
+        d["enabled"],
+        f"{ctx}.enabled",
+    )
+    episodes = defaults.episodes if "episodes" not in d else _as_int(
+        d["episodes"],
+        f"{ctx}.episodes",
+    )
     deterministic = (
         defaults.deterministic
         if "deterministic" not in d
@@ -220,7 +226,10 @@ def _parse_features_extractor(model_d: dict[str, Any]) -> FeaturesExtractorConfi
 
     # New schema path: model.features_extractor.{type, features_dim, params}
     fe_type = str(_require(fe_d, "type", "model.features_extractor"))
-    fe_dim = _as_int(_require(fe_d, "features_dim", "model.features_extractor"), "model.features_extractor.features_dim")
+    fe_dim = _as_int(
+        _require(fe_d, "features_dim", "model.features_extractor"),
+        "model.features_extractor.features_dim",
+    )
 
     params_v = fe_d.get("params", {})
     if params_v is None:
@@ -244,7 +253,10 @@ def parse_config(data: dict[str, Any]) -> TrainConfig:
         num_envs=_as_int(_require(run_d, "num_envs", "run"), "run.num_envs"),
         total_timesteps=_as_int(_require(run_d, "total_timesteps", "run"), "run.total_timesteps"),
         checkpoint_freq=_as_int(_require(run_d, "checkpoint_freq", "run"), "run.checkpoint_freq"),
-        resume_checkpoint=_as_opt_str(run_d.get("resume_checkpoint", None), "run.resume_checkpoint"),
+        resume_checkpoint=_as_opt_str(
+            run_d.get("resume_checkpoint", None),
+            "run.resume_checkpoint",
+        ),
     )
 
     # --- level ---

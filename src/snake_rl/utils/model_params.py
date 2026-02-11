@@ -72,7 +72,8 @@ def format_sb3_param_report(model: Any) -> str:
         pc_feat = _count_params(feat)
         feat_name = type(feat).__name__
         lines.append(
-            f"[params] features_extractor({feat_name}): total={pc_feat.total:,} trainable={pc_feat.trainable:,}"
+            f"[params] features_extractor({feat_name}): "
+            f"total={pc_feat.total:,} trainable={pc_feat.trainable:,}"
         )
 
     # SB3 common: mlp_extractor with policy_net/value_net inside
@@ -80,7 +81,8 @@ def format_sb3_param_report(model: Any) -> str:
     if isinstance(mlp_extractor, torch.nn.Module):
         pc_mlp = _count_params(mlp_extractor)
         lines.append(
-            f"[params] mlp_extractor({type(mlp_extractor).__name__}): total={pc_mlp.total:,} trainable={pc_mlp.trainable:,}"
+            f"[params] mlp_extractor({type(mlp_extractor).__name__}): "
+            f"total={pc_mlp.total:,} trainable={pc_mlp.trainable:,}"
         )
 
         policy_net = _get_attr(mlp_extractor, "policy_net")
@@ -98,6 +100,9 @@ def format_sb3_param_report(model: Any) -> str:
         m = _get_attr(policy, name)
         if isinstance(m, torch.nn.Module):
             pc = _count_params(m)
-            lines.append(f"[params] {name}({type(m).__name__}): total={pc.total:,} trainable={pc.trainable:,}")
+            lines.append(
+                f"[params] {name}({type(m).__name__}): "
+                f"total={pc.total:,} trainable={pc.trainable:,}"
+            )
 
     return "\n".join(lines)

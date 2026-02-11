@@ -109,11 +109,28 @@ def _render_ids_overlay(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Agent-view window helper (spawned by snake-watch).")
+    ap = argparse.ArgumentParser(
+        description="Agent-view window helper (spawned by snake-watch)."
+    )
     ap.add_argument("--caption", type=str, default="Snake (agent view)")
-    ap.add_argument("--max-size", type=int, default=480, help="Max window side in pixels (auto pixel_size).")
-    ap.add_argument("--fps", type=int, default=0, help="If >0, cap render FPS. 0 => render on every update.")
-    ap.add_argument("--pixel-size", type=int, default=0, help="If >0, force this pixel_size (match main window).")
+    ap.add_argument(
+        "--max-size",
+        type=int,
+        default=480,
+        help="Max window side in pixels (auto pixel_size).",
+    )
+    ap.add_argument(
+        "--fps",
+        type=int,
+        default=0,
+        help="If >0, cap render FPS. 0 => render on every update.",
+    )
+    ap.add_argument(
+        "--pixel-size",
+        type=int,
+        default=0,
+        help="If >0, force this pixel_size (match main window).",
+    )
     args = ap.parse_args()
 
     caption = str(args.caption)

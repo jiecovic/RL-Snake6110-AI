@@ -2,8 +2,8 @@
 
 from snake_rl.vocab.tile_vocab import (
     TileVocab,
-    load_tile_vocab,
     list_tile_vocabs,
+    load_tile_vocab,
 )
 
 __all__ = [

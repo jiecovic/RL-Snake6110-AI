@@ -1,11 +1,10 @@
 # src/snake_rl/training/policy_factory.py
 from __future__ import annotations
 
-from typing import Any
 import inspect
+from typing import Any
 
 from gymnasium import spaces
-
 from torch import nn
 
 from snake_rl.config.schema import TrainConfig
@@ -40,7 +39,11 @@ def _get_tiles_box(observation_space: spaces.Space) -> spaces.Box:
     raise ValueError(f"Unsupported observation_space type: {type(observation_space)!r}")
 
 
-def _filter_valid_extractor_kwargs(*, extractor_cls: type, kwargs: dict[str, Any]) -> dict[str, Any]:
+def _filter_valid_extractor_kwargs(
+    *,
+    extractor_cls: type,
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
     """
     Filter kwargs to only those accepted by extractor_cls.__init__.
 
@@ -110,8 +113,8 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
         if user_num_tiles is not None and int(user_num_tiles) != int(inferred_num_tiles):
             raise ValueError(
                 f"Config provided num_tiles={user_num_tiles}, but observation_space implies "
-                f"num_tiles={inferred_num_tiles}. Remove num_tiles from model.features_extractor.params "
-                f"or fix your env/vocab."
+                f"num_tiles={inferred_num_tiles}. "
+                "Remove num_tiles from model.features_extractor.params or fix your env/vocab."
             )
 
         policy_kwargs["features_extractor_kwargs"] = {
@@ -134,13 +137,17 @@ def build_policy_kwargs(*, cfg: TrainConfig, observation_space: spaces.Space) ->
                 f"but got {type(observation_space)!r}."
             )
 
-        # px_* extractors may have legit params (e.g. BaseCNNExtractor: c_mult; PxCnnViTExtractor: cnn_stem/d_model/...).
+        # px_* extractors may have legit params
+        # (e.g. BaseCNNExtractor: c_mult; PxCnnViTExtractor: cnn_stem/d_model/...).
         # Keep it strict by validating against the extractor's __init__ signature (catch typos).
         extractor_kwargs = {
             "features_dim": int(features_dim),
             **extra_params,
         }
-        extractor_kwargs = _filter_valid_extractor_kwargs(extractor_cls=extractor_cls, kwargs=extractor_kwargs)
+        extractor_kwargs = _filter_valid_extractor_kwargs(
+            extractor_cls=extractor_cls,
+            kwargs=extractor_kwargs,
+        )
 
         policy_kwargs["features_extractor_kwargs"] = extractor_kwargs
         return policy_kwargs
