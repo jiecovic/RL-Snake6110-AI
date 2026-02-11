@@ -1,4 +1,4 @@
-# src/snake_rl/models/vits/vit_utils.py
+# src\snake_rl\models\vits\vit_utils.py
 from __future__ import annotations
 
 import torch

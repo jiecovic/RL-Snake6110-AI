@@ -1,4 +1,4 @@
-# src/snake_rl/game/level/placement.py
+# src\snake_rl\game\level\placement.py
 from __future__ import annotations
 
 from collections.abc import Iterable

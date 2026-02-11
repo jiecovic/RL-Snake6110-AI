@@ -1,4 +1,4 @@
-# src/snake_rl/rl/policy_factory.py
+# src\snake_rl\rl\policy_factory.py
 from __future__ import annotations
 
 import inspect

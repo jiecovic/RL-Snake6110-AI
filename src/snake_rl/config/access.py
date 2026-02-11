@@ -1,4 +1,4 @@
-# src/snake_rl/config/access.py
+# src\snake_rl\config\access.py
 from __future__ import annotations
 
 from typing import Any

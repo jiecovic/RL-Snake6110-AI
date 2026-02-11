@@ -1,4 +1,4 @@
-# src/snake_rl/vocab/__init__.py
+# src\snake_rl\vocab\__init__.py
 
 from snake_rl.vocab.tile_vocab import (
     TileVocab,

@@ -1,4 +1,4 @@
-use super::constants::*;
+// rust\src\engine\tiles.rs
 use super::geom::Point;
 
 pub fn head_tile(direction: i8) -> u8 {

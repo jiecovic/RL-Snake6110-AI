@@ -1,4 +1,4 @@
-# src/snake_rl/envs/pixel_envs.py
+# src\snake_rl\envs\pixel_envs.py
 from __future__ import annotations
 
 import numpy as np

@@ -1,4 +1,4 @@
-# src/snake_rl/models/registry.py
+# src\snake_rl\models\registry.py
 from __future__ import annotations
 
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor

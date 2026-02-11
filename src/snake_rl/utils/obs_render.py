@@ -1,4 +1,4 @@
-# src/snake_rl/utils/obs_render.py
+# src\snake_rl\utils\obs_render.py
 from __future__ import annotations
 
 from typing import Any

@@ -1,4 +1,4 @@
-# src/snake_rl/game/tile_types.py
+# src\snake_rl\game\tile_types.py
 from __future__ import annotations
 
 from enum import Enum

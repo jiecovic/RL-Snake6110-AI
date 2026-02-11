@@ -1,4 +1,4 @@
-# src/snake_rl/envs/tile_id_env.py
+# src\snake_rl\envs\tile_id_env.py
 from __future__ import annotations
 
 import numpy as np

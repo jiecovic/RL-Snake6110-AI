@@ -1,4 +1,4 @@
-# src/snake_rl/rl/rust_vec_env.py
+# src\snake_rl\rl\rust_vec_env.py
 from __future__ import annotations
 
 from collections.abc import Iterable

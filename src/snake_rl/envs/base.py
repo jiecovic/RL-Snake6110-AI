@@ -1,4 +1,4 @@
-# src/snake_rl/envs/base.py
+# src\snake_rl\envs\base.py
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

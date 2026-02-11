@@ -1,4 +1,4 @@
-# src/snake_rl/app/eval_app.py
+# src\snake_rl\app\eval_app.py
 from __future__ import annotations
 
 import argparse

@@ -1,4 +1,4 @@
-# src/snake_rl/utils/run_paths.py
+# src\snake_rl\utils\run_paths.py
 from __future__ import annotations
 
 from dataclasses import dataclass

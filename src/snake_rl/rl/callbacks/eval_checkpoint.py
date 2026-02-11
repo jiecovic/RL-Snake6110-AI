@@ -1,4 +1,4 @@
-# src/snake_rl/rl/callbacks/eval_checkpoint.py
+# src\snake_rl\rl\callbacks\eval_checkpoint.py
 from __future__ import annotations
 
 from contextlib import suppress

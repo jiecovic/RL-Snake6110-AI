@@ -1,4 +1,4 @@
-# src/snake_rl/rl/env_factory.py
+# src\snake_rl\rl\env_factory.py
 from __future__ import annotations
 
 from collections.abc import Callable

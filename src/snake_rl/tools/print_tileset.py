@@ -1,4 +1,4 @@
-# src/snake_rl/tools/print_tileset.py
+# src\snake_rl\tools\print_tileset.py
 from __future__ import annotations
 
 from snake_rl.game.tile_types import TileType

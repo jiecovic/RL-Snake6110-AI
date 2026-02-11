@@ -1,4 +1,4 @@
-# src/snake_rl/rl/train_loop.py
+# src\snake_rl\rl\train_loop.py
 from __future__ import annotations
 
 import json

@@ -1,4 +1,4 @@
-# src/snake_rl/cli/play.py
+# src\snake_rl\cli\play.py
 from __future__ import annotations
 
 import argparse

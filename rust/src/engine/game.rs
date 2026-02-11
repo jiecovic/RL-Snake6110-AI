@@ -1,9 +1,9 @@
-use rand::seq::index::sample;
+// rust\src\engine\game.rs
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use super::constants::*;
-use super::geom::{
+use super::geometry::{
     Point, compute_spawn_cells, dir_turn_left, dir_turn_right, dir_vec, idx, idx_to_point,
     is_straight_spawn_valid,
 };

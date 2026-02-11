@@ -1,4 +1,4 @@
-# src/snake_rl/utils/paths.py
+# src\snake_rl\utils\paths.py
 from __future__ import annotations
 
 import os

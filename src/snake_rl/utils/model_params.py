@@ -1,4 +1,4 @@
-# src/snake_rl/utils/model_params.py
+# src\snake_rl\utils\model_params.py
 from __future__ import annotations
 
 from dataclasses import dataclass

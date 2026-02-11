@@ -1,4 +1,4 @@
-# src/snake_rl/tools/agent_view_window.py
+# src\snake_rl\tools\agent_view_window.py
 from __future__ import annotations
 
 import argparse

@@ -1,7 +1,7 @@
-mod game;
+// rust\src\engine\mod.rs
 
 pub mod constants;
-pub mod geom;
+pub mod geometry;
 pub mod tiles;
 
 pub use constants::*;

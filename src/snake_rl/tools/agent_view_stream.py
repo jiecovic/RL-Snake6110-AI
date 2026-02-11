@@ -1,4 +1,4 @@
-# src/snake_rl/tools/agent_view_stream.py
+# src\snake_rl\tools\agent_view_stream.py
 from __future__ import annotations
 
 import pickle

@@ -1,4 +1,4 @@
-# src/snake_rl/game/rendering/pygame/surf.py
+# src\snake_rl\game\rendering\pygame\surf.py
 from __future__ import annotations
 
 import numpy as np

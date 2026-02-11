@@ -1,4 +1,4 @@
-# src/snake_rl/game/rendering/pygame/app.py
+# src\snake_rl\game\rendering\pygame\app.py
 from __future__ import annotations
 
 from collections.abc import Callable

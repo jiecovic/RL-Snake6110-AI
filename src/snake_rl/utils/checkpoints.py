@@ -1,4 +1,4 @@
-# src/snake_rl/utils/checkpoints.py
+# src\snake_rl\utils\checkpoints.py
 from __future__ import annotations
 
 import json

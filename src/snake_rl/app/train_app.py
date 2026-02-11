@@ -1,4 +1,4 @@
-# src/snake_rl/app/train_app.py
+# src\snake_rl\app\train_app.py
 from __future__ import annotations
 
 from pathlib import Path

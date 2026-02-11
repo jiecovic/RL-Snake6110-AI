@@ -1,4 +1,4 @@
-pub const MOVE_OK: u32 = 1 << 0;
+// rust\src\engine\constants.rs
 pub const MOVE_FOOD: u32 = 1 << 1;
 pub const MOVE_HIT_BOUNDARY: u32 = 1 << 2;
 pub const MOVE_HIT_WALL: u32 = 1 << 3;

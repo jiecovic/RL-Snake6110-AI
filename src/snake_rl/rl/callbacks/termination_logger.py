@@ -1,4 +1,4 @@
-# src/snake_rl/rl/callbacks/termination_logger.py
+# src\snake_rl\rl\callbacks\termination_logger.py
 from __future__ import annotations
 
 from collections import defaultdict

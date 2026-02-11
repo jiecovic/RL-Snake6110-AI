@@ -1,4 +1,4 @@
-# src/snake_rl/rl/callbacks_factory.py
+# src\snake_rl\rl\callbacks_factory.py
 from __future__ import annotations
 
 from pathlib import Path

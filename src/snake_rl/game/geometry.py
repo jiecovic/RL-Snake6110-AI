@@ -1,4 +1,4 @@
-# src/snake_rl/game/geometry.py
+# src\snake_rl\game\geometry.py
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,4 +1,4 @@
-# src/snake_rl/game/level/core.py
+# src\snake_rl\game\level\core.py
 from __future__ import annotations
 
 from pathlib import Path

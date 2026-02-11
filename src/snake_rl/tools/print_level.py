@@ -1,4 +1,4 @@
-# src/snake_rl/tools/print_level.py
+# src\snake_rl\tools\print_level.py
 from __future__ import annotations
 
 from snake_rl.game.level import EmptyLevel, TemplateLevel

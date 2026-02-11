@@ -1,4 +1,4 @@
-# src/snake_rl/rl/eval_utils.py
+# src\snake_rl\rl\eval_utils.py
 from __future__ import annotations
 
 from collections.abc import Callable

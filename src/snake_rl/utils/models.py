@@ -1,4 +1,4 @@
-# src/snake_rl/utils/models.py
+# src\snake_rl\utils\models.py
 from __future__ import annotations
 
 from pathlib import Path

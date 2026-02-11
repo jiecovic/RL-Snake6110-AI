@@ -1,4 +1,4 @@
-# src/snake_rl/models/cnns/px_strided_cnn_l3k8.py
+# src\snake_rl\models\cnns\px_strided_cnn_l3k8.py
 from __future__ import annotations
 
 from gymnasium import spaces

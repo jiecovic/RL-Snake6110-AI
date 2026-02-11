@@ -1,4 +1,4 @@
-# src/snake_rl/envs/obs_utils.py
+# src\snake_rl\envs\obs_utils.py
 from __future__ import annotations
 
 from typing import Literal, overload

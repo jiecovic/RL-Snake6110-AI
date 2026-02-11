@@ -1,4 +1,4 @@
-# src/snake_rl/vocab/tile_vocab.py
+# src\snake_rl\vocab\tile_vocab.py
 from __future__ import annotations
 
 import hashlib
