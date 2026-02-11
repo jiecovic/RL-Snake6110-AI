@@ -6,8 +6,8 @@ from gymnasium import spaces
 
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.base import BaseSnakeEnv
+from snake_rl.envs.obs_utils import global_tile_frame, pov_tile_frame_with_valid
 from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.geometry import Direction, Point
 from snake_rl.game.snakegame import SnakeGame
 from snake_rl.game.tile_types import TileType
 from snake_rl.vocab import load_tile_vocab
@@ -90,10 +90,7 @@ class GlobalTileIdEnv(BaseSnakeEnv):
         self._last_class_grid: np.ndarray | None = None
 
     def _get_grid_view(self) -> np.ndarray:
-        g = self.game.tile_grid  # (H,W) uint8, values are TileType.value
-        if not self.remove_border:
-            return g
-        return g[1:-1, 1:-1]
+        return global_tile_frame(tile_grid=self.game.tile_grid, remove_border=self.remove_border)
 
     def get_obs(self):
         raw = self._get_grid_view()
@@ -196,69 +193,15 @@ class PovTileIdEnv(BaseSnakeEnv):
         raw_frame contains TileType.value IDs. OOB is filled with EMPTY in raw_frame;
         valid_mask indicates which entries correspond to real board coordinates.
         """
-        g = self.game.tile_grid  # (H,W) uint8
-
-        head: Point = self.game.get_head_position()
-        hx, hy = int(head.x), int(head.y)
-
-        ry = int(self.view_radius_y)
-        rx = int(self.view_radius_x)
-        vy = 2 * ry + 1
-        vx = 2 * rx + 1
-
-        out = np.full((vy, vx), int(TileType.EMPTY.value), dtype=np.uint8)
-        valid = np.zeros((vy, vx), dtype=np.bool_)
-
-        if not self.rotate_to_head:
-            # World-oriented rectangular crop (ry vertical, rx horizontal).
-            x0, x1 = hx - rx, hx + rx + 1
-            y0, y1 = hy - ry, hy + ry + 1
-
-            gy0 = max(0, y0)
-            gy1 = min(g.shape[0], y1)
-            gx0 = max(0, x0)
-            gx1 = min(g.shape[1], x1)
-
-            oy0 = gy0 - y0
-            oy1 = oy0 + (gy1 - gy0)
-            ox0 = gx0 - x0
-            ox1 = ox0 + (gx1 - gx0)
-
-            out[oy0:oy1, ox0:ox1] = g[gy0:gy1, gx0:gx1]
-            valid[oy0:oy1, ox0:ox1] = True
-            return out, valid
-
-        # Egocentric crop (forward is UP). Shape stays (vy, vx) even if ry != rx.
         d = self.game.direction
         assert d is not None, "SnakeGame.direction is None (did you call game.reset()?)"
-
-        ys = np.arange(-ry, ry + 1, dtype=np.int32)  # ego dy (rows)
-        xs = np.arange(-rx, rx + 1, dtype=np.int32)  # ego dx (cols)
-        dy_ego, dx_ego = np.meshgrid(ys, xs, indexing="ij")  # (vy,vx)
-
-        if d == Direction.UP:
-            dx_w = dx_ego
-            dy_w = dy_ego
-        elif d == Direction.RIGHT:
-            dx_w = -dy_ego
-            dy_w = dx_ego
-        elif d == Direction.DOWN:
-            dx_w = -dx_ego
-            dy_w = -dy_ego
-        elif d == Direction.LEFT:
-            dx_w = dy_ego
-            dy_w = -dx_ego
-        else:
-            dx_w = dx_ego
-            dy_w = dy_ego
-
-        xw = hx + dx_w
-        yw = hy + dy_w
-
-        mask = (xw >= 0) & (xw < g.shape[1]) & (yw >= 0) & (yw < g.shape[0])
-        out[mask] = g[yw[mask], xw[mask]]
-        valid[mask] = True
-        return out, valid
+        return pov_tile_frame_with_valid(
+            tile_grid=self.game.tile_grid,
+            head=self.game.get_head_position(),
+            direction=d,
+            view_radius=(self.view_radius_y, self.view_radius_x),
+            rotate_to_head=bool(self.rotate_to_head),
+        )
 
     def get_obs(self):
         raw, valid = self._pov_tile_frame_with_valid()

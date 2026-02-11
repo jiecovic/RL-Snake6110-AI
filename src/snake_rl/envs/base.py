@@ -22,13 +22,13 @@ class BaseSnakeEnv(gym.Env, ABC):
     trigger mixin __init__ methods via MRO and break when they require args.
     """
 
-    FATAL_RESULTS = {
-        MoveResult.HIT_SELF,
-        MoveResult.HIT_WALL,
-        MoveResult.HIT_BOUNDARY,
-        MoveResult.GAME_NOT_RUNNING,
-        MoveResult.WIN,
-    }
+    FATAL_MASK = (
+        MoveResult.HIT_SELF
+        | MoveResult.HIT_WALL
+        | MoveResult.HIT_BOUNDARY
+        | MoveResult.GAME_NOT_RUNNING
+        | MoveResult.WIN
+    )
 
     TERMINATION_PRIORITY = [
         MoveResult.WIN,
@@ -85,10 +85,8 @@ class BaseSnakeEnv(gym.Env, ABC):
 
         # Bind the game's RNG to the env RNG. This makes seeding robust and
         # consistent with Gymnasium/SB3 behavior (per-env streams).
-        self.game.set_rng(self.np_random)
-
-        self.game.reset()
-        self.initial_snake_length = len(self.game.snake)
+        self.game.reset(seed=seed)
+        self.initial_snake_length = int(self.game.snake_len)
 
         self.current_step_since_last_food = 0
 
@@ -110,9 +108,9 @@ class BaseSnakeEnv(gym.Env, ABC):
 
         self.current_step_since_last_food += 1
 
-        is_win = MoveResult.WIN in results
-        is_fatal = any(r in self.FATAL_RESULTS for r in results)
-        is_food = MoveResult.FOOD_EATEN in results
+        is_win = bool(results & MoveResult.WIN)
+        is_fatal = bool(results & self.FATAL_MASK)
+        is_food = bool(results & MoveResult.FOOD_EATEN)
         is_truncated = self.current_step_since_last_food >= self.max_steps
 
         if is_win:
@@ -140,11 +138,11 @@ class BaseSnakeEnv(gym.Env, ABC):
             if truncated:
                 reward -= float(self.reward.timeout_penalty)
 
-        info: dict[str, Any] = {"move_results": results}
+        info: dict[str, Any] = {"move_results": int(results)}
 
         if terminated or truncated:
             result_for_cause: MoveResult | None = next(
-                (r for r in self.TERMINATION_PRIORITY if r in results),
+                (r for r in self.TERMINATION_PRIORITY if (results & r)),
                 None,
             )
             if truncated and result_for_cause is None:

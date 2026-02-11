@@ -11,8 +11,11 @@ from gymnasium import Env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-from snake_rl.config.access import get_env_id, get_env_params, get_frame_stack_n
+from snake_rl.config.access import cfg_get, get_env_id, get_env_params, get_frame_stack_n
+from snake_rl.config.schema import RewardConfig
+from snake_rl.game.level import EmptyLevel
 from snake_rl.rl.env_factory import apply_frame_stack, make_single_env
+from snake_rl.rl.rust_vec_env import RustVecEnv
 from snake_rl.utils.obs import sanitize_observation
 
 
@@ -45,16 +48,43 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
     if len(seeds) <= 0:
         raise ValueError("seeds must be non-empty")
 
-    env_fns = [make_single_env(cfg=cfg, seed=int(s)) for s in seeds]
-    env_fns = cast(list[Callable[[], Env]], env_fns)
-    if len(env_fns) == 1:
-        vec: VecEnv = DummyVecEnv(env_fns)
+    env_params = get_env_params(cfg)
+    engine = str(env_params.get("engine", "python")).lower()
+
+    if engine == "rust":
+        reward = _get_reward_from_cfg(cfg)
+        level = EmptyLevel(
+            height=int(cfg_get(cfg, "level.height")),
+            width=int(cfg_get(cfg, "level.width")),
+        )
+        vec: VecEnv = RustVecEnv(
+            env_id=str(get_env_id(cfg)),
+            env_params=dict(env_params),
+            level=level,
+            food_count=int(cfg_get(cfg, "level.food_count")),
+            reward=reward,
+            num_envs=len(seeds),
+            seeds=seeds,
+        )
     else:
-        vec = SubprocVecEnv(env_fns)
+        env_fns = [make_single_env(cfg=cfg, seed=int(s)) for s in seeds]
+        env_fns = cast(list[Callable[[], Env]], env_fns)
+        vec = DummyVecEnv(env_fns) if len(env_fns) == 1 else SubprocVecEnv(env_fns)
 
     n_stack = get_frame_stack_n(cfg)
     vec = apply_frame_stack(vec_env=vec, n_stack=n_stack, pixel_key=str(pixel_key))
     return vec
+
+
+def _get_reward_from_cfg(cfg: Any) -> RewardConfig:
+    reward = getattr(cfg, "reward", None) if not isinstance(cfg, dict) else cfg.get("reward")
+    if reward is None:
+        return RewardConfig()
+    if isinstance(reward, RewardConfig):
+        return reward
+    if isinstance(reward, dict):
+        return RewardConfig(**reward)
+    raise TypeError(f"cfg.reward must be a dict or RewardConfig, got {type(reward).__name__}")
 
 
 def _obs_set(obs: Any, idx: int, value: Any) -> Any:

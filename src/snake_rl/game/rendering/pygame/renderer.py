@@ -23,7 +23,7 @@ class PygameRenderer:
         # HUD
         score_text = f"Score: {game.score}"
         fps_text = f"FPS: {ctx.clock.get_fps():.1f}"
-        empty_text = f"Empty: {len(game.spawnable_tiles)}"
+        empty_text = f"Empty: {int(game.spawnable_count)}"
         combined = f"{score_text}    {fps_text}    {empty_text}"
 
         info_surf = ctx.font.render(combined, True, (230, 230, 230))

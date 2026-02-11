@@ -1,50 +1,32 @@
 # src/snake_rl/game/snakegame.py
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum, auto
+from enum import IntFlag
 
-import numpy as np
-
-from snake_rl.game.geometry import DIRECTION_TO_POINT, Direction, Point, RelativeDirection
+from snake_rl.core.game import RustGame
+from snake_rl.game.geometry import Direction, Point, RelativeDirection
 from snake_rl.game.level import BaseLevel
-from snake_rl.game.level.placement import compute_spawn_cells, is_straight_spawn_valid
-from snake_rl.game.tile_types import TileType
 from snake_rl.game.tileset import Tileset
 
 
-class MoveResult(Enum):
-    OK = auto()
-    FOOD_EATEN = auto()
-    HIT_BOUNDARY = auto()
-    HIT_WALL = auto()
-    HIT_SELF = auto()
-    GAME_NOT_RUNNING = auto()
-    TIMEOUT = auto()
-    WIN = auto()
-
-
-@dataclass(frozen=True, slots=True)
-class _MoveDelta:
-    old_head: Point
-    old_dir: Direction
-    old_tail: Point
-    new_head: Point
-    new_dir: Direction
-    ate_food: bool
-    food_before: set[Point]
-    food_after: set[Point]
+class MoveResult(IntFlag):
+    OK = 1 << 0
+    FOOD_EATEN = 1 << 1
+    HIT_BOUNDARY = 1 << 2
+    HIT_WALL = 1 << 3
+    HIT_SELF = 1 << 4
+    GAME_NOT_RUNNING = 1 << 5
+    TIMEOUT = 1 << 6
+    WIN = 1 << 7
 
 
 class SnakeGame:
     """
-    Core game state + rules (headless, RL-safe).
+    Rust-backed core game state + rules (headless, RL-safe).
 
     RNG contract
-    - The env injects Gymnasium's per-env RNG via set_rng(env.np_random) inside env.reset().
-      This is the preferred training behavior.
-    - Standalone usage can pass an rng object (np.random.Generator) to __init__.
-    - This class does NOT store or accept integer seeds. Seed ownership belongs to the env.
+    - Rust owns all randomness.
+    - env.reset(seed) passes a seed to Rust; resets without seed continue RNG stream.
     """
 
     def __init__(
@@ -52,493 +34,75 @@ class SnakeGame:
         level: BaseLevel,
         food_count: int | None = None,
         tileset: Tileset | None = None,
-        rng: np.random.Generator | None = None,
+        seed: int | None = None,
     ):
-        # === Static config ===
-        self.level = level
-        self.width = level.width
-        self.height = level.height
-        self.tileset = tileset or Tileset()
-
-        # === RNG ===
-        # Default is fine for standalone construction; env will override on reset().
-        self.rng: np.random.Generator = rng if rng is not None else np.random.default_rng()
-
-        # === Buffers ===
-        self.pixel_buffer: np.ndarray = np.zeros((1, 1), dtype=np.uint8)
-        self.tile_grid: np.ndarray = np.zeros((self.height, self.width), dtype=np.uint8)
-
-        # === Walls (static) ===
-        self.wall_tiles: list[tuple[Point, TileType]] = level.get_wall_tiles()
-        self.wall_positions: set[Point] = {pos for pos, _ in self.wall_tiles}
-
-        # === Food policy ===
         if food_count is None:
             raise ValueError("food_count must be provided (level does not encode food).")
-        self.target_food_count: int = int(food_count)
-        if self.target_food_count < 0:
-            raise ValueError(f"food_count must be >= 0, got {food_count}")
-
-        # === Runtime state ===
-        self.spawnable_tiles: set[Point] = set()
-        self.snake: list[Point] = []
-        self.snake_set: set[Point] = set()
-        self.food: list[Point] = []
-        self.direction: Direction | None = None
-
-        self.score: int = 0
-        self.running: bool = True
-
-        # Precomputed tiles for fast blits
-        self._tile_cache: dict[TileType, np.ndarray] = {}
-        tile_size = int(self.tileset.tile_size)
-        self._empty_tile: np.ndarray = np.zeros((tile_size, tile_size), dtype=np.uint8)
-
-        # IMPORTANT:
-        # Do NOT auto-reset here. The environment should control reset timing and RNG injection.
-        # Callers must call reset() explicitly.
-
-    def set_rng(self, rng: np.random.Generator) -> None:
-        """
-        Inject an RNG (typically Gymnasium's env.np_random).
-        This is the preferred way to control randomness during training.
-        """
-        self.rng = rng
-
-    def reset(self) -> None:
-        """Reinitialize runtime state and rebuild buffers."""
-        self.score = 0
-        self.running = True
-        self.food = []
-        self.snake = []
-        self.snake_set = set()
-        self.direction = None
-
-        # Spawnable tiles = any non-wall position; subtract snake/food as we place them.
-        self.spawnable_tiles = {
-            Point(x, y)
-            for y in range(self.height)
-            for x in range(self.width)
-            if Point(x, y) not in self.wall_positions
-        }
-
-        # 1) spawn snake from level.spawn
-        self._spawn_snake_from_level()
-
-        # 2) remove snake cells from spawnables
-        self.spawnable_tiles -= self.snake_set
-
-        # 3) spawn food
-        self._spawn_food()
-
-        # 4) bookkeeping + buffers
-        self._build_tile_cache()
-        self._rebuild_tile_grid_full()
-        self._render_full_from_tile_grid()
-
-    def _spawn_snake_from_level(self) -> None:
-        """
-        Initialize snake state from level.spawn.
-
-        Uses level.spawn:
-          - x/y (optional; defaults to center)
-          - length (required >= 2)
-          - direction (optional; default RIGHT unless random_direction)
-          - random_direction (optional)
-          - jitter (optional; expands candidate head positions)
-        """
-        sp = self.level.spawn
-
-        if sp.length < 2:
-            raise ValueError(f"spawn.length must be >= 2, got {sp.length}")
-
-        # direction selection
-        if sp.random_direction:
-            dirs = [Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT]
-            direction = dirs[int(self.rng.integers(0, len(dirs)))]
-        else:
-            direction = sp.direction if sp.direction is not None else Direction.RIGHT
-
-        # base head position
-        if sp.x is None or sp.y is None:
-            base = Point(self.width // 2, self.height // 2)
-        else:
-            base = Point(int(sp.x), int(sp.y))
-
-        jitter = int(sp.jitter)
-        if jitter < 0:
-            raise ValueError(f"spawn.jitter must be >= 0, got {sp.jitter}")
-
-        # candidate generation: base -> jittered -> random
-        candidates: list[Point] = [base]
-
-        if jitter > 0:
-            for _ in range(64):
-                dx = int(self.rng.integers(-jitter, jitter + 1))
-                dy = int(self.rng.integers(-jitter, jitter + 1))
-                candidates.append(Point(base.x + dx, base.y + dy))
-
-        for _ in range(64):
-            candidates.append(
-                Point(
-                    int(self.rng.integers(0, self.width)),
-                    int(self.rng.integers(0, self.height)),
-                )
-            )
-
-        # pick first valid
-        for head in candidates:
-            cells = compute_spawn_cells(head_pos=head, length=sp.length, direction=direction)
-            if is_straight_spawn_valid(
-                cells=cells,
-                width=self.width,
-                height=self.height,
-                wall_positions=self.wall_positions,
-            ):
-                self.snake = cells
-                self.snake_set = set(cells)
-                self.direction = direction
-                return
-
-        raise ValueError(
-            "Could not find a valid snake spawn. "
-            "Check spawn settings (x/y/direction/length/jitter) and level walls. "
-            f"spawn={sp}"
+        self._impl = RustGame(
+            level,
+            food_count=int(food_count),
+            tileset=tileset,
+            seed=seed,
         )
+
+    def reset(self, seed: int | None = None) -> None:
+        self._impl.reset(seed=seed)
+
+    def move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> MoveResult:
+        mask = self._impl.move(rel_dir)
+        return MoveResult(int(mask))
+
+    # ---- properties used by envs/renderers ----
+
+    @property
+    def width(self) -> int:
+        return self._impl.width
+
+    @property
+    def height(self) -> int:
+        return self._impl.height
+
+    @property
+    def tileset(self) -> Tileset:
+        return self._impl.tileset
+
+    @property
+    def tile_grid(self):
+        return self._impl.tile_grid
+
+    @property
+    def pixel_buffer(self):
+        return self._impl.pixel_buffer
+
+    @property
+    def direction(self) -> Direction | None:
+        return self._impl.direction
+
+    @property
+    def score(self) -> int:
+        return self._impl.score
+
+    @property
+    def running(self) -> bool:
+        return self._impl.running
+
+    @property
+    def snake_len(self) -> int:
+        return self._impl.snake_len
+
+    def get_head_position(self) -> Point:
+        return self._impl.get_head_position()
+
+    def get_food_positions(self) -> list[Point]:
+        return self._impl.get_food_positions()
 
     @property
     def max_playable_tiles(self) -> int:
-        return self.width * self.height - len(self.wall_positions)
+        return self._impl.max_playable_tiles
 
     @property
-    def won(self) -> bool:
-        return len(self.snake) >= self.max_playable_tiles
+    def spawnable_count(self) -> int:
+        return self._impl.spawnable_count
 
-    def get_head_position(self) -> Point:
-        return self.snake[0]
 
-    def get_food_positions(self) -> list[Point]:
-        return self.food.copy()
-
-    def _spawn_food(self) -> int:
-        need = self.target_food_count - len(self.food)
-        if need <= 0 or not self.spawnable_tiles:
-            return 0
-
-        cands = list(self.spawnable_tiles)
-        k = min(int(need), len(cands))
-        if k <= 0:
-            return 0
-
-        # Sample without replacement via indices (deterministic under rng)
-        idx = self.rng.choice(len(cands), size=k, replace=False)
-        for i in np.asarray(idx).tolist():
-            p = cands[int(i)]
-            self.food.append(p)
-            self.spawnable_tiles.remove(p)
-        return int(k)
-
-    # -------------------------------------------------------------------------
-    # Rendering plumbing (tile cache -> tile_grid -> pixel_buffer)
-    # -------------------------------------------------------------------------
-
-    def _build_tile_cache(self) -> None:
-        """
-        Precompute TileType -> (tile_size, tile_size) uint8 tile.
-
-        Notes
-        - Missing TileType entries in the tileset YAML render as empty.
-        - Binary tiles (0/1) are promoted to (0/255) once here.
-        """
-        self._tile_cache.clear()
-        for tt in TileType:
-            if tt == TileType.EMPTY:
-                continue
-            if tt in self.tileset:
-                tile = np.array(self.tileset[tt], dtype=np.uint8)
-                if tile.size and int(tile.max()) <= 1:
-                    tile = (tile * np.uint8(255)).astype(np.uint8, copy=False)
-                self._tile_cache[tt] = tile
-
-        td = int(self.tileset.tile_size)
-        if self._empty_tile.shape != (td, td):
-            self._empty_tile = np.zeros((td, td), dtype=np.uint8)
-
-    def _tile_at(self, tt: TileType) -> np.ndarray:
-        if tt == TileType.EMPTY:
-            return self._empty_tile
-        return self._tile_cache.get(tt, self._empty_tile)
-
-    def _blit_cell(self, p: Point, tt: TileType) -> None:
-        td = int(self.tileset.tile_size)
-        py, px = p.y * td, p.x * td
-        self.pixel_buffer[py : py + td, px : px + td] = self._tile_at(tt)
-
-    def _render_full_from_tile_grid(self) -> None:
-        td = int(self.tileset.tile_size)
-        ph, pw = self.height * td, self.width * td
-        self.pixel_buffer = np.zeros((ph, pw), dtype=np.uint8)
-
-        ys, xs = np.nonzero(self.tile_grid)
-        for y, x in zip(ys.tolist(), xs.tolist(), strict=False):
-            tt = TileType(int(self.tile_grid[y, x]))
-            self._blit_cell(Point(int(x), int(y)), tt)
-
-    def _rebuild_tile_grid_full(self) -> None:
-        self.tile_grid.fill(int(TileType.EMPTY.value))
-
-        # walls
-        for pos, tile_type in self.wall_tiles:
-            self.tile_grid[pos.y, pos.x] = int(tile_type.value)
-
-        # food
-        for p in self.food:
-            self.tile_grid[p.y, p.x] = int(TileType.FOOD.value)
-
-        # snake
-        self._paint_full_snake_into_grid()
-
-    def _paint_full_snake_into_grid(self) -> None:
-        if not self.snake:
-            return
-        if self.direction is None:
-            raise RuntimeError("Snake direction is not initialized (did you call reset?)")
-
-        h = self.snake[0]
-        self.tile_grid[h.y, h.x] = int(self._head_tile(self.direction).value)
-
-        if len(self.snake) == 1:
-            return
-
-        for i in range(1, len(self.snake) - 1):
-            prev = self.snake[i - 1]  # closer to head
-            curr = self.snake[i]
-            nxt = self.snake[i + 1]  # closer to tail
-            self.tile_grid[curr.y, curr.x] = int(self._body_tile(prev, curr, nxt).value)
-
-        tail = self.snake[-1]
-        prev = self.snake[-2]
-        self.tile_grid[tail.y, tail.x] = int(self._tail_tile(prev, tail).value)
-
-    # -------------------------------------------------------------------------
-    # TileType synthesis for snake geometry
-    # -------------------------------------------------------------------------
-
-    def _head_tile(self, d: Direction) -> TileType:
-        return {
-            Direction.UP: TileType.SNAKE_HEAD_UP,
-            Direction.DOWN: TileType.SNAKE_HEAD_DOWN,
-            Direction.LEFT: TileType.SNAKE_HEAD_LEFT,
-            Direction.RIGHT: TileType.SNAKE_HEAD_RIGHT,
-        }[d]
-
-    def _tail_tile(self, prev: Point, tail: Point) -> TileType:
-        if prev.x < tail.x:
-            return TileType.SNAKE_TAIL_RIGHT
-        if prev.x > tail.x:
-            return TileType.SNAKE_TAIL_LEFT
-        if prev.y < tail.y:
-            return TileType.SNAKE_TAIL_DOWN
-        if prev.y > tail.y:
-            return TileType.SNAKE_TAIL_UP
-        raise RuntimeError(f"Could not determine tail direction: prev={prev}, tail={tail}")
-
-    def _body_tile(self, prev: Point, curr: Point, nxt: Point) -> TileType:
-        """
-        Body tile resolver for `curr`.
-
-        Convention
-        - prev is closer to head, nxt is closer to tail.
-        - Straight segments encode direction as tail->head flow (nxt -> prev).
-        """
-        # Straight vertical
-        if prev.x == nxt.x:
-            if prev.y < nxt.y:
-                return TileType.SNAKE_BODY_VERTICAL_UP
-            if prev.y > nxt.y:
-                return TileType.SNAKE_BODY_VERTICAL_DOWN
-            raise RuntimeError(f"Degenerate vertical body segment: prev={prev}, nxt={nxt}")
-
-        # Straight horizontal
-        if prev.y == nxt.y:
-            if prev.x < nxt.x:
-                return TileType.SNAKE_BODY_HORIZONTAL_LEFT
-            if prev.x > nxt.x:
-                return TileType.SNAKE_BODY_HORIZONTAL_RIGHT
-            raise RuntimeError(f"Degenerate horizontal body segment: prev={prev}, nxt={nxt}")
-
-        # Corners
-        if (prev.x < curr.x and nxt.y > curr.y) or (nxt.x < curr.x and prev.y > curr.y):
-            return TileType.SNAKE_BODY_TR
-        if (prev.x > curr.x and nxt.y > curr.y) or (nxt.x > curr.x and prev.y > curr.y):
-            return TileType.SNAKE_BODY_TL
-        if (prev.x < curr.x and nxt.y < curr.y) or (nxt.x < curr.x and prev.y < curr.y):
-            return TileType.SNAKE_BODY_BR
-        if (prev.x > curr.x and nxt.y < curr.y) or (nxt.x > curr.x and prev.y < curr.y):
-            return TileType.SNAKE_BODY_BL
-
-        raise RuntimeError(
-            f"Could not determine body tile type: prev={prev}, curr={curr}, next={nxt}"
-        )
-
-    # -------------------------------------------------------------------------
-    # Incremental updates (single source of truth for buffer correctness)
-    # -------------------------------------------------------------------------
-
-    def _apply_incremental_updates(self, delta: _MoveDelta) -> None:
-        changed: list[Point] = []
-
-        # Food diffs
-        added_food = delta.food_after - delta.food_before
-        removed_food = delta.food_before - delta.food_after
-
-        for p in removed_food:
-            self.tile_grid[p.y, p.x] = int(TileType.EMPTY.value)
-            changed.append(p)
-
-        for p in added_food:
-            self.tile_grid[p.y, p.x] = int(TileType.FOOD.value)
-            changed.append(p)
-
-        # Tail cell cleared only on non-eat moves
-        if not delta.ate_food:
-            self.tile_grid[delta.old_tail.y, delta.old_tail.x] = int(TileType.EMPTY.value)
-            changed.append(delta.old_tail)
-
-        # New head
-        self.tile_grid[delta.new_head.y, delta.new_head.x] = int(
-            self._head_tile(delta.new_dir).value
-        )
-        changed.append(delta.new_head)
-
-        # Old head becomes body (length >= 3 after move)
-        if len(self.snake) >= 3:
-            curr = self.snake[1]  # old head position
-            prev = self.snake[0]  # new head position
-            nxt = self.snake[2]
-            self.tile_grid[curr.y, curr.x] = int(self._body_tile(prev, curr, nxt).value)
-            changed.append(curr)
-
-        # Tail + pre-tail refresh
-        if len(self.snake) >= 2:
-            tail = self.snake[-1]
-            prev_tail = self.snake[-2]
-            self.tile_grid[tail.y, tail.x] = int(self._tail_tile(prev_tail, tail).value)
-            changed.append(tail)
-
-            if len(self.snake) >= 3:
-                curr = self.snake[-2]
-                prev = self.snake[-3]
-                nxt = self.snake[-1]
-                self.tile_grid[curr.y, curr.x] = int(self._body_tile(prev, curr, nxt).value)
-                changed.append(curr)
-
-        if not changed:
-            return
-
-        # Dedup + blit
-        seen: set[Point] = set()
-        for p in changed:
-            if p in seen:
-                continue
-            seen.add(p)
-            tt = TileType(int(self.tile_grid[p.y, p.x]))
-            self._blit_cell(p, tt)
-
-    # -------------------------------------------------------------------------
-    # Move logic (state transitions) + incremental rendering hook
-    # -------------------------------------------------------------------------
-
-    def move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> list[MoveResult]:
-        if self.direction is None:
-            raise RuntimeError("Snake direction is not initialized (did you call reset?)")
-        if not self.snake:
-            raise RuntimeError("Snake not initialized (did you call reset?)")
-
-        old_head = self.snake[0]
-        old_tail = self.snake[-1]
-        old_dir = self.direction
-        food_before = set(self.food)
-
-        results = self._move(rel_dir)
-
-        # No OK => no state advance => no incremental update
-        if MoveResult.OK not in results:
-            return results
-
-        new_dir = self.direction if self.direction is not None else old_dir
-        new_head = self.snake[0]
-        ate_food = MoveResult.FOOD_EATEN in results
-        food_after = set(self.food)
-
-        delta = _MoveDelta(
-            old_head=old_head,
-            old_dir=old_dir,
-            old_tail=old_tail,
-            new_head=new_head,
-            new_dir=new_dir,
-            ate_food=ate_food,
-            food_before=food_before,
-            food_after=food_after,
-        )
-
-        self._apply_incremental_updates(delta)
-        return results
-
-    def _move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> list[MoveResult]:
-        if not self.running:
-            return [MoveResult.GAME_NOT_RUNNING]
-
-        if self.direction is None:
-            raise RuntimeError("Snake direction is not initialized (did you call reset?)")
-
-        results: list[MoveResult] = []
-
-        # 1) choose new direction
-        new_direction = self.direction
-        if rel_dir == RelativeDirection.LEFT:
-            new_direction = self.direction.turn_left()
-        elif rel_dir == RelativeDirection.RIGHT:
-            new_direction = self.direction.turn_right()
-
-        vec = DIRECTION_TO_POINT[new_direction]
-        new_head = Point(self.snake[0].x + vec.x, self.snake[0].y + vec.y)
-
-        # 2) collision checks (early return => no state advance)
-        if not (0 <= new_head.x < self.width and 0 <= new_head.y < self.height):
-            self.running = False
-            return [MoveResult.HIT_BOUNDARY]
-
-        if new_head in self.wall_positions:
-            self.running = False
-            return [MoveResult.HIT_WALL]
-
-        if new_head in self.snake_set:
-            self.running = False
-            return [MoveResult.HIT_SELF]
-
-        # 3) apply move
-        self.direction = new_direction
-        self.snake.insert(0, new_head)
-        self.snake_set.add(new_head)
-
-        self.spawnable_tiles.discard(new_head)
-
-        # 4) eat or tail pop
-        if new_head in self.food:
-            self.food.remove(new_head)
-            self.score += 1
-            results.append(MoveResult.FOOD_EATEN)
-
-            self._spawn_food()
-
-            if len(self.food) == 0 and self.won:
-                self.running = False
-                results.append(MoveResult.WIN)
-        else:
-            tail = self.snake.pop()
-            self.snake_set.remove(tail)
-            self.spawnable_tiles.add(tail)
-
-        results.insert(0, MoveResult.OK)
-        return results
+__all__ = ["MoveResult", "SnakeGame"]

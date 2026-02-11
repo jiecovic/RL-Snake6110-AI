@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.5"]
+build-backend = "maturin"
 
 [project]
 name = "snake-rl"
@@ -31,7 +31,13 @@ viz = [
 dev = [
     "ruff>=0.6.4",
     "pyright>=1.1.386",
+    "maturin>=1.5",
 ]
+
+[tool.maturin]
+python-source = "src"
+module-name = "snake_rl._core"
+manifest-path = "rust/Cargo.toml"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

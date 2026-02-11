@@ -19,6 +19,7 @@ from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.registry import get_env_cls
 from snake_rl.game.level import EmptyLevel
 from snake_rl.game.snakegame import SnakeGame
+from snake_rl.rl.rust_vec_env import RustVecEnv
 
 
 def _get_reward_from_cfg(cfg: Any) -> RewardConfig:
@@ -184,9 +185,8 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
     Factory for a single Snake environment instance.
 
     Seeding model:
-      - The Gymnasium environment owns the RNG and is seeded via env.reset(seed=...).
-      - The SnakeGame instance does not manage seeds; it consumes the env RNG
-        injected during env.reset().
+      - Gymnasium env.reset(seed=...) passes a deterministic seed into the Rust core.
+      - Subsequent resets without a seed continue the Rust RNG stream.
     """
     env_id = cfg_get(cfg, "env.id", None)
     if env_id is None:
@@ -209,6 +209,7 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
         )
 
         env_params = get_env_params(cfg)
+        env_params.pop("engine", None)
         reward_cfg = _get_reward_from_cfg(cfg)
         if "reward" in env_params:
             raise ValueError("env.params must not contain 'reward'; use top-level reward config.")
@@ -234,7 +235,7 @@ def make_vec_env(*, cfg: Any):
       - A single master seed is expanded into independent per-env streams
         using numpy.random.SeedSequence.
       - Each environment receives exactly one deterministic seed at creation.
-      - Subsequent episode resets continue the RNG stream (no reseeding).
+      - Subsequent episode resets continue the Rust RNG stream (no reseeding).
     """
     base_seed = require_int(cfg, "run.seed")
     num_envs = require_int(cfg, "run.num_envs")
@@ -242,6 +243,36 @@ def make_vec_env(*, cfg: Any):
     # Derive independent child seeds from a single master seed
     ss = np.random.SeedSequence(base_seed)
     child_seeds = [int(s.generate_state(1, dtype=np.uint32)[0]) for s in ss.spawn(num_envs)]
+
+    env_params = get_env_params(cfg)
+    engine = str(env_params.get("engine", "python")).lower()
+    env_params_clean = dict(env_params)
+    env_params_clean.pop("engine", None)
+
+    if engine == "rust":
+        level = EmptyLevel(
+            height=require_int(cfg, "level.height"),
+            width=require_int(cfg, "level.width"),
+        )
+        reward_cfg = _get_reward_from_cfg(cfg)
+        vec_env = RustVecEnv(
+            env_id=str(cfg_get(cfg, "env.id")),
+            env_params=env_params_clean,
+            level=level,
+            food_count=require_int(cfg, "level.food_count"),
+            reward=reward_cfg,
+            num_envs=num_envs,
+            seeds=child_seeds,
+        )
+        vec_env = VecMonitor(vec_env)
+
+        n_stack = get_frame_stack_n(cfg)
+        vec_env = apply_frame_stack(
+            vec_env=vec_env,
+            n_stack=n_stack,
+            pixel_key="pixel",
+        )
+        return vec_env
 
     env_fns = [make_single_env(cfg=cfg, seed=child_seeds[i]) for i in range(num_envs)]
 

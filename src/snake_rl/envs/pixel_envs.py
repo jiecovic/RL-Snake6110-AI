@@ -306,7 +306,7 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
             ).astype(np.uint8, copy=False)
 
         fill = self._fill.compute(
-            snake_len=len(self.game.snake),
+            snake_len=int(self.game.snake_len),
             initial_len=self.initial_snake_length,
             max_playable=self.max_snake_length,
         )

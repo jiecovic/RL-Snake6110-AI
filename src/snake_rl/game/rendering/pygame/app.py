@@ -25,14 +25,14 @@ class AppConfig:
     turn_keys: tuple[int, int] = (pygame.K_a, pygame.K_d)  # left, right
 
 
-_END_RESULTS: set[MoveResult] = {
-    MoveResult.HIT_WALL,
-    MoveResult.HIT_SELF,
-    MoveResult.HIT_BOUNDARY,
-    MoveResult.GAME_NOT_RUNNING,
-    MoveResult.TIMEOUT,
-    MoveResult.WIN,
-}
+_END_MASK: MoveResult = (
+    MoveResult.HIT_WALL
+    | MoveResult.HIT_SELF
+    | MoveResult.HIT_BOUNDARY
+    | MoveResult.GAME_NOT_RUNNING
+    | MoveResult.TIMEOUT
+    | MoveResult.WIN
+)
 
 
 def run_pygame_app(
@@ -103,7 +103,7 @@ def run_pygame_app(
                             rel = RelativeDirection.FORWARD
 
                         results = game.move(rel)
-                        if cfg.reset_on_done and any(r in _END_RESULTS for r in results):
+                        if cfg.reset_on_done and (results & _END_MASK):
                             game.reset()
                             queued_turn = None
                     else:
