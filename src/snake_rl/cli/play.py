@@ -30,7 +30,6 @@ def main() -> None:
             caption="Snake (human)",
             enable_human_input=True,
         ),
-        action_fn=None,
     )
 
 

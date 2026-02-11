@@ -1,12 +1,11 @@
 # src/snake_rl/envs/tile_id_env.py
 from __future__ import annotations
 
-from typing import Any, Tuple
-
 import numpy as np
 from gymnasium import spaces
 
 from snake_rl.envs.base import BaseSnakeEnv
+from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.geometry import Direction, Point
 from snake_rl.game.snakegame import SnakeGame
 from snake_rl.game.tile_types import TileType
@@ -17,37 +16,6 @@ def _tile_vocab_size() -> int:
     # We store TileType.value directly in SnakeGame.tile_grid (uint8).
     # Vocab size is max enum value + 1, assuming values are 0..K.
     return int(max(int(t.value) for t in TileType) + 1)
-
-
-def _parse_view_radius(v: Any) -> Tuple[int, int]:
-    """
-    Parse POV radius.
-
-    Accepted:
-      - int r           -> (r, r)
-      - (ry, rx) tuple  -> (ry, rx)
-      - [ry, rx] list   -> (ry, rx)  (YAML)
-
-    Returns:
-      (ry, rx) with ry,rx >= 0
-    """
-    if isinstance(v, (int, np.integer)):
-        r = int(v)
-        if r < 0:
-            raise ValueError(f"view_radius must be >= 0, got {r}")
-        return (r, r)
-
-    if isinstance(v, (tuple, list)) and len(v) == 2:
-        ry = int(v[0])
-        rx = int(v[1])
-        if ry < 0 or rx < 0:
-            raise ValueError(f"view_radius must be >= 0, got {(ry, rx)}")
-        return (ry, rx)
-
-    raise TypeError(
-        "view_radius must be an int or a pair (ry, rx) / [ry, rx], "
-        f"got {type(v).__name__}: {v}"
-    )
 
 
 class GlobalTileIdEnv(BaseSnakeEnv):
@@ -94,13 +62,19 @@ class GlobalTileIdEnv(BaseSnakeEnv):
         if tile_vocab is not None:
             self._tile_vocab = load_tile_vocab(tile_vocab)
 
-        self.num_classes: int = (
-            int(self._tile_vocab.num_classes) if self._tile_vocab is not None else int(self.raw_vocab_size)
-        )
+        if self._tile_vocab is not None:
+            num_classes = int(self._tile_vocab.num_classes)
+        else:
+            num_classes = int(self.raw_vocab_size)
+        self.num_classes: int = num_classes
 
         # Expose for logging/debug
-        self.tile_vocab_name: str | None = self._tile_vocab.name if self._tile_vocab is not None else None
-        self.tile_vocab_sha256: str | None = self._tile_vocab.sha256 if self._tile_vocab is not None else None
+        if self._tile_vocab is not None:
+            self.tile_vocab_name = self._tile_vocab.name
+            self.tile_vocab_sha256 = self._tile_vocab.sha256
+        else:
+            self.tile_vocab_name = None
+            self.tile_vocab_sha256 = None
 
         self.observation_space = spaces.Box(
             low=0,
@@ -168,7 +142,7 @@ class PovTileIdEnv(BaseSnakeEnv):
     ):
         BaseSnakeEnv.__init__(self, game)
 
-        self.view_radius_y, self.view_radius_x = _parse_view_radius(view_radius)
+        self.view_radius_y, self.view_radius_x = parse_view_radius(view_radius)
         self.rotate_to_head = bool(rotate_to_head)
         self.mask_oob = bool(mask_oob)
 
@@ -190,12 +164,19 @@ class PovTileIdEnv(BaseSnakeEnv):
         if tile_vocab is not None:
             self._tile_vocab = load_tile_vocab(tile_vocab)
 
-        base_num = int(self._tile_vocab.num_classes) if self._tile_vocab is not None else int(self.raw_vocab_size)
+        if self._tile_vocab is not None:
+            base_num = int(self._tile_vocab.num_classes)
+        else:
+            base_num = int(self.raw_vocab_size)
         self.num_classes: int = base_num + (1 if self.mask_oob else 0)
 
         # Expose for logging/debug
-        self.tile_vocab_name: str | None = self._tile_vocab.name if self._tile_vocab is not None else None
-        self.tile_vocab_sha256: str | None = self._tile_vocab.sha256 if self._tile_vocab is not None else None
+        if self._tile_vocab is not None:
+            self.tile_vocab_name = self._tile_vocab.name
+            self.tile_vocab_sha256 = self._tile_vocab.sha256
+        else:
+            self.tile_vocab_name = None
+            self.tile_vocab_sha256 = None
 
         self.observation_space = spaces.Box(
             low=0,

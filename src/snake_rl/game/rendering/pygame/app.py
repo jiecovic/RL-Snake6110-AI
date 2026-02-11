@@ -11,7 +11,6 @@ from snake_rl.game.rendering.pygame.renderer import PygameRenderer
 from snake_rl.game.rendering.pygame.window import PygameRenderContext, create_pygame_context
 from snake_rl.game.snakegame import MoveResult, SnakeGame
 
-ActionFn = Callable[[SnakeGame], RelativeDirection]
 StepFn = Callable[[], None]
 
 
@@ -40,20 +39,16 @@ def run_pygame_app(
         *,
         game: SnakeGame,
         cfg: AppConfig,
-        action_fn: Optional[ActionFn] = None,
         step_fn: Optional[StepFn] = None,
 ) -> None:
     """
     pygame UI loop.
 
-    Two modes:
-
-    1) step_fn mode (preferred for RL watch):
-       - The caller advances the environment by exactly one step inside step_fn().
-       - This function does NOT call game.move().
-
-    2) legacy action_fn/human mode (used by play.py):
-       - This function computes a RelativeDirection (AI or human) and calls game.move().
+    Modes:
+      - step_fn mode (preferred for RL watch): the caller advances the environment
+        by exactly one step inside step_fn(); this function does NOT call game.move().
+      - internal stepping (human): computes RelativeDirection from buffered input
+        and calls game.move().
     """
     pygame.init()
     try:
@@ -95,12 +90,14 @@ def run_pygame_app(
                     # RL-consistent mode: caller owns stepping (env.step()).
                     step_fn()
                 else:
-                    # Legacy mode: pygame loop steps the game directly.
+                    # Human mode: pygame loop steps the game directly.
                     if game.running:
-                        if action_fn is not None:
-                            rel = action_fn(game)
-                        elif cfg.enable_human_input:
-                            rel = queued_turn if queued_turn is not None else RelativeDirection.FORWARD
+                        if cfg.enable_human_input:
+                            rel = (
+                                queued_turn
+                                if queued_turn is not None
+                                else RelativeDirection.FORWARD
+                            )
                             queued_turn = None  # consume once per step
                         else:
                             rel = RelativeDirection.FORWARD

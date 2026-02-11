@@ -15,6 +15,28 @@ def _u8(x: int) -> np.uint8:
     return np.uint8(int(x) & 0xFF)
 
 
+def _global_pixel_dims(game: SnakeGame, *, remove_border: bool) -> tuple[int, int]:
+    game.reset()
+    h, w = game.pixel_buffer.shape
+    if not remove_border:
+        return int(h), int(w)
+
+    ts = int(game.tileset.tile_size)
+    if h <= 2 * ts or w <= 2 * ts:
+        raise ValueError(
+            "remove_border=True requires pixel dims > 2*tile_size; "
+            f"got h={h} w={w} tile_size={ts}"
+        )
+    return int(h - 2 * ts), int(w - 2 * ts)
+
+
+def _maybe_crop(frame: np.ndarray, game: SnakeGame, *, remove_border: bool) -> np.ndarray:
+    if not remove_border:
+        return frame
+    ts = int(game.tileset.tile_size)
+    return frame[ts:-ts, ts:-ts]
+
+
 class GlobalPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
     """
     Baseline: global pixel only.
@@ -32,29 +54,13 @@ class GlobalPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
 
         self.remove_border = bool(remove_border)
 
-        self.game.reset()
-        h, w = self.game.pixel_buffer.shape
-
-        if self.remove_border:
-            ts = int(self.game.tileset.tile_size)
-            if h <= 2 * ts or w <= 2 * ts:
-                raise ValueError(
-                    f"remove_border=True requires pixel dims > 2*tile_size; got h={h} w={w} tile_size={ts}"
-                )
-            h -= 2 * ts
-            w -= 2 * ts
+        h, w = _global_pixel_dims(self.game, remove_border=self.remove_border)
 
         self.observation_space = spaces.Box(low=0, high=255, shape=(1, h, w), dtype=np.uint8)
 
-    def _maybe_crop(self, frame: np.ndarray) -> np.ndarray:
-        if not self.remove_border:
-            return frame
-        ts = int(self.game.tileset.tile_size)
-        return frame[ts:-ts, ts:-ts]
-
     def get_obs(self):
         frame = self._global_pixel_frame()
-        frame = self._maybe_crop(frame)
+        frame = _maybe_crop(frame, self.game, remove_border=self.remove_border)
         return frame[None, :, :].astype(np.uint8, copy=False)
 
 
@@ -78,17 +84,7 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
 
         self.remove_border = bool(remove_border)
 
-        self.game.reset()
-        h, w = self.game.pixel_buffer.shape
-
-        if self.remove_border:
-            ts = int(self.game.tileset.tile_size)
-            if h <= 2 * ts or w <= 2 * ts:
-                raise ValueError(
-                    f"remove_border=True requires pixel dims > 2*tile_size; got h={h} w={w} tile_size={ts}"
-                )
-            h -= 2 * ts
-            w -= 2 * ts
+        h, w = _global_pixel_dims(self.game, remove_border=self.remove_border)
 
         self.observation_space = spaces.Dict(
             {
@@ -97,15 +93,9 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
             }
         )
 
-    def _maybe_crop(self, frame: np.ndarray) -> np.ndarray:
-        if not self.remove_border:
-            return frame
-        ts = int(self.game.tileset.tile_size)
-        return frame[ts:-ts, ts:-ts]
-
     def get_obs(self):
         frame = self._global_pixel_frame()
-        frame = self._maybe_crop(frame)
+        frame = _maybe_crop(frame, self.game, remove_border=self.remove_border)
         pixel = frame[None, :, :].astype(np.uint8, copy=False)
 
         d = self.game.direction
@@ -298,7 +288,10 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
             )
             mask = np.full(frame.shape, _u8(self.mask_oob_value), dtype=np.uint8)
             mask[valid] = _u8(self.mask_valid_value)
-            pixel = np.stack([frame.astype(np.uint8, copy=False), mask], axis=0).astype(np.uint8, copy=False)
+            pixel = np.stack(
+                [frame.astype(np.uint8, copy=False), mask],
+                axis=0,
+            ).astype(np.uint8, copy=False)
 
         fill = self._fill.compute(
             snake_len=len(self.game.snake),

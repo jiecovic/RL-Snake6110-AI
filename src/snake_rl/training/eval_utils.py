@@ -5,13 +5,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, TypedDict, cast
 
 import numpy as np
+from gymnasium import Env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-from snake_rl.envs.registry import get_env_cls
-from snake_rl.game.level import EmptyLevel
-from snake_rl.game.snakegame import SnakeGame
-from snake_rl.training.env_factory import apply_frame_stack
+from snake_rl.training.env_factory import apply_frame_stack, make_single_env
 from snake_rl.utils.obs import sanitize_observation
 
 
@@ -92,32 +90,12 @@ def _is_win_from_info(info: dict[str, Any]) -> bool:
     return False
 
 
-def _make_single_env_fn(*, cfg: Any, seed: int):
-    env_id = _get_env_id(cfg)
-    env_cls = get_env_cls(env_id)
-    env_params = _get_env_params_from_cfg(cfg)
-
-    height = _get_level_int(cfg, "height")
-    width = _get_level_int(cfg, "width")
-    food_count = _get_level_int(cfg, "food_count")
-
-    def _init():
-        level = EmptyLevel(height=height, width=width)
-        game = SnakeGame(level=level, food_count=food_count)
-        env = env_cls(game, **env_params)  # type: ignore[arg-type]
-
-        # Env-level seeding (Gymnasium): BaseSnakeEnv.reset() binds game RNG to env.np_random.
-        env.reset(seed=int(seed))
-        return env
-
-    return _init
-
-
 def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -> VecEnv:
     if len(seeds) <= 0:
         raise ValueError("seeds must be non-empty")
 
-    env_fns = [_make_single_env_fn(cfg=cfg, seed=int(s)) for s in seeds]
+    env_fns = [make_single_env(cfg=cfg, seed=int(s)) for s in seeds]
+    env_fns = cast(list[Callable[[], Env]], env_fns)
     if len(env_fns) == 1:
         vec: VecEnv = DummyVecEnv(env_fns)
     else:
@@ -181,92 +159,100 @@ def evaluate_model(
     next_ep = n_envs
 
     vec_env = make_eval_vec_env(cfg=cfg, seeds=slot_seeds, pixel_key=str(pixel_key))
-    obs = vec_env.reset()
+    try:
+        obs = vec_env.reset()
 
-    slots: list[_SlotState] = [_SlotState(episode_idx=i, seed=slot_seeds[i]) for i in range(n_envs)]
+        slots: list[_SlotState] = [
+            _SlotState(episode_idx=i, seed=slot_seeds[i])
+            for i in range(n_envs)
+        ]
 
-    rewards_by_ep = np.zeros((episodes,), dtype=np.float64)
-    lengths_by_ep = np.zeros((episodes,), dtype=np.int64)
-    wins_by_ep = np.zeros((episodes,), dtype=np.int64)
+        rewards_by_ep = np.zeros((episodes,), dtype=np.float64)
+        lengths_by_ep = np.zeros((episodes,), dtype=np.int64)
+        wins_by_ep = np.zeros((episodes,), dtype=np.int64)
 
-    termination_counts: Dict[str, int] = {}
-    final_scores: list[float] = []
+        termination_counts: Dict[str, int] = {}
+        final_scores: list[float] = []
 
-    finished = 0
+        finished = 0
 
-    if on_episode is not None:
-        for _ in range(n_envs):
-            on_episode(finished, episodes, None)
+        if on_episode is not None:
+            for _ in range(n_envs):
+                on_episode(finished, episodes, None)
 
-    while finished < episodes:
-        obs_for_model = sanitize_observation(obs)
-        actions, _ = model.predict(obs_for_model, deterministic=bool(deterministic))
+        while finished < episodes:
+            obs_for_model = sanitize_observation(obs)
+            actions, _ = model.predict(obs_for_model, deterministic=bool(deterministic))
 
-        obs, step_rewards, dones, infos = vec_env.step(actions)
+            obs, step_rewards, dones, infos = vec_env.step(actions)
 
-        step_rewards = np.asarray(step_rewards, dtype=np.float64).reshape((n_envs,))
-        dones = np.asarray(dones, dtype=bool).reshape((n_envs,))
-        infos_list = cast(list[dict], infos)
+            step_rewards = np.asarray(step_rewards, dtype=np.float64).reshape((n_envs,))
+            dones = np.asarray(dones, dtype=bool).reshape((n_envs,))
+            infos_list = cast(list[dict], infos)
 
-        for i in range(n_envs):
-            s = slots[i]
-            if s.episode_idx < 0:
-                continue
+            for i in range(n_envs):
+                s = slots[i]
+                if s.episode_idx < 0:
+                    continue
 
-            s.reward += float(step_rewards[i])
-            s.length += 1
+                s.reward += float(step_rewards[i])
+                s.length += 1
 
-            if not dones[i]:
-                continue
+                if not dones[i]:
+                    continue
 
-            info_i = infos_list[i] if i < len(infos_list) and isinstance(infos_list[i], dict) else {}
-            ep_idx = int(s.episode_idx)
+                info_i = (
+                    infos_list[i]
+                    if i < len(infos_list) and isinstance(infos_list[i], dict)
+                    else {}
+                )
+                ep_idx = int(s.episode_idx)
 
-            rewards_by_ep[ep_idx] = float(s.reward)
-            lengths_by_ep[ep_idx] = int(s.length)
+                rewards_by_ep[ep_idx] = float(s.reward)
+                lengths_by_ep[ep_idx] = int(s.length)
 
-            if _is_win_from_info(info_i):
-                wins_by_ep[ep_idx] = 1
+                if _is_win_from_info(info_i):
+                    wins_by_ep[ep_idx] = 1
 
-            tc = info_i.get("termination_cause")
-            if isinstance(tc, str) and tc.strip():
-                key = tc.strip()
-                termination_counts[key] = termination_counts.get(key, 0) + 1
+                tc = info_i.get("termination_cause")
+                if isinstance(tc, str) and tc.strip():
+                    key = tc.strip()
+                    termination_counts[key] = termination_counts.get(key, 0) + 1
 
-            if "final_score" in info_i:
-                try:
-                    final_scores.append(float(info_i["final_score"]))
-                except Exception:
-                    pass
+                if "final_score" in info_i:
+                    try:
+                        final_scores.append(float(info_i["final_score"]))
+                    except Exception:
+                        pass
 
-            finished += 1
-            if on_episode is not None:
-                on_episode(finished, episodes, float(s.reward))
-
-            if next_ep < episodes:
-                new_ep_idx = next_ep
-                new_seed = ep_seeds[new_ep_idx]
-                next_ep += 1
-
-                ret = vec_env.env_method("reset", seed=int(new_seed), indices=i)
-                try:
-                    obs_i = ret[0][0] if isinstance(ret[0], tuple) else ret[0]
-                except Exception:
-                    obs_i = ret[0] if ret else None
-                if obs_i is not None:
-                    obs = _obs_set(obs, i, obs_i)
-
-                slots[i] = _SlotState(episode_idx=new_ep_idx, seed=int(new_seed))
-
+                finished += 1
                 if on_episode is not None:
-                    on_episode(finished, episodes, None)
-            else:
-                slots[i].episode_idx = -1
+                    on_episode(finished, episodes, float(s.reward))
 
-    vec_env.close()
+                if next_ep < episodes:
+                    new_ep_idx = next_ep
+                    new_seed = ep_seeds[new_ep_idx]
+                    next_ep += 1
+
+                    ret = vec_env.env_method("reset", seed=int(new_seed), indices=i)
+                    try:
+                        obs_i = ret[0][0] if isinstance(ret[0], tuple) else ret[0]
+                    except Exception:
+                        obs_i = ret[0] if ret else None
+                    if obs_i is not None:
+                        obs = _obs_set(obs, i, obs_i)
+
+                    slots[i] = _SlotState(episode_idx=new_ep_idx, seed=int(new_seed))
+
+                    if on_episode is not None:
+                        on_episode(finished, episodes, None)
+                else:
+                    slots[i].episode_idx = -1
+    finally:
+        vec_env.close()
 
     r = rewards_by_ep.astype(np.float64)
-    l = lengths_by_ep.astype(np.float64)
+    lengths = lengths_by_ep.astype(np.float64)
 
     wins = int(wins_by_ep.sum())
     out: Dict[str, Any] = {
@@ -277,8 +263,8 @@ def evaluate_model(
         "n_frames": int(_get_n_stack_from_cfg(cfg)),
         "mean_reward": float(r.mean()),
         "std_reward": float(r.std(ddof=0)),
-        "mean_length": float(l.mean()),
-        "std_length": float(l.std(ddof=0)),
+        "mean_length": float(lengths.mean()),
+        "std_length": float(lengths.std(ddof=0)),
         "wins": wins,
         "win_rate": float(wins / float(episodes)),
         "env_id": _get_env_id(cfg),

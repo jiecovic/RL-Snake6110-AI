@@ -26,7 +26,6 @@ class BaseSnakeEnv(gym.Env, ABC):
         MoveResult.HIT_WALL,
         MoveResult.HIT_BOUNDARY,
         MoveResult.GAME_NOT_RUNNING,
-        MoveResult.CYCLE_DETECTED,
         MoveResult.WIN,
     }
 
@@ -35,7 +34,6 @@ class BaseSnakeEnv(gym.Env, ABC):
         MoveResult.HIT_WALL,
         MoveResult.HIT_SELF,
         MoveResult.HIT_BOUNDARY,
-        MoveResult.CYCLE_DETECTED,
         MoveResult.TIMEOUT,
         MoveResult.GAME_NOT_RUNNING,
     ]
@@ -45,7 +43,6 @@ class BaseSnakeEnv(gym.Env, ABC):
         MoveResult.HIT_WALL: "hit_wall",
         MoveResult.HIT_SELF: "hit_self",
         MoveResult.HIT_BOUNDARY: "hit_boundary",
-        MoveResult.CYCLE_DETECTED: "cycle",
         MoveResult.GAME_NOT_RUNNING: "not_running",
         MoveResult.TIMEOUT: "timeout",
     }
@@ -69,7 +66,6 @@ class BaseSnakeEnv(gym.Env, ABC):
         self.tiny_reward: float = 1.0 / self.max_steps
 
         self.current_step_since_last_food: int = 0
-        self.visited_nodes: set = set()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -82,7 +78,6 @@ class BaseSnakeEnv(gym.Env, ABC):
         self.initial_snake_length = len(self.game.snake)
 
         self.current_step_since_last_food = 0
-        self.visited_nodes.clear()
 
         obs = self.get_obs()
         return obs, {}
@@ -113,7 +108,6 @@ class BaseSnakeEnv(gym.Env, ABC):
             truncated = False
 
             if is_food:
-                self.visited_nodes.clear()
                 self.current_step_since_last_food = 0
         else:
             reward -= self.tiny_reward
@@ -121,7 +115,6 @@ class BaseSnakeEnv(gym.Env, ABC):
             if is_food:
                 reward += 2.5
                 reward += 1.0 * (1.0 - (self.current_step_since_last_food / self.max_steps))
-                self.visited_nodes.clear()
                 self.current_step_since_last_food = 0
 
             if is_fatal:

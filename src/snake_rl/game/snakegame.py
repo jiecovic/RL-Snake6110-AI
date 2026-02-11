@@ -1,7 +1,6 @@
 # src/snake_rl/game/snakegame.py
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -22,7 +21,6 @@ class MoveResult(Enum):
     HIT_SELF = auto()
     GAME_NOT_RUNNING = auto()
     TIMEOUT = auto()
-    CYCLE_DETECTED = auto()
     WIN = auto()
 
 
@@ -70,9 +68,6 @@ class SnakeGame:
         self.pixel_buffer: np.ndarray = np.zeros((1, 1), dtype=np.uint8)
         self.tile_grid: np.ndarray = np.zeros((self.height, self.width), dtype=np.uint8)
 
-        # Optional trackers (debug/analysis tooling)
-        self.visited: set[Point] = set()
-
         # === Walls (static) ===
         self.wall_tiles: list[tuple[Point, TileType]] = level.get_wall_tiles()
         self.wall_positions: set[Point] = {pos for pos, _ in self.wall_tiles}
@@ -94,15 +89,10 @@ class SnakeGame:
         self.score: int = 0
         self.running: bool = True
 
-        # Cycle/debug helpers (kept; not enforced yet)
-        self.recent_heads: deque[Point] = deque(maxlen=max(1, self.max_playable_tiles))
-
-        # Debug-only validation switch
-        self.enable_shadow_check: bool = False
-
         # Precomputed tiles for fast blits
         self._tile_cache: dict[TileType, np.ndarray] = {}
-        self._empty_tile: np.ndarray = np.zeros((self.tileset.tile_size, self.tileset.tile_size), dtype=np.uint8)
+        tile_size = int(self.tileset.tile_size)
+        self._empty_tile: np.ndarray = np.zeros((tile_size, tile_size), dtype=np.uint8)
 
         # IMPORTANT:
         # Do NOT auto-reset here. The environment should control reset timing and RNG injection.
@@ -142,15 +132,9 @@ class SnakeGame:
         self._spawn_food()
 
         # 4) bookkeeping + buffers
-        self.visited.clear()
-        self.recent_heads.clear()
-
         self._build_tile_cache()
         self._rebuild_tile_grid_full()
         self._render_full_from_tile_grid()
-
-        if self.enable_shadow_check:
-            self._shadow_check()
 
     def _spawn_snake_from_level(self) -> None:
         """
@@ -296,7 +280,7 @@ class SnakeGame:
         self.pixel_buffer = np.zeros((ph, pw), dtype=np.uint8)
 
         ys, xs = np.nonzero(self.tile_grid)
-        for y, x in zip(ys.tolist(), xs.tolist()):
+        for y, x in zip(ys.tolist(), xs.tolist(), strict=False):
             tt = TileType(int(self.tile_grid[y, x]))
             self._blit_cell(Point(int(x), int(y)), tt)
 
@@ -393,7 +377,9 @@ class SnakeGame:
         if (prev.x > curr.x and nxt.y < curr.y) or (nxt.x > curr.x and prev.y < curr.y):
             return TileType.SNAKE_BODY_BL
 
-        raise RuntimeError(f"Could not determine body tile type: prev={prev}, curr={curr}, next={nxt}")
+        raise RuntimeError(
+            f"Could not determine body tile type: prev={prev}, curr={curr}, next={nxt}"
+        )
 
     # -------------------------------------------------------------------------
     # Incremental updates (single source of truth for buffer correctness)
@@ -420,7 +406,9 @@ class SnakeGame:
             changed.append(delta.old_tail)
 
         # New head
-        self.tile_grid[delta.new_head.y, delta.new_head.x] = int(self._head_tile(delta.new_dir).value)
+        self.tile_grid[delta.new_head.y, delta.new_head.x] = int(
+            self._head_tile(delta.new_dir).value
+        )
         changed.append(delta.new_head)
 
         # Old head becomes body (length >= 3 after move)
@@ -457,38 +445,6 @@ class SnakeGame:
             tt = TileType(int(self.tile_grid[p.y, p.x]))
             self._blit_cell(p, tt)
 
-    def _shadow_check(self) -> None:
-        """Debug-only: rebuild tile_grid the slow way and compare."""
-        ref = np.zeros_like(self.tile_grid)
-        ref.fill(int(TileType.EMPTY.value))
-
-        for pos, tile_type in self.wall_tiles:
-            ref[pos.y, pos.x] = int(tile_type.value)
-
-        for p in self.food:
-            ref[p.y, p.x] = int(TileType.FOOD.value)
-
-        if self.snake:
-            if self.direction is None:
-                raise RuntimeError("Snake direction is not initialized (did you call reset?)")
-
-            ref[self.snake[0].y, self.snake[0].x] = int(self._head_tile(self.direction).value)
-
-            for i in range(1, len(self.snake) - 1):
-                bt = self._body_tile(self.snake[i - 1], self.snake[i], self.snake[i + 1])
-                ref[self.snake[i].y, self.snake[i].x] = int(bt.value)
-
-            if len(self.snake) >= 2:
-                tt = self._tail_tile(self.snake[-2], self.snake[-1])
-                ref[self.snake[-1].y, self.snake[-1].x] = int(tt.value)
-
-        if not np.array_equal(ref, self.tile_grid):
-            ys, xs = np.where(ref != self.tile_grid)
-            y0, x0 = int(ys[0]), int(xs[0])
-            raise RuntimeError(
-                f"tile_grid mismatch at (x={x0}, y={y0}): fast={int(self.tile_grid[y0, x0])} ref={int(ref[y0, x0])}"
-            )
-
     # -------------------------------------------------------------------------
     # Move logic (state transitions) + incremental rendering hook
     # -------------------------------------------------------------------------
@@ -508,8 +464,6 @@ class SnakeGame:
 
         # No OK => no state advance => no incremental update
         if MoveResult.OK not in results:
-            if self.enable_shadow_check:
-                self._shadow_check()
             return results
 
         new_dir = self.direction if self.direction is not None else old_dir
@@ -529,10 +483,6 @@ class SnakeGame:
         )
 
         self._apply_incremental_updates(delta)
-
-        if self.enable_shadow_check:
-            self._shadow_check()
-
         return results
 
     def _move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> list[MoveResult]:
@@ -573,15 +523,11 @@ class SnakeGame:
         self.snake_set.add(new_head)
 
         self.spawnable_tiles.discard(new_head)
-        self.recent_heads.append(new_head)
-        self.visited.add(new_head)
 
         # 4) eat or tail pop
         if new_head in self.food:
             self.food.remove(new_head)
             self.score += 1
-            self.recent_heads.clear()
-            self.visited.clear()
             results.append(MoveResult.FOOD_EATEN)
 
             self._spawn_food()
