@@ -26,13 +26,14 @@ def _is_binary01_u8(frame: np.ndarray) -> bool:
     if frame.size == 0:
         return True
     u = np.unique(frame)
-    return u.size <= 2 and np.all((u == 0) | (u == 1))
+    return bool(u.size <= 2 and np.all((u == 0) | (u == 1)))
 
 
 def obs_last_frame_and_kind(
         obs: Any,
         *,
         pixel_key: str = "pixel",
+        kind_hint: str | None = None,
 ) -> Tuple[np.ndarray, str]:
     """
     Extract the *last* stacked frame from a VecEnv observation.
@@ -45,6 +46,20 @@ def obs_last_frame_and_kind(
       - "mask01": values in {0,1} (binary mask semantics; matches game.pixel_buffer)
       - "tile_id": values are TileType ids (uint8), not pixels
     """
+    # Explicit override if the caller already knows the kind.
+    if kind_hint is not None:
+        kind = str(kind_hint).strip().lower()
+        if kind not in {"pixel", "mask01", "tile_id"}:
+            raise ValueError(f"kind_hint must be one of pixel|mask01|tile_id, got {kind_hint!r}")
+        arr = obs if isinstance(obs, np.ndarray) else np.asarray(obs)
+        if isinstance(obs, dict):
+            if pixel_key not in obs:
+                raise KeyError(f"obs dict missing key {pixel_key!r}")
+            arr = obs[pixel_key]
+            arr = arr if isinstance(arr, np.ndarray) else np.asarray(arr)
+        frame = _as_u8_2d_last_frame(arr)
+        return frame, kind
+
     # --- Dict obs: {"pixel": (N,C,H,W), ...}
     if isinstance(obs, dict):
         if pixel_key not in obs:
@@ -59,9 +74,10 @@ def obs_last_frame_and_kind(
             return frame, "mask01"
 
         vmax = int(frame.max()) if frame.size else 0
-        # If max fits in the TileType range, it's very likely tile ids.
+        vmin = int(frame.min()) if frame.size else 0
+        # If values are within TileType range and non-negative, it's likely tile ids.
         max_tid = max(int(t.value) for t in TileType)
-        if vmax <= max_tid:
+        if 0 <= vmin and vmax <= max_tid:
             return frame, "tile_id"
 
         return frame, "pixel"
@@ -74,8 +90,9 @@ def obs_last_frame_and_kind(
         return frame, "mask01"
 
     vmax = int(frame.max()) if frame.size else 0
+    vmin = int(frame.min()) if frame.size else 0
     max_tid = max(int(t.value) for t in TileType)
-    kind = "tile_id" if vmax <= max_tid else "pixel"
+    kind = "tile_id" if 0 <= vmin and vmax <= max_tid else "pixel"
     return frame, kind
 
 

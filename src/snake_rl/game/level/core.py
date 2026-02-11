@@ -8,7 +8,7 @@ import yaml
 
 from snake_rl.game.geometry import Point
 from snake_rl.game.level.loader import SpawnSpec, load_level_yaml
-from snake_rl.game.tile_types import TileType, WALL_TILES
+from snake_rl.game.tile_types import WALL_TILES, TileType
 from snake_rl.game.tileset import Tileset
 
 
@@ -43,7 +43,11 @@ class BaseLevel:
                 "x": self.spawn.x,
                 "y": self.spawn.y,
                 "length": self.spawn.length,
-                "direction": self.spawn.direction.name if self.spawn.direction is not None else None,
+                "direction": (
+                    self.spawn.direction.name
+                    if self.spawn.direction is not None
+                    else None
+                ),
                 "random_direction": self.spawn.random_direction,
                 "jitter": self.spawn.jitter,
             },
@@ -88,8 +92,18 @@ class BaseLevel:
 
 
 class TemplateLevel(BaseLevel):
-    def __init__(self, filepath: str | Path = "levels/test_level.yaml", *, tileset: Optional[Tileset] = None):
-        width, height, grid, spawn = load_level_yaml(filepath, tileset=tileset)
+    def __init__(
+        self,
+        filepath: str | Path = "levels/test_level.yaml",
+        *,
+        tileset: Optional[Tileset] = None,
+        strict_glyphs: bool = True,
+    ):
+        width, height, grid, spawn = load_level_yaml(
+            filepath,
+            tileset=tileset,
+            strict_glyphs=bool(strict_glyphs),
+        )
         super().__init__(width, height, grid, spawn)
 
 

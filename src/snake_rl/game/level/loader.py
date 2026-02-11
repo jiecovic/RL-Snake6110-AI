@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import yaml
 
 from snake_rl.game.geometry import Direction
 from snake_rl.game.level.placement import parse_direction
-from snake_rl.game.tile_types import TileType, WALL_TILES, is_body, is_head, is_tail
+from snake_rl.game.tile_types import WALL_TILES, TileType, is_body, is_head, is_tail
 from snake_rl.game.tileset import Tileset
 from snake_rl.utils.paths import asset_path
 
@@ -21,8 +21,10 @@ class SpawnSpec:
 
     Semantics:
       - If x/y is None -> snakegame chooses a valid position (e.g. center or random valid).
-      - If direction is None -> snakegame chooses direction (random if random_direction else default RIGHT).
-      - jitter: optional random perturbation radius (Manhattan/box is up to SnakeGame; we just carry the number).
+      - If direction is None -> snakegame chooses direction
+        (random if random_direction else default RIGHT).
+      - jitter: optional random perturbation radius (Manhattan/box is up to SnakeGame;
+        we just carry the number).
     """
     x: Optional[int]
     y: Optional[int]
@@ -34,7 +36,11 @@ class SpawnSpec:
 
 def _has_any_dynamic_tiles(grid: list[list[TileType]]) -> bool:
     # NEW world: snake + food are runtime-only, therefore forbidden in level grids.
-    return any(is_head(t) or is_body(t) or is_tail(t) or (t == TileType.FOOD) for row in grid for t in row)
+    return any(
+        is_head(t) or is_body(t) or is_tail(t) or (t == TileType.FOOD)
+        for row in grid
+        for t in row
+    )
 
 
 def _is_static_level_tile(t: TileType) -> bool:
@@ -45,6 +51,7 @@ def load_level_yaml(
         path: str | Path,
         *,
         tileset: Tileset | None = None,
+        strict_glyphs: bool = True,
 ) -> tuple[int, int, list[list[TileType]], SpawnSpec]:
     """
     Load a YAML level file (NEW world only).
@@ -105,7 +112,14 @@ def load_level_yaml(
         out_row: list[TileType] = []
         for ch in row:
             t = ts.tile_for_glyph(ch)
-            out_row.append(t if t is not None else TileType.EMPTY)
+            if t is None:
+                if strict_glyphs:
+                    raise ValueError(
+                        f"Unknown glyph {ch!r} in level grid. "
+                        "Update the tileset or use strict_glyphs=False."
+                    )
+                t = TileType.EMPTY
+            out_row.append(t)
         grid.append(out_row)
 
     # NEW world enforcement: no snake/food tiles in level grid
@@ -124,7 +138,9 @@ def load_level_yaml(
                 bad.append(t)
     if bad:
         uniq = ", ".join(sorted({t.name for t in bad}))
-        raise ValueError(f"Level grid contains non-static tiles: {uniq}. Allowed: EMPTY + WALL_* only.")
+        raise ValueError(
+            f"Level grid contains non-static tiles: {uniq}. Allowed: EMPTY + WALL_* only."
+        )
 
     spawn = data.get("spawn")
     if not isinstance(spawn, dict):
