@@ -226,6 +226,12 @@ Developer editable build:
 maturin develop -m rust/Cargo.toml
 ```
 
+Rust lint (clippy):
+
+```
+cargo clippy --all-targets --all-features -- -D warnings
+```
+
 PyTorch install:
 https://pytorch.org/get-started/locally/
 

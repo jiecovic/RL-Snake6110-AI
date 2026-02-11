@@ -9,7 +9,6 @@ from gymnasium import spaces
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
 from snake_rl.config.schema import RewardConfig
-from snake_rl.core.game import RustVecGame
 from snake_rl.envs.obs_utils import (
     pov_pixel_frame,
     pov_tile_frame_with_valid,
@@ -17,7 +16,14 @@ from snake_rl.envs.obs_utils import (
 from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.geometry import Direction, Point
 from snake_rl.game.level import BaseLevel
-from snake_rl.game.snakegame import MoveResult
+from snake_rl.game.snakegame import (
+    MoveResult,
+    build_level_grid,
+    build_tileset_array,
+    dir_to_i8,
+    ensure_rust_core,
+    spawn_from_level,
+)
 from snake_rl.game.tile_types import TileType
 from snake_rl.game.tileset import Tileset
 from snake_rl.vocab import load_tile_vocab
@@ -50,12 +56,30 @@ class RustVecEnv(VecEnv):
         self.tileset = Tileset()
         tile_vocab_name = self.env_params.get("tile_vocab")
         self._tile_vocab = load_tile_vocab(tile_vocab_name) if tile_vocab_name is not None else None
-        self._vec_game = RustVecGame(
-            n=self.num_envs,
-            level=level,
+        core = ensure_rust_core()
+        grid = build_level_grid(level)
+        tiles = build_tileset_array(self.tileset)
+        sp = spawn_from_level(level)
+
+        seed_list = None
+        if seeds is not None:
+            seed_list = [int(s) for s in seeds]
+
+        self._vec_game = core.VecGame(
+            n=int(self.num_envs),
+            width=int(level.width),
+            height=int(level.height),
+            level_grid=grid,
+            spawn_len=int(sp.length),
+            spawn_dir=dir_to_i8(sp.direction),
+            spawn_random_dir=bool(sp.random_direction),
+            spawn_jitter=int(sp.jitter),
             food_count=int(food_count),
-            tileset=self.tileset,
-            seeds=seeds,
+            tile_size=int(self.tileset.tile_size),
+            tiles=tiles,
+            spawn_x=sp.x,
+            spawn_y=sp.y,
+            seeds=seed_list,
         )
 
         self._max_playable = int(self._vec_game.max_playable_tiles())
@@ -156,7 +180,7 @@ class RustVecEnv(VecEnv):
 
         self._vec_game.reset(seeds=seeds)
         self.current_step_since_last_food.fill(0)
-        self.initial_snake_length = self._vec_game.snake_lens()
+        self.initial_snake_length = np.asarray(self._vec_game.snake_lens(), dtype=np.int32)
         obs = self._build_obs()
         return obs
 
@@ -213,7 +237,7 @@ class RustVecEnv(VecEnv):
 
         infos: list[dict[str, Any]] = [{} for _ in range(self.num_envs)]
 
-        scores = self._vec_game.scores()
+        scores = np.asarray(self._vec_game.scores(), dtype=np.int32)
         for i in range(self.num_envs):
             infos[i]["move_results"] = int(masks[i])
             if dones[i]:
@@ -229,7 +253,7 @@ class RustVecEnv(VecEnv):
                 self.current_step_since_last_food[int(idx)] = 0
                 infos[int(idx)]["terminal_observation"] = terminal_obs[i]
 
-            self.initial_snake_length = self._vec_game.snake_lens()
+            self.initial_snake_length = np.asarray(self._vec_game.snake_lens(), dtype=np.int32)
             obs = self._build_obs()
 
         return obs, reward, dones, infos
@@ -269,7 +293,7 @@ class RustVecEnv(VecEnv):
             seed = method_kwargs.get("seed")
             self._vec_game.reset_one(int(i), seed=None if seed is None else int(seed))
             self.current_step_since_last_food[int(i)] = 0
-            self.initial_snake_length = self._vec_game.snake_lens()
+            self.initial_snake_length = np.asarray(self._vec_game.snake_lens(), dtype=np.int32)
             obs = self._build_obs()
             obs_i = _index_obs(obs, np.asarray([int(i)]))[0]
             results.append((obs_i, {}))
@@ -291,18 +315,18 @@ class RustVecEnv(VecEnv):
         ts = int(self.tileset.tile_size)
 
         if env_id in {"global_pixel", "global_pixel_dir"}:
-            pixels = self._vec_game.pixel_grids()
+            pixels = np.asarray(self._vec_game.pixel_grids(), dtype=np.uint8)
             remove_border = bool(p.get("remove_border", True))
             if remove_border:
                 pixels = pixels[:, ts:-ts, ts:-ts]
             pixels = pixels[:, None, :, :].astype(np.uint8, copy=False)
             if env_id == "global_pixel_dir":
-                dirs = self._vec_game.directions().astype(np.int64, copy=False)
+                dirs = np.asarray(self._vec_game.directions(), dtype=np.int64)
                 return {"pixel": pixels, "direction": dirs}
             return pixels
 
         if env_id in {"pov_pixel", "pov_pixel_fill"}:
-            pixels = self._vec_game.pixel_grids()
+            pixels = np.asarray(self._vec_game.pixel_grids(), dtype=np.uint8)
             view_radius = p.get("view_radius")
             if view_radius is None:
                 raise ValueError("view_radius is required for pov_pixel envs")
@@ -312,8 +336,8 @@ class RustVecEnv(VecEnv):
             mask_valid_value = int(p.get("mask_valid_value", 255))
             mask_oob_value = int(p.get("mask_oob_value", 0))
 
-            head_pos = self._vec_game.head_positions()
-            dirs = self._vec_game.directions()
+            head_pos = np.asarray(self._vec_game.head_positions(), dtype=np.int32)
+            dirs = np.asarray(self._vec_game.directions(), dtype=np.int8)
 
             frames: list[np.ndarray] = []
             masks: list[np.ndarray] = []
@@ -363,7 +387,7 @@ class RustVecEnv(VecEnv):
             # pov_pixel_fill
             fill_bins = p.get("fill_bins")
             fill = _compute_fill(
-                snake_len=self._vec_game.snake_lens(),
+                snake_len=np.asarray(self._vec_game.snake_lens(), dtype=np.int32),
                 initial_len=self.initial_snake_length,
                 max_playable=self.max_snake_length,
                 fill_bins=fill_bins,
@@ -371,7 +395,7 @@ class RustVecEnv(VecEnv):
             return {"pixel": out, "fill": fill}
 
         if env_id in {"global_tile_id", "pov_tile_id"}:
-            grids = self._vec_game.tile_grids()
+            grids = np.asarray(self._vec_game.tile_grids(), dtype=np.uint8)
             vocab = self._tile_vocab
 
             if env_id == "global_tile_id":
@@ -388,8 +412,8 @@ class RustVecEnv(VecEnv):
             rotate_to_head = bool(p.get("rotate_to_head", True))
             mask_oob = bool(p.get("mask_oob", False))
 
-            head_pos = self._vec_game.head_positions()
-            dirs = self._vec_game.directions()
+            head_pos = np.asarray(self._vec_game.head_positions(), dtype=np.int32)
+            dirs = np.asarray(self._vec_game.directions(), dtype=np.int8)
 
             frames: list[np.ndarray] = []
             valids: list[np.ndarray] = []

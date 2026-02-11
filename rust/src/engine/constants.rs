@@ -1,0 +1,27 @@
+pub const MOVE_OK: u32 = 1 << 0;
+pub const MOVE_FOOD: u32 = 1 << 1;
+pub const MOVE_HIT_BOUNDARY: u32 = 1 << 2;
+pub const MOVE_HIT_WALL: u32 = 1 << 3;
+pub const MOVE_HIT_SELF: u32 = 1 << 4;
+pub const MOVE_NOT_RUNNING: u32 = 1 << 5;
+pub const MOVE_TIMEOUT: u32 = 1 << 6;
+pub const MOVE_WIN: u32 = 1 << 7;
+
+pub const TILE_EMPTY: u8 = 0;
+pub const TILE_HEAD_UP: u8 = 9;
+pub const TILE_HEAD_DOWN: u8 = 10;
+pub const TILE_HEAD_LEFT: u8 = 11;
+pub const TILE_HEAD_RIGHT: u8 = 12;
+pub const TILE_BODY_VERTICAL_UP: u8 = 13;
+pub const TILE_BODY_VERTICAL_DOWN: u8 = 14;
+pub const TILE_BODY_HORIZONTAL_LEFT: u8 = 15;
+pub const TILE_BODY_HORIZONTAL_RIGHT: u8 = 16;
+pub const TILE_BODY_BR: u8 = 17;
+pub const TILE_BODY_BL: u8 = 18;
+pub const TILE_BODY_TR: u8 = 19;
+pub const TILE_BODY_TL: u8 = 20;
+pub const TILE_TAIL_UP: u8 = 21;
+pub const TILE_TAIL_DOWN: u8 = 22;
+pub const TILE_TAIL_LEFT: u8 = 23;
+pub const TILE_TAIL_RIGHT: u8 = 24;
+pub const TILE_FOOD: u8 = 25;
