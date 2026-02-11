@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, Dict, Optional, Type
+from typing import Any
 
 import torch as th
 from gymnasium import spaces
@@ -25,7 +25,7 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         observation_space: spaces.Dict,
         cnn_features_dim: int = 512,
         normalized_image: bool = False,
-        cnn_extractor_class: Optional[Type[BaseFeaturesExtractor]] = None,
+        cnn_extractor_class: type[BaseFeaturesExtractor] | None = None,
     ) -> None:
         # features_dim is set after we build sub-extractors
         super().__init__(observation_space, features_dim=1)
@@ -33,14 +33,14 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         if cnn_extractor_class is None:
             cnn_extractor_class = NatureCNN
 
-        extractors: Dict[str, nn.Module] = {}
+        extractors: dict[str, nn.Module] = {}
         total_concat_size = 0
 
         for key, subspace in observation_space.spaces.items():
             if is_image_space(subspace, check_channels=False, normalized_image=normalized_image):
                 # CNN-style features extractor (must be BaseFeaturesExtractor-compatible)
                 sig = inspect.signature(cnn_extractor_class.__init__)
-                kwargs: Dict[str, Any] = {"features_dim": int(cnn_features_dim)}
+                kwargs: dict[str, Any] = {"features_dim": int(cnn_features_dim)}
                 if "normalized_image" in sig.parameters:
                     kwargs["normalized_image"] = normalized_image
                 extractors[key] = cnn_extractor_class(

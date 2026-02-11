@@ -5,8 +5,8 @@ import pickle
 import subprocess
 import sys
 import time
+from contextlib import suppress
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -33,7 +33,7 @@ class AgentViewStream:
         - num_classes: int | None        (required for mode="ids")
     """
 
-    proc: Optional[subprocess.Popen] = None
+    proc: subprocess.Popen | None = None
     last_send_t: float = 0.0
 
     def start(
@@ -74,15 +74,11 @@ class AgentViewStream:
     def close(self) -> None:
         if self.proc is None:
             return
-        try:
+        with suppress(Exception):
             if self.proc.poll() is None:
                 _send_msg(self.proc, {"type": "close"})
-        except Exception:
-            pass
-        try:
+        with suppress(Exception):
             self.proc.terminate()
-        except Exception:
-            pass
         self.proc = None
 
     def send_frame(
@@ -90,7 +86,7 @@ class AgentViewStream:
         frame: np.ndarray,
         *,
         mode: str = "gray255",
-        num_classes: Optional[int] = None,
+        num_classes: int | None = None,
         max_fps: int = 0,
     ) -> None:
         """

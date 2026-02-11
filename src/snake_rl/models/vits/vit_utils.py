@@ -1,8 +1,6 @@
 # src/snake_rl/models/vits/vit_utils.py
 from __future__ import annotations
 
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -35,11 +33,11 @@ class GridPositionalEncoding(nn.Module):
             raise ValueError(f"pos_mode must be one of {sorted(POS_MODES)}, got {pos_mode!r}")
         self.pos_mode = pos_mode
 
-        self.pos_1d: Optional[nn.Embedding] = None
-        self.pos_row: Optional[nn.Embedding] = None
-        self.pos_col: Optional[nn.Embedding] = None
-        self.rel_row: Optional[nn.Embedding] = None
-        self.rel_col: Optional[nn.Embedding] = None
+        self.pos_1d: nn.Embedding | None = None
+        self.pos_row: nn.Embedding | None = None
+        self.pos_col: nn.Embedding | None = None
+        self.rel_row: nn.Embedding | None = None
+        self.rel_col: nn.Embedding | None = None
 
         if self.pos_mode == "abs_1d":
             self.pos_1d = nn.Embedding(self.seq_len, self.d_model)
@@ -156,7 +154,7 @@ def pool_tokens(
     *,
     pooling: str,
     has_cls: bool,
-    token_mask: Optional[torch.Tensor] = None,
+    token_mask: torch.Tensor | None = None,
     mask_pool: bool = True,
 ) -> torch.Tensor:
     """

@@ -5,10 +5,10 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 
-def read_json(path: Path) -> Optional[dict[str, Any]]:
+def read_json(path: Path) -> dict[str, Any] | None:
     """
     Read small checkpoint metadata JSON files (e.g. checkpoints/state.json).
     Returns None if the file does not exist.

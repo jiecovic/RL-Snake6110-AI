@@ -72,9 +72,8 @@ def is_straight_spawn_valid(
         if not (0 <= p.x < width and 0 <= p.y < height):
             return False
 
-        if require_interior:
-            if p.x == 0 or p.x == width - 1 or p.y == 0 or p.y == height - 1:
-                return False
+        if require_interior and (p.x == 0 or p.x == width - 1 or p.y == 0 or p.y == height - 1):
+            return False
 
         if p in wall_positions:
             return False

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 
 def setup_logger(*, name: str, use_rich: bool, level: str) -> logging.Logger:
@@ -20,7 +19,7 @@ def setup_logger(*, name: str, use_rich: bool, level: str) -> logging.Logger:
     lvl = getattr(logging, str(level).upper(), logging.INFO)
     logger.setLevel(lvl)
 
-    handler: Optional[logging.Handler] = None
+    handler: logging.Handler | None = None
 
     if use_rich:
         try:

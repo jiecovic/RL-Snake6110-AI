@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Tuple
+from typing import Any
 
 import numpy as np
 
 
-def parse_view_radius(v: Any) -> Tuple[int, int]:
+def parse_view_radius(v: Any) -> tuple[int, int]:
     """
     Parse POV radius.
 

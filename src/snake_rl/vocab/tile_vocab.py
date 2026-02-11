@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import yaml
@@ -29,7 +29,7 @@ class TileVocab:
     name: str
     path: Path
     sha256: str
-    class_names: Tuple[str, ...]
+    class_names: tuple[str, ...]
     lut: np.ndarray
     num_classes: int
 
@@ -45,8 +45,8 @@ class TileVocab:
 
 
 # --- internal cache (process-local) ---
-_REGISTRY_CACHE: Optional[Dict[str, Path]] = None
-_VOCAB_CACHE: Dict[str, TileVocab] = {}
+_REGISTRY_CACHE: dict[str, Path] | None = None
+_VOCAB_CACHE: dict[str, TileVocab] = {}
 
 
 def _assets_vocab_dir() -> Path:
@@ -79,15 +79,15 @@ def _raw_vocab_size() -> int:
     return int(max(int(t.value) for t in TileType) + 1)
 
 
-def _all_yaml_files(root: Path) -> List[Path]:
-    files: List[Path] = []
+def _all_yaml_files(root: Path) -> list[Path]:
+    files: list[Path] = []
     if root.is_dir():
         files.extend(sorted(root.glob("*.yaml")))
         files.extend(sorted(root.glob("*.yml")))
     return files
 
 
-def _build_registry() -> Dict[str, Path]:
+def _build_registry() -> dict[str, Path]:
     """
     Scan assets/vocabs/*.ya?ml and return mapping: vocab_name -> file_path.
 
@@ -101,8 +101,8 @@ def _build_registry() -> Dict[str, Path]:
     if not root.is_dir():
         raise FileNotFoundError(f"Vocab directory not found: {root}")
 
-    by_name: Dict[str, Path] = {}
-    collisions: Dict[str, List[Path]] = {}
+    by_name: dict[str, Path] = {}
+    collisions: dict[str, list[Path]] = {}
 
     for p in _all_yaml_files(root):
         data = _read_yaml(p)
@@ -132,7 +132,7 @@ def _build_registry() -> Dict[str, Path]:
     return by_name
 
 
-def list_tile_vocabs() -> List[str]:
+def list_tile_vocabs() -> list[str]:
     """
     Return available vocab names from assets/vocabs.
     """
@@ -164,11 +164,11 @@ def resolve_tile_vocab_path(name: str) -> Path:
     return p
 
 
-def _parse_classes(d: Any, *, ctx: str, path: Path) -> List[Tuple[str, List[TileType]]]:
+def _parse_classes(d: Any, *, ctx: str, path: Path) -> list[tuple[str, list[TileType]]]:
     if not isinstance(d, dict):
         raise TypeError(f"Expected '{ctx}' to be a dict in {path}")
 
-    out: List[Tuple[str, List[TileType]]] = []
+    out: list[tuple[str, list[TileType]]] = []
     for class_name, members_v in d.items():
         cname = str(class_name).strip()
         if not cname:
@@ -177,7 +177,7 @@ def _parse_classes(d: Any, *, ctx: str, path: Path) -> List[Tuple[str, List[Tile
         if not isinstance(members_v, list) or not members_v:
             raise TypeError(f"Expected '{ctx}.{cname}' to be a non-empty list in {path}")
 
-        members: List[TileType] = []
+        members: list[TileType] = []
         for item in members_v:
             s = str(item).strip()
             if not s:
@@ -195,11 +195,11 @@ def _parse_classes(d: Any, *, ctx: str, path: Path) -> List[Tuple[str, List[Tile
     return out
 
 
-def _compile_lut(*, classes: List[Tuple[str, List[TileType]]], path: Path) -> np.ndarray:
+def _compile_lut(*, classes: list[tuple[str, list[TileType]]], path: Path) -> np.ndarray:
     raw_size = _raw_vocab_size()
 
     # Track coverage
-    seen: Dict[TileType, str] = {}
+    seen: dict[TileType, str] = {}
     lut = np.zeros((raw_size,), dtype=np.uint8)
 
     for class_id, (cname, members) in enumerate(classes):
@@ -231,7 +231,7 @@ def load_tile_vocab(name: str) -> TileVocab:
     if not key:
         raise ValueError("tile_vocab name must be a non-empty string")
 
-    cached = _VOCAB_CACHE.get(key, None)
+    cached = _VOCAB_CACHE.get(key)
     if cached is not None:
         return cached
 

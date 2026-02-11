@@ -1,8 +1,6 @@
 # src/snake_rl/models/vits/tile_vit_extractor.py
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import torch
 from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
@@ -11,7 +9,7 @@ from torch import nn
 from snake_rl.models.vits.vit_utils import POS_MODES, GridPositionalEncoding, pool_tokens
 
 
-def _infer_chw(space: spaces.Box) -> Tuple[int, int, int]:
+def _infer_chw(space: spaces.Box) -> tuple[int, int, int]:
     """
     Return (C, H, W) for supported tile-id observations.
     Supported shapes:
@@ -146,7 +144,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
         nn.init.normal_(self.tile_emb.weight, mean=0.0, std=0.02)
 
         # Optional: embed the "frame/channel" index if we have C>1.
-        self.frame_emb: Optional[nn.Embedding] = None
+        self.frame_emb: nn.Embedding | None = None
         if self.in_channels > 1 and self.use_frame_embed:
             self.frame_emb = nn.Embedding(self.in_channels, self.d_model)
             nn.init.normal_(self.frame_emb.weight, mean=0.0, std=0.02)
@@ -160,7 +158,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
         )
 
         # Optional CLS token.
-        self.cls_token: Optional[torch.Tensor] = None
+        self.cls_token: torch.Tensor | None = None
         if self.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, self.d_model))
             nn.init.normal_(self.cls_token, mean=0.0, std=0.02)
@@ -205,7 +203,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
             # For non-flatten pooling modes, keep a simple linear projection.
             self.out_proj = nn.Linear(in_dim, int(features_dim), bias=True)
 
-    def _build_token_mask(self, tile_ids: torch.Tensor) -> Optional[torch.Tensor]:
+    def _build_token_mask(self, tile_ids: torch.Tensor) -> torch.Tensor | None:
         """
         Build src_key_padding_mask for attention.
 
@@ -299,10 +297,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
 
         if self.pooling == "flatten":
             # For flatten we drop CLS (if present) and just flatten all spatial tokens.
-            if self.cls_token is not None:
-                tokens = x[:, 1:, :]  # [B, num_tokens, D]
-            else:
-                tokens = x  # [B, num_tokens, D]
+            tokens = x[:, 1:, :] if self.cls_token is not None else x  # [B, num_tokens, D]
 
             flat = tokens.reshape(b, -1)  # [B, num_tokens * D]
             return self.out_proj(flat)

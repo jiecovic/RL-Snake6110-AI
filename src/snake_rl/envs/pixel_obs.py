@@ -1,7 +1,7 @@
 # src/snake_rl/envs/pixel_obs.py
 from __future__ import annotations
 
-from typing import Literal, Optional, Tuple, Union, overload
+from typing import Literal, overload
 
 import numpy as np
 
@@ -9,7 +9,7 @@ from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.geometry import Direction
 from snake_rl.game.snakegame import SnakeGame
 
-Radius = Union[int, Tuple[int, int]]
+Radius = int | tuple[int, int]
 
 
 def _rotate_tile_block(block: np.ndarray, d: Direction) -> np.ndarray:
@@ -125,7 +125,7 @@ class PixelObsEnvBase:
         fill = np.uint8(int(oob_fill_value) & 0xFF)
         vision = np.full((view_h, view_w), fill, dtype=np.uint8)
 
-        valid: Optional[np.ndarray] = None
+        valid: np.ndarray | None = None
         if return_valid:
             valid = np.zeros((view_h, view_w), dtype=np.bool_)
 
@@ -229,7 +229,7 @@ class FillFeature:
     - Optionally bins the value into a discrete number of bins.
     """
 
-    def __init__(self, *, fill_bins: Optional[int] = None):
+    def __init__(self, *, fill_bins: int | None = None):
         self.fill_bins = None if fill_bins is None else int(fill_bins)
 
     def compute(self, *, snake_len: int, initial_len: int, max_playable: int):

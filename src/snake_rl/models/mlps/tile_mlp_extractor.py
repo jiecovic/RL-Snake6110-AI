@@ -1,7 +1,7 @@
 # src/snake_rl/models/mlps/tile_mlp_extractor.py
 from __future__ import annotations
 
-from typing import Iterable, Optional, Tuple
+from collections.abc import Iterable
 
 import torch
 from gymnasium import spaces
@@ -11,7 +11,7 @@ from torch import nn
 from snake_rl.models.vits.vit_utils import POS_MODES, GridPositionalEncoding
 
 
-def _infer_chw(space: spaces.Box) -> Tuple[int, int, int]:
+def _infer_chw(space: spaces.Box) -> tuple[int, int, int]:
     """
     Return (C, H, W) for supported tile-id observations.
     Supported shapes:
@@ -177,7 +177,7 @@ class TileMLPExtractor(BaseFeaturesExtractor):
 
         self.mlp = _build_mlp(head_in, mlp_hidden, int(features_dim), float(dropout))
 
-    def _build_token_mask(self, tile_ids: torch.Tensor) -> Optional[torch.Tensor]:
+    def _build_token_mask(self, tile_ids: torch.Tensor) -> torch.Tensor | None:
         """
         Build a token mask aligned with the token sequence (no CLS).
         Returns mask: [B,T] or [B,C*T] bool, True => ignore/exclude.

@@ -1,7 +1,7 @@
 # src/snake_rl/tools/obs_debug.py
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -39,7 +39,7 @@ def print_tile_grid(grid_hw: np.ndarray, *, max_h: int = 13, max_w: int = 22) ->
         print(f"[obs_debug] (clipped print to {hh}x{ww} of full {h}x{w})", flush=True)
 
 
-def _extract_first_grid_from_array(arr: np.ndarray) -> Optional[np.ndarray]:
+def _extract_first_grid_from_array(arr: np.ndarray) -> np.ndarray | None:
     """
     Attempt to extract a 2D integer grid from common env observation layouts.
 

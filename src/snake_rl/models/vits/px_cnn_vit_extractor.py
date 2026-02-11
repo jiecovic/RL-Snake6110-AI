@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import importlib
-from typing import Tuple
 
 import numpy as np
 import torch
@@ -15,7 +14,7 @@ from snake_rl.models.cnns.base import BaseCNNExtractor
 from snake_rl.models.vits.vit_utils import POS_MODES, GridPositionalEncoding, pool_tokens
 
 
-def _infer_chw(space: spaces.Box) -> Tuple[int, int, int]:
+def _infer_chw(space: spaces.Box) -> tuple[int, int, int]:
     if not isinstance(space, spaces.Box):
         raise TypeError(f"CnnViTExtractor expects spaces.Box, got {type(space)!r}")
     shape = space.shape

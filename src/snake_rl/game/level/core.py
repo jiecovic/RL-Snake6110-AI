@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -27,7 +27,7 @@ class BaseLevel:
         self.grid = grid
         self.spawn = spawn
 
-    def to_dict(self, *, tileset: Optional[Tileset] = None) -> dict[str, Any]:
+    def to_dict(self, *, tileset: Tileset | None = None) -> dict[str, Any]:
         ts = tileset or Tileset()
 
         def cell_to_glyph(cell: TileType) -> str:
@@ -51,7 +51,7 @@ class BaseLevel:
             },
         }
 
-    def to_yaml(self, path: str | Path, *, tileset: Optional[Tileset] = None) -> None:
+    def to_yaml(self, path: str | Path, *, tileset: Tileset | None = None) -> None:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("w", encoding="utf-8") as f:
@@ -94,7 +94,7 @@ class TemplateLevel(BaseLevel):
         self,
         filepath: str | Path = "levels/test_level.yaml",
         *,
-        tileset: Optional[Tileset] = None,
+        tileset: Tileset | None = None,
         strict_glyphs: bool = True,
     ):
         width, height, grid, spawn = load_level_yaml(

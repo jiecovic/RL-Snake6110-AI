@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -95,7 +95,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         obs = self.get_obs()
         return obs, {}
 
-    def _get_min_food_distance(self) -> Optional[int]:
+    def _get_min_food_distance(self) -> int | None:
         head = self.game.get_head_position()
         food = self.game.get_food_positions()
         if not food:
@@ -143,7 +143,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         info: dict[str, Any] = {"move_results": results}
 
         if terminated or truncated:
-            result_for_cause: Optional[MoveResult] = next(
+            result_for_cause: MoveResult | None = next(
                 (r for r in self.TERMINATION_PRIORITY if r in results),
                 None,
             )

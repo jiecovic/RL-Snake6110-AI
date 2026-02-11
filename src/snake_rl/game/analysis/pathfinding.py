@@ -1,15 +1,13 @@
 # src/snake_rl/game/analysis/pathfinding.py
 from __future__ import annotations
 
-from typing import List, Optional
-
 import networkx as nx
 
 from snake_rl.game.geometry import Point
 from snake_rl.game.snakegame import SnakeGame
 
 
-def shortest_path_to_closest_food_dijkstra(game: SnakeGame) -> Optional[List[Point]]:
+def shortest_path_to_closest_food_dijkstra(game: SnakeGame) -> list[Point] | None:
     """
     Uses Dijkstra/shortest_path via networkx to find shortest path from head to closest food.
     Ignores moving tail; excludes snake body (except head).

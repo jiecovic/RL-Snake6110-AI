@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -27,10 +26,10 @@ class SpawnSpec:
         we just carry the number).
     """
 
-    x: Optional[int]
-    y: Optional[int]
+    x: int | None
+    y: int | None
     length: int
-    direction: Optional[Direction]
+    direction: Direction | None
     random_direction: bool
     jitter: int
 
@@ -158,11 +157,7 @@ def load_level_yaml(
     random_direction = bool(spawn.get("random_direction", False))
 
     dir_v = spawn.get("direction", None)
-    direction: Optional[Direction]
-    if dir_v is None:
-        direction = None
-    else:
-        direction = parse_direction(dir_v)
+    direction: Direction | None = None if dir_v is None else parse_direction(dir_v)
 
     jitter = int(spawn.get("jitter", 0))
     if jitter < 0:

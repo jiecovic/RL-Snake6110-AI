@@ -1,7 +1,7 @@
 # src/snake_rl/utils/obs_render.py
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -34,7 +34,7 @@ def obs_last_frame_and_kind(
     *,
     pixel_key: str = "pixel",
     kind_hint: str | None = None,
-) -> Tuple[np.ndarray, str]:
+) -> tuple[np.ndarray, str]:
     """
     Extract the *last* stacked frame from a VecEnv observation.
 
@@ -77,7 +77,7 @@ def obs_last_frame_and_kind(
         vmin = int(frame.min()) if frame.size else 0
         # If values are within TileType range and non-negative, it's likely tile ids.
         max_tid = max(int(t.value) for t in TileType)
-        if 0 <= vmin and vmax <= max_tid:
+        if vmin >= 0 and vmax <= max_tid:
             return frame, "tile_id"
 
         return frame, "pixel"
@@ -92,7 +92,7 @@ def obs_last_frame_and_kind(
     vmax = int(frame.max()) if frame.size else 0
     vmin = int(frame.min()) if frame.size else 0
     max_tid = max(int(t.value) for t in TileType)
-    kind = "tile_id" if 0 <= vmin and vmax <= max_tid else "pixel"
+    kind = "tile_id" if vmin >= 0 and vmax <= max_tid else "pixel"
     return frame, kind
 
 
@@ -136,7 +136,7 @@ def tile_id_frame_to_pixels(
 def obs_frame_to_pixels(
     obs: Any,
     *,
-    tileset: Optional[Tileset] = None,
+    tileset: Tileset | None = None,
     pixel_key: str = "pixel",
 ) -> np.ndarray:
     """

@@ -1,8 +1,8 @@
 # src/snake_rl/game/rendering/pygame/app.py
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import pygame
 
@@ -39,7 +39,7 @@ def run_pygame_app(
     *,
     game: SnakeGame,
     cfg: AppConfig,
-    step_fn: Optional[StepFn] = None,
+    step_fn: StepFn | None = None,
 ) -> None:
     """
     pygame UI loop.

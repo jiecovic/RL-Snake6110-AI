@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, cast
+from typing import cast
 
 import yaml
 
@@ -36,16 +36,16 @@ class Tileset:
     def __init__(self, filepath: str = "assets/tilesets/classic.yaml"):
         self.filepath = Path(filepath)
         self.tile_size: int
-        self.tiles: Dict[TileType, List[List[int]]] = {}
+        self.tiles: dict[TileType, list[list[int]]] = {}
 
         # TileType -> glyph (optional)
-        self.glyphs: Dict[TileType, str] = {}
+        self.glyphs: dict[TileType, str] = {}
 
         # glyph -> list of TileTypes (duplicates allowed)
-        self.glyph_to_tiles: Dict[str, List[TileType]] = {}
+        self.glyph_to_tiles: dict[str, list[TileType]] = {}
 
         # glyph -> canonical TileType (first encountered)
-        self.glyph_to_tile: Dict[str, TileType] = {}
+        self.glyph_to_tile: dict[str, TileType] = {}
 
         data = self._read_yaml(self.filepath)
         self._load(data)
@@ -103,7 +103,7 @@ class Tileset:
                     f"Invalid or inconsistent 'pixels' matrix for tile '{name}' "
                     f"(expected {self.tile_size}x{self.tile_size})"
                 )
-            pixels = cast(List[List[int]], pixels)
+            pixels = cast(list[list[int]], pixels)
 
             # Optional: validate pixels are ints (YAML can load weird scalars)
             if not self._pixels_are_ints(pixels):
@@ -146,12 +146,12 @@ class Tileset:
     # Helpers
     # ------------------------------------------------------------------ #
 
-    def _is_valid_matrix(self, matrix: List[List[int]] | None, size: int) -> bool:
+    def _is_valid_matrix(self, matrix: list[list[int]] | None, size: int) -> bool:
         if not isinstance(matrix, list) or len(matrix) != size:
             return False
         return all(isinstance(row, list) and len(row) == size for row in matrix)
 
-    def _pixels_are_ints(self, matrix: List[List[int]]) -> bool:
+    def _pixels_are_ints(self, matrix: list[list[int]]) -> bool:
         for row in matrix:
             for v in row:
                 if not isinstance(v, int):
@@ -162,7 +162,7 @@ class Tileset:
     # Access
     # ------------------------------------------------------------------ #
 
-    def __getitem__(self, tile_type: TileType) -> List[List[int]]:
+    def __getitem__(self, tile_type: TileType) -> list[list[int]]:
         return self.tiles[tile_type]
 
     def __contains__(self, tile_type: TileType) -> bool:
@@ -185,7 +185,7 @@ class Tileset:
             raise ValueError("glyph must be a single character")
         return self.glyph_to_tile.get(glyph)
 
-    def tiles_for_glyph(self, glyph: str) -> List[TileType]:
+    def tiles_for_glyph(self, glyph: str) -> list[TileType]:
         """Return all TileTypes registered for a glyph (possibly empty)."""
         if not isinstance(glyph, str) or len(glyph) != 1:
             raise ValueError("glyph must be a single character")

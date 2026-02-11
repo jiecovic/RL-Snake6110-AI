@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 
@@ -24,7 +24,7 @@ def _count_params(module: torch.nn.Module) -> ParamCount:
     return ParamCount(total=total, trainable=trainable)
 
 
-def _get_attr(obj: Any, name: str) -> Optional[Any]:
+def _get_attr(obj: Any, name: str) -> Any | None:
     return getattr(obj, name, None)
 
 

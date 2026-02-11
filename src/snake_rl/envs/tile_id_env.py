@@ -97,10 +97,7 @@ class GlobalTileIdEnv(BaseSnakeEnv):
 
     def get_obs(self):
         raw = self._get_grid_view()
-        if self._tile_vocab is None:
-            grid = raw
-        else:
-            grid = self._tile_vocab.lut[raw]
+        grid = raw if self._tile_vocab is None else self._tile_vocab.lut[raw]
 
         self._last_raw_grid = raw
         self._last_class_grid = grid
@@ -267,10 +264,7 @@ class PovTileIdEnv(BaseSnakeEnv):
         raw, valid = self._pov_tile_frame_with_valid()
 
         # Map raw -> class IDs (or identity).
-        if self._tile_vocab is None:
-            frame = raw
-        else:
-            frame = self._tile_vocab.lut[raw]
+        frame = raw if self._tile_vocab is None else self._tile_vocab.lut[raw]
 
         self._last_raw_grid = raw
         self._last_class_grid = frame

@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import pickle
 import sys
-from typing import Optional, Tuple
 
 import numpy as np
 import pygame
@@ -22,7 +21,7 @@ def _read_exact(n: int) -> bytes:
     return buf
 
 
-def _read_msg() -> Optional[dict]:
+def _read_msg() -> dict | None:
     hdr = _read_exact(4)
     if not hdr:
         return None
@@ -81,10 +80,7 @@ def _render_ids_overlay(
     h, w = int(ids2d.shape[0]), int(ids2d.shape[1])
 
     # Ensure ints for rendering.
-    if ids2d.dtype.kind not in {"u", "i"}:
-        ids = ids2d.astype(np.int64, copy=False)
-    else:
-        ids = ids2d
+    ids = ids2d.astype(np.int64, copy=False) if ids2d.dtype.kind not in {"u", "i"} else ids2d
 
     # Small outline makes numbers readable on both dark/light backgrounds.
     for y in range(h):
@@ -139,11 +135,11 @@ def main() -> None:
     pygame.init()
     clock = pygame.time.Clock()
 
-    screen: Optional[pygame.Surface] = None
-    last_size: Tuple[int, int] = (0, 0)
+    screen: pygame.Surface | None = None
+    last_size: tuple[int, int] = (0, 0)
 
     # Font is created lazily once we know pixel_size.
-    font: Optional[pygame.font.Font] = None
+    font: pygame.font.Font | None = None
     last_font_ps: int = 0
 
     try:

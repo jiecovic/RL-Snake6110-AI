@@ -1,8 +1,6 @@
 # src/snake_rl/envs/pixel_envs.py
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 from gymnasium import spaces
 
@@ -230,7 +228,7 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
         game: SnakeGame,
         *,
         view_radius: int,
-        fill_bins: Optional[int] = None,
+        fill_bins: int | None = None,
         rotate_to_head: bool = True,
         add_oob_mask: bool = False,
         pixel_oob_value: int = 255,

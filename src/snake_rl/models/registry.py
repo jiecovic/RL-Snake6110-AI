@@ -1,8 +1,6 @@
 # src/snake_rl/models/registry.py
 from __future__ import annotations
 
-from typing import Type
-
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 # pixel-based CNNs
@@ -20,7 +18,7 @@ from snake_rl.models.mlps.tile_mlp_extractor import TileMLPExtractor
 from snake_rl.models.vits.px_cnn_vit_extractor import PxCnnViTExtractor
 from snake_rl.models.vits.tile_vit_extractor import TileViTExtractor
 
-FEATURE_EXTRACTOR_REGISTRY: dict[str, Type[BaseFeaturesExtractor]] = {
+FEATURE_EXTRACTOR_REGISTRY: dict[str, type[BaseFeaturesExtractor]] = {
     # pixel-based CNNs
     "px_strided_cnn_l1k4": PxStridedCNN_L1K4,
     "px_strided_cnn_l2_s2s2_k4": PxStridedCNN_L2_S2S2_K4,
