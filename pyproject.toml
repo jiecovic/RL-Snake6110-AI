@@ -16,12 +16,18 @@ dependencies = [
     "torch>=2.0",
     "pygame>=2.5",
     "PyYAML>=6.0",
+    "tqdm>=4.66",
+    "rich>=13.7",
 ]
 
 [project.optional-dependencies]
 # Only needed for your run.py / visualization helpers (opencv, feature maps, etc.)
 viz = [
     "opencv-python>=4.8,<5.0",
+]
+dev = [
+    "ruff>=0.6.4",
+    "pyright>=1.1.386",
 ]
 
 [tool.setuptools]
@@ -39,3 +45,38 @@ snake-watch = "snake_rl.cli.watch:main"
 # New tools for level and tileset printing
 snake-print-level = "snake_rl.tools.print_level:main"
 snake-print-tileset = "snake_rl.tools.print_tileset:main"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    "assets",
+    "configs",
+    "demo-videos",
+    "experiments",
+    "old_*",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.pyright]
+include = ["src"]
+exclude = [
+    "assets",
+    "configs",
+    "demo-videos",
+    "experiments",
+    "old_*",
+    ".venv",
+    "venv",
+    "env",
+]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = false
