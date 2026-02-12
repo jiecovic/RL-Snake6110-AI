@@ -1,18 +1,17 @@
-feature_extractor:
-  type: snake_unified
-  features_dim: 512
-  params:
-    stem:
-      type: px_cnn
-      params:
-        d_model: 64
-        layers:
-          - { out: 64, k: 4, s: 4, p: 0, act: relu }
-        frame_mode: stacked
-        frame_base_channels: 1
-    mixer:
-      type: identity
-    pooling: flatten
-    use_cls_token: false
-    use_frame_embed: false
-    flatten_mlp_hidden_dim: 512
+type: snake_unified
+features_dim: 512
+params:
+  stem:
+    type: px_cnn
+    params:
+      d_model: 64
+      layers:
+        - { out: 64, k: 4, s: 4, p: 0, act: relu }
+      frame_mode: stacked
+      frame_base_channels: 1
+  mixer:
+    type: identity
+  pooling: flatten
+  use_cls_token: false
+  use_frame_embed: false
+  flatten_mlp_hidden_dim: 512

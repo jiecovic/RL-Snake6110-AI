@@ -6,13 +6,59 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig
 
-from snake_rl.config.loader import dataclass_from_raw, load_from_hydra_cfg
+from snake_rl.config.loader import (
+    dataclass_from_raw,
+    load_from_hydra_cfg,
+    load_train_config_from_path,
+)
 from snake_rl.rl.train.train_loop import train
 from snake_rl.utils.runs.paths import repo_root, runs_root
 from snake_rl.utils.runs.resume import resolve_resume_arg
 from snake_rl.utils.runs.run_paths import make_run_paths
 
 CONFIG_DIR = Path(repo_root()) / "configs"
+
+
+def run_from_config_path(
+    *,
+    config_path: Path,
+    overrides: list[str] | None = None,
+    no_rich: bool | None = None,
+    log_level: str | None = None,
+) -> None:
+    cfg_path = Path(config_path)
+    cfg, logging_cfg, model, raw_yaml = load_train_config_from_path(
+        config_path=cfg_path,
+        config_root=CONFIG_DIR,
+        overrides=list(overrides or []),
+    )
+
+    cfg_no_rich = bool(logging_cfg.get("no_rich", False))
+    cfg_log_level = str(logging_cfg.get("level", "INFO"))
+    use_rich = not cfg_no_rich
+    if no_rich is True:
+        use_rich = False
+    effective_log_level = cfg_log_level if log_level is None else str(log_level)
+
+    resume_path = None
+    if cfg.run.resume_checkpoint:
+        resume_path = resolve_resume_arg(
+            str(cfg.run.resume_checkpoint),
+            runs_root=runs_root(),
+            legacy_root=repo_root() / "experiments",
+        )
+
+    paths = make_run_paths(run_name=str(cfg.run.name))
+
+    train(
+        cfg=cfg,
+        paths=paths,
+        resume_path=resume_path,
+        use_rich=use_rich,
+        log_level=effective_log_level,
+        config_hydra_yaml=raw_yaml,
+        config_validated=model.model_dump(mode="python"),
+    )
 
 
 @hydra.main(version_base=None, config_path=str(CONFIG_DIR), config_name="config")

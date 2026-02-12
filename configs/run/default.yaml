@@ -1,7 +1,6 @@
-run:
-  name: snake_run
-  seed: 42
-  num_envs: 12
-  total_timesteps: 1_000_000
-  checkpoint_freq: 10_000
-  resume_checkpoint: null
+name: snake_run
+seed: 42
+num_envs: 12
+total_timesteps: 1_000_000
+checkpoint_freq: 10_000
+resume_checkpoint: null

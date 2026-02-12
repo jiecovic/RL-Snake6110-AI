@@ -1,15 +1,14 @@
 ---
 # Environment + observation config (board and reward are chosen separately)
-env:
-  engine: python
-  action:
-    type: relative
-  obs:
-    kind: categorical
-    view: world
-    params:
-      remove_border: true
-  frame_stack:
-    n_frames: 1
+engine: python
+action:
+  type: relative
+obs:
+  kind: categorical
+  view: world
+  params:
+    remove_border: true
+frame_stack:
+  n_frames: 1
 
 

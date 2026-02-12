@@ -1,25 +1,24 @@
-feature_extractor:
-  type: snake_unified
-  features_dim: 128
-  params:
-    stem:
-      type: cat_patch
-      params:
-        d_model: 64
-        patch: 2
-        stride: 2
-        frame_fuse: sum
-    mixer:
-      type: transformer
-      params:
-        n_layers: 4
-        n_heads: 4
-        ffn_dim: 128
-        dropout: 0.1
-        norm_first: true
-    pooling: cls_mean
-    pos_mode: abs_2d
-    use_cls_token: true
-    use_frame_embed: true
-    use_token_mask: true
-    mask_token_id: 0
+type: snake_unified
+features_dim: 128
+params:
+  stem:
+    type: cat_patch
+    params:
+      d_model: 64
+      patch: 2
+      stride: 2
+      frame_fuse: sum
+  mixer:
+    type: transformer
+    params:
+      n_layers: 4
+      n_heads: 4
+      ffn_dim: 128
+      dropout: 0.1
+      norm_first: true
+  pooling: cls_mean
+  pos_mode: abs_2d
+  use_cls_token: true
+  use_frame_embed: true
+  use_token_mask: true
+  mask_token_id: 0

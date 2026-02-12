@@ -1,22 +1,21 @@
-train:
-  algo:
-    type: ppo
-    params:
-      policy_kwargs:
-        net_arch:
-          - 256
-          - 256
-      n_steps: 2048
-      batch_size: 128
-      n_epochs: 2
-      gamma: 0.998
-      ent_coef: 0.03
-      learning_rate: 1e-4
-      normalize_advantage: true
-      verbose: 0
-  eval:
-    enabled: true
-    episodes: 20
-    best_metric: mean_reward
-    deterministic: true
-    seed_offset: 10000
+algo:
+  type: ppo
+  params:
+    policy_kwargs:
+      net_arch:
+        - 256
+        - 256
+    n_steps: 2048
+    batch_size: 128
+    n_epochs: 2
+    gamma: 0.998
+    ent_coef: 0.03
+    learning_rate: 1e-4
+    normalize_advantage: true
+    verbose: 0
+eval:
+  enabled: true
+  episodes: 20
+  best_metric: mean_reward
+  deterministic: true
+  seed_offset: 10000

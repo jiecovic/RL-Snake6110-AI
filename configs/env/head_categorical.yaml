@@ -1,17 +1,16 @@
 ---
 # Environment + observation config (board and reward are chosen separately)
-env:
-  engine: python
-  action:
-    type: relative
-  obs:
-    kind: categorical
-    view: head
-    params:
-      tile_vocab: head_v1
-      view_radius: 6
-      rotate_to_head: true
-  frame_stack:
-    n_frames: 1
+engine: python
+action:
+  type: relative
+obs:
+  kind: categorical
+  view: head
+  params:
+    tile_vocab: head_v1
+    view_radius: 6
+    rotate_to_head: true
+frame_stack:
+  n_frames: 1
 
 

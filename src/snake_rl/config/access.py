@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from snake_rl.config.schema import ObservationConfig
+
 
 def cfg_get(cfg: Any, path: str, default: Any = None) -> Any:
     """
@@ -60,6 +62,13 @@ def get_env_obs(cfg: Any) -> dict[str, Any]:
     obs = cfg_get(cfg, "env.obs", None)
     if isinstance(obs, dict):
         return dict(obs)
+    if isinstance(obs, ObservationConfig):
+        return {
+            "kind": str(obs.kind),
+            "view": str(obs.view),
+            "params": dict(obs.params),
+            "features": dict(obs.features),
+        }
 
     raise KeyError("Config missing env.obs")
 

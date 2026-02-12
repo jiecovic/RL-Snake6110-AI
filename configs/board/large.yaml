@@ -1,5 +1,4 @@
-board:
-  height: 17
-  width: 30
-  food_count: 1
+height: 17
+width: 30
+food_count: 1
 

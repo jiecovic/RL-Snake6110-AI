@@ -1,4 +1,3 @@
-logging:
-  no_rich: false
-  level: "INFO"
+no_rich: false
+level: "INFO"
 

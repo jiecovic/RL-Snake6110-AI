@@ -1,16 +1,15 @@
-feature_extractor:
-  type: snake_unified
-  features_dim: 512
-  params:
-    stem:
-      type: cat_identity
-      params:
-        d_model: 32
-        frame_fuse: sum
-    mixer:
-      type: identity
-    pooling: flatten
-    use_cls_token: false
-    use_token_mask: true
-    mask_token_id: 0
-    flatten_mlp_hidden_dim: 512
+type: snake_unified
+features_dim: 512
+params:
+  stem:
+    type: cat_identity
+    params:
+      d_model: 32
+      frame_fuse: sum
+  mixer:
+    type: identity
+  pooling: flatten
+  use_cls_token: false
+  use_token_mask: true
+  mask_token_id: 0
+  flatten_mlp_hidden_dim: 512

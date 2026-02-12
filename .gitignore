@@ -228,6 +228,8 @@ runs/**/tb/**
 # Allow code under src/snake_rl/utils/runs (gitignore "runs/" is broad).
 !src/snake_rl/utils/runs/
 !src/snake_rl/utils/runs/**
+src/snake_rl/utils/runs/**/__pycache__/
+src/snake_rl/utils/runs/**/*.pyc
 
 # Legacy experiments outputs
 experiments/
