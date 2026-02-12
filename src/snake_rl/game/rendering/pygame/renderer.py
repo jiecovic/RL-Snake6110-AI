@@ -47,7 +47,7 @@ class PygameRenderer:
         self.agent_view_vocab_num_classes = agent_view_vocab_num_classes
         self.hud_mode = str(hud_mode)
         self.hud_features = dict(hud_features or {})
-        self.hud_info = dict(hud_info or {})
+        self.hud_info = hud_info if hud_info is not None else {}
 
     def draw(self, *, game: SnakeEngine, ctx: PygameRenderContext) -> None:
         if game.pixel_buffer is None or game.pixel_buffer.size == 0:

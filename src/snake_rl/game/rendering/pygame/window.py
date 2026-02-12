@@ -71,6 +71,7 @@ def create_pygame_context(
     pixel_size: int,
     caption: str,
     agent_view_grid: tuple[int, int] | None = None,
+    agent_view_side: str = "right",
     layout: LayoutConfig | None = None,
 ) -> PygameRenderContext:
     if pygame is None:  # pragma: no cover
@@ -117,7 +118,11 @@ def create_pygame_context(
     font = pygame.font.SysFont(cfg.font_name, int(cfg.font_size))
     label_font = pygame.font.SysFont(cfg.font_name, int(cfg.label_font_size))
 
-    world_panel = Rect(x=margin, y=margin, w=world_panel_w, h=world_panel_h)
+    side = str(agent_view_side).strip().lower()
+    agent_on_left = side in {"left", "l"}
+
+    world_x = margin + (agent_panel_w + gap if agent_on_left and agent_panel_w else 0)
+    world_panel = Rect(x=world_x, y=margin, w=world_panel_w, h=world_panel_h)
     world_view = Rect(
         x=world_panel.x + panel_pad,
         y=world_panel.y + panel_pad + label_h,
@@ -128,7 +133,7 @@ def create_pygame_context(
     agent_panel: Rect | None = None
     agent_view: Rect | None = None
     if agent_panel_w and agent_panel_h:
-        ax = margin + world_panel_w + gap
+        ax = margin if agent_on_left else margin + world_panel_w + gap
         agent_panel = Rect(x=ax, y=margin, w=agent_panel_w, h=agent_panel_h)
         agent_view = Rect(
             x=agent_panel.x + panel_pad,
@@ -138,7 +143,7 @@ def create_pygame_context(
         )
 
     hud_panel = Rect(
-        x=margin,
+        x=world_panel.x,
         y=margin + world_panel_h + hud_gap,
         w=world_panel_w,
         h=hud_h,

@@ -120,6 +120,7 @@ class WatchController:
         self.current_ckpt = initial_ckpt
         self.current_mtime = initial_ckpt.stat().st_mtime
         self.last_reload_check = 0.0
+        self.last_reload_at = time.time()
 
         self.logger = logger
         self.repo = repo
@@ -142,10 +143,14 @@ class WatchController:
                 self.model = load_ppo(chosen, device=self.device)
                 self.current_ckpt = chosen
                 self.current_mtime = mtime
+                self.last_reload_at = time.time()
                 rel = relpath(chosen, base=self.repo)
                 self.logger.info(f"reloaded checkpoint: {rel} (mtime={int(mtime)})")
         except Exception:
             self.logger.exception("reload error")
+
+    def reload_age_seconds(self) -> float:
+        return max(0.0, time.time() - self.last_reload_at)
 
     def step(self) -> None:
         self.maybe_reload()
@@ -234,8 +239,18 @@ def main() -> None:
         repo=repo,
     )
 
+    hud_info = {
+        "mode": "watch",
+        "run": run_dir.name,
+        "which": str(args.which),
+        "seed": str(args.seed),
+        "obs": f"{obs_spec.kind_norm()}/{obs_spec.view_norm()}",
+        "action": str(action_spec.type),
+    }
+
     def _controller_step() -> None:
         controller.step()
+        hud_info["reload"] = f"{controller.reload_age_seconds():.1f}s"
 
     try:
         run_pygame_app(
@@ -249,16 +264,10 @@ def main() -> None:
                 agent_view_spec=obs_spec,
                 agent_view_vocab_name=obs_spec.tile_vocab_name(),
                 agent_view_vocab_num_classes=obs_spec.tile_vocab_num_classes(),
+                agent_view_side="left",
                 hud_mode="selected",
                 hud_features=obs_spec.features,
-                hud_info={
-                    "mode": "watch",
-                    "run": run_dir.name,
-                    "which": str(args.which),
-                    "seed": str(args.seed),
-                    "obs": f"{obs_spec.kind_norm()}/{obs_spec.view_norm()}",
-                    "action": str(action_spec.type),
-                },
+                hud_info=hud_info,
             ),
             step_fn=_controller_step,
         )

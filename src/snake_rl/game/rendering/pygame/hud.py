@@ -8,10 +8,40 @@ from snake_rl.envs.specs import ObservationSpec
 from snake_rl.game.snake_engine import SnakeEngine
 
 
+def _feature_enabled(value: Any) -> bool:
+    if isinstance(value, dict):
+        return bool(value.get("enabled", True))
+    return bool(value)
+
+
+def _normalize_feature_flags(hud_features: dict[str, Any]) -> dict[str, Any]:
+    flags: dict[str, Any] = {}
+    if "direction" in hud_features:
+        flags["direction"] = hud_features.get("direction")
+    if "snake_progress" in hud_features:
+        flags["snake_progress"] = hud_features.get("snake_progress")
+    if "fill" in hud_features and "snake_progress" not in flags:
+        flags["snake_progress"] = hud_features.get("fill")
+    if "time_since_food" in hud_features:
+        flags["time_since_food"] = hud_features.get("time_since_food")
+    if "time_since_last_food" in hud_features and "time_since_food" not in flags:
+        flags["time_since_food"] = hud_features.get("time_since_last_food")
+    if "closest_food" in hud_features:
+        flags["closest_food"] = hud_features.get("closest_food")
+    if "collision_ahead" in hud_features:
+        flags["collision_ahead"] = hud_features.get("collision_ahead")
+    if "collision_left" in hud_features:
+        flags["collision_left"] = hud_features.get("collision_left")
+    if "collision_right" in hud_features:
+        flags["collision_right"] = hud_features.get("collision_right")
+    return flags
+
+
 def hud_feature_flags(*, hud_mode: str, hud_features: dict[str, Any]) -> dict[str, Any]:
     mode = str(hud_mode).strip().lower()
     if mode == "selected":
-        return {k: v for k, v in hud_features.items() if v}
+        flags = _normalize_feature_flags(hud_features)
+        return {k: v for k, v in flags.items() if _feature_enabled(v)}
     return {
         "direction": True,
         "snake_progress": True,
@@ -88,6 +118,9 @@ def info_pairs(
         obs = f"{kind}/{view}"
     if obs:
         items.append(("Obs", str(obs)))
+    reload_age = hud_info.get("reload")
+    if reload_age is not None and str(reload_age).strip():
+        items.append(("Reload", str(reload_age)))
     action = str(hud_info.get("action", "")).strip()
     if action:
         items.append(("Action", action))

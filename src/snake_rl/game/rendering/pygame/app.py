@@ -43,6 +43,7 @@ class AppConfig:
     agent_view_spec: ObservationSpec | None = None
     agent_view_vocab_name: str | None = None
     agent_view_vocab_num_classes: int | None = None
+    agent_view_side: str = "right"
     # HUD
     hud_mode: str = "all"  # "all" | "selected"
     hud_features: dict[str, Any] | None = None
@@ -91,6 +92,7 @@ def run_pygame_app(
             pixel_size=cfg.pixel_size,
             caption=cfg.caption,
             agent_view_grid=agent_view_grid,
+            agent_view_side=str(cfg.agent_view_side),
             layout=cfg.layout,
         )
         renderer = PygameRenderer(
