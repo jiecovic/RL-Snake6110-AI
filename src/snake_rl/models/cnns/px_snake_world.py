@@ -22,7 +22,7 @@ class PxSnakeWorld(BaseCNNExtractor):
 
     Notes:
       - Strong inductive bias toward tile-level structure.
-      - Useful when pixel grid is a clean rendering of symbolic tiles.
+      - Useful when pixel grid is a clean rendering of categorical tiles.
       - Complements PxStridedCNN_L3K8 (larger receptive field, less alignment).
 
     Output:

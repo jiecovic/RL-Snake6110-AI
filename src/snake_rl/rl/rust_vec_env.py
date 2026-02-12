@@ -273,36 +273,18 @@ class RustVecEnv(VecEnv):
             else:
                 view_radius = spec._view_radius()
                 rotate_to_head = spec._rotate_to_head()
-                mask_oob = spec._tile_mask_oob()
-                if mask_oob:
-                    frame_arr, valid_arr = self._vec_game.head_tile_views(
-                        (int(view_radius[0]), int(view_radius[1])),
-                        rotate_to_head=rotate_to_head,
-                        empty_id=None,
-                        return_valid=True,
-                    )
-                else:
-                    frame_arr = self._vec_game.head_tile_views(
-                        (int(view_radius[0]), int(view_radius[1])),
-                        rotate_to_head=rotate_to_head,
-                        empty_id=None,
-                        return_valid=False,
-                    )
-                    valid_arr = None
+                frame_arr = self._vec_game.head_tile_views(
+                    (int(view_radius[0]), int(view_radius[1])),
+                    rotate_to_head=rotate_to_head,
+                    empty_id=None,
+                    return_valid=False,
+                )
 
                 frame_arr = np.asarray(frame_arr, dtype=np.uint8)
                 if vocab is not None:
                     frame_arr = vocab.lut[frame_arr]
 
-                if not mask_oob:
-                    base = frame_arr[:, None, :, :].astype(np.uint8, copy=False)
-                else:
-                    valid_arr = np.asarray(valid_arr, dtype=bool)
-                    out = np.zeros_like(frame_arr, dtype=np.uint8)
-                    out[valid_arr] = (frame_arr[valid_arr].astype(np.uint16) + 1).astype(
-                        np.uint8, copy=False
-                    )
-                    base = out[:, None, :, :].astype(np.uint8, copy=False)
+                base = frame_arr[:, None, :, :].astype(np.uint8, copy=False)
 
             base_key = "tiles"
 

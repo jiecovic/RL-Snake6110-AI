@@ -169,7 +169,7 @@ def apply_frame_stack(*, vec_env: VecEnv, n_stack: int, pixel_key: str = "pixel"
     Rules:
       - n_stack <= 1: return vec_env unchanged
       - Dict obs: stack only pixel_key (leave scalar / discrete features untouched)
-      - Box obs: stack along channel dimension (works for pixels and tile-id grids)
+      - Box obs: stack along channel dimension (works for pixels and categorical grids)
 
     This is intentionally strict and small so watch/train/eval can share it.
     """
@@ -185,7 +185,7 @@ def apply_frame_stack(*, vec_env: VecEnv, n_stack: int, pixel_key: str = "pixel"
             )
         return DictPixelVecFrameStack(vec_env, n_stack=n, pixel_key=str(pixel_key))
 
-    # Works for pixel Box AND for tile-id Box (C,H,W).
+    # Works for pixel Box AND for categorical Box (C,H,W).
     return VecFrameStack(vec_env, n_stack=n, channels_order="first")
 
 

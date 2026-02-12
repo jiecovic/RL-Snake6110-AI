@@ -13,7 +13,7 @@ from snake_rl.models.vits.vit_utils import POS_MODES, GridPositionalEncoding
 
 def _infer_chw(space: spaces.Box) -> tuple[int, int, int]:
     """
-    Return (C, H, W) for supported tile-id observations.
+    Return (C, H, W) for supported categorical observations.
     Supported shapes:
       - (H, W)
       - (C, H, W)   (e.g. VecFrameStack -> channels-first stacking)
@@ -72,14 +72,14 @@ class TileMLPExtractor(BaseFeaturesExtractor):
         * "mean":        average token embeddings into one vector (smaller head, often stabler)
 
     Input:
-      obs: [B,H,W] or [B,C,H,W] with tile ids in [0, num_tiles-1]
+      obs: [B,H,W] or [B,C,H,W] with categorical ids in [0, num_tiles-1]
 
     Pooling modes:
       - "flatten_mlp": flatten tokens then MLP (backward compatible default)
       - "mean":        mean over tokens then MLP
 
     Token masking (optional):
-      - if use_token_mask=True, tokens with tile_id == mask_token_id can be
+      - if use_token_mask=True, tokens with categorical_id == mask_token_id can be
         excluded from mean pooling
       - masking affects "mean" only (not flatten)
     """

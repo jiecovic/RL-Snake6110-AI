@@ -11,7 +11,7 @@ from snake_rl.models.cnns.px_strided_cnn_l2_s2s2_k4 import PxStridedCNN_L2_S2S2_
 from snake_rl.models.cnns.px_strided_cnn_l3k4 import PxStridedCNN_L3K4
 from snake_rl.models.cnns.px_strided_cnn_l3k8 import PxStridedCNN_L3K8
 
-# symbolic tile-id models
+# categorical models
 from snake_rl.models.mlps.tile_mlp_extractor import TileMLPExtractor
 
 # hybrid CNN â†’ ViT
@@ -29,7 +29,7 @@ FEATURE_EXTRACTOR_REGISTRY: dict[str, type[BaseFeaturesExtractor]] = {
     "px_snake_global": PxSnakeWorld,
     # hybrid CNN â†’ ViT
     "px_cnn_vit": PxCnnViTExtractor,
-    # symbolic tile-id models
+    # categorical models
     "tile_vit": TileViTExtractor,
     "tile_mlp": TileMLPExtractor,
 }

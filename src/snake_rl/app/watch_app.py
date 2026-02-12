@@ -85,7 +85,7 @@ def _obs_has_pixel_key(obs: Any, *, pixel_key: str = "pixel") -> bool:
 
 def _extract_tile_grid_2d(obs: Any) -> np.ndarray | None:
     """
-    Convert the current observation into a 2D uint8 grid of class/tile ids.
+    Convert the current observation into a 2D uint8 grid of categorical ids.
 
     Supported shapes:
       - Box obs from VecEnv: np.ndarray with shape (n_envs, C, H, W)

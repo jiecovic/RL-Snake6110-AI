@@ -77,9 +77,11 @@ class ObservationSpec:
         k = str(self.kind).strip().lower()
         if k in {"pixel", "pixels"}:
             return "pixel"
-        if k in {"tile_id", "tile", "tiles"}:
-            return "tile_id"
-        raise ValueError(f"Unknown obs.kind={self.kind!r}. Expected pixel|tile_id.")
+        if k in {"categorical", "cat", "tile_id", "tile", "tiles", "symbolic"}:
+            return "categorical"
+        raise ValueError(
+            f"Unknown obs.kind={self.kind!r}. Expected pixel|categorical (aliases: tile_id)."
+        )
 
     def _view(self) -> str:
         v = str(self.view).strip().lower()
@@ -210,10 +212,9 @@ class ObservationSpec:
                 ry, rx = self._view_radius()
                 vy = 2 * ry + 1
                 vx = 2 * rx + 1
-                num_classes = base_num + (1 if self._tile_mask_oob() else 0)
                 base_space = spaces.Box(
                     low=0,
-                    high=num_classes - 1,
+                    high=base_num - 1,
                     shape=(1, vy, vx),
                     dtype=np.uint8,
                 )
@@ -280,19 +281,14 @@ class ObservationSpec:
                 frame = raw if tile_vocab is None else tile_vocab.lut[raw]
                 base = frame[None, :, :].astype(np.uint8, copy=False)
             else:
-                raw, valid = game.head_tile_view(
+                raw = game.head_tile_view(
                     view_radius=self._view_radius(),
                     rotate_to_head=self._rotate_to_head(),
                     empty_id=None,
-                    return_valid=True,
+                    return_valid=False,
                 )
                 frame = raw if tile_vocab is None else tile_vocab.lut[raw]
-                if self._tile_mask_oob():
-                    out = np.zeros_like(frame, dtype=np.uint8)
-                    out[valid] = (frame[valid].astype(np.uint16) + 1).astype(np.uint8, copy=False)
-                    base = out[None, :, :].astype(np.uint8, copy=False)
-                else:
-                    base = frame[None, :, :].astype(np.uint8, copy=False)
+                base = frame[None, :, :].astype(np.uint8, copy=False)
 
             base_key = "tiles"
 

@@ -5,10 +5,12 @@ env:
   action:
     type: relative
   obs:
-    kind: tile_id
-    view: world
+    kind: categorical
+    view: head
     params:
-      remove_border: true
+      tile_vocab: head_v1
+      view_radius: 6
+      rotate_to_head: true
   frame_stack:
     n_frames: 1
 

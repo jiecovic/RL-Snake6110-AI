@@ -115,7 +115,7 @@ impl PySnakeEngine {
         empty_id: Option<u8>,
         return_valid: bool,
     ) -> PyResult<PyObject> {
-        let empty = empty_id.unwrap_or(TILE_EMPTY);
+        let empty = empty_id.unwrap_or(TILE_OOB);
         let (view, valid, h, w) = self
             .inner
             .head_tile_view(view_radius.0, view_radius.1, rotate_to_head, empty)
@@ -347,7 +347,7 @@ impl PyVecSnakeEngine {
             return Ok(arr.into_pyarray_bound(py).unbind().to_object(py));
         }
 
-        let empty = empty_id.unwrap_or(TILE_EMPTY);
+        let empty = empty_id.unwrap_or(TILE_OOB);
         let (view0, valid0, h, w) = self.games[0]
             .head_tile_view(view_radius.0, view_radius.1, rotate_to_head, empty)
             .map_err(map_engine_err)?;
@@ -521,6 +521,7 @@ fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("MOVE_TIMEOUT", MOVE_TIMEOUT)?;
     m.add("MOVE_WIN", MOVE_WIN)?;
 
+    m.add("TILE_OOB", TILE_OOB)?;
     m.add("TILE_EMPTY", TILE_EMPTY)?;
     m.add("TILE_WALL_TL", TILE_WALL_TL)?;
     m.add("TILE_WALL_TR", TILE_WALL_TR)?;

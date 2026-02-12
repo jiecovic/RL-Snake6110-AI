@@ -13,7 +13,7 @@ from snake_rl.models.registry import FEATURE_EXTRACTOR_REGISTRY, available_featu
 
 def _infer_num_tiles_from_box(space: spaces.Box) -> int:
     """
-    Infer vocab size from a tile-id Box space where high == num_tiles-1.
+    Infer vocab size from a categorical Box space where high == num_tiles-1.
     Works for scalar high or array-like high.
     """
     hi = space.high
@@ -24,7 +24,7 @@ def _infer_num_tiles_from_box(space: spaces.Box) -> int:
 def _get_tiles_box(observation_space: spaces.Space) -> spaces.Box:
     """
     Accept either:
-      - Box directly (tile ids)
+      - Box directly (categorical ids)
       - Dict with "tiles": Box (future-proof)
     """
     if isinstance(observation_space, spaces.Box):
@@ -92,7 +92,7 @@ def build_policy_kwargs(
 
     Conventions:
       - px_* extractors: pixel-based (typically CNN); kwargs: {features_dim}
-      - tile_* extractors: symbolic tile-id; kwargs: {num_tiles, features_dim, **params}
+      - tile_* extractors: categorical; kwargs: {num_tiles, features_dim, **params}
 
     IMPORTANT:
       For tile_* extractors, num_tiles is inferred from observation_space.high (+1).
@@ -129,7 +129,7 @@ def build_policy_kwargs(
             continue
         policy_kwargs[k] = v
 
-    # Tile-id models need vocab size inferred from the observation space.
+    # Categorical models need vocab size inferred from the observation space.
     if extractor_key.startswith("tile_"):
         tiles_box = _get_tiles_box(observation_space)
         inferred_num_tiles = _infer_num_tiles_from_box(tiles_box)

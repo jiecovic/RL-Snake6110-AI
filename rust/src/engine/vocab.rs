@@ -12,7 +12,11 @@ pub struct VocabDef {
     pub classes: &'static [VocabClass],
 }
 
-static GLOBAL_NO_BORDER_V1: [VocabClass; 8] = [
+static GLOBAL_NO_BORDER_V1: [VocabClass; 9] = [
+    VocabClass {
+        name: "OOB",
+        members: &["OOB"],
+    },
     VocabClass {
         name: "EMPTY",
         members: &[
@@ -71,7 +75,11 @@ static GLOBAL_NO_BORDER_V1: [VocabClass; 8] = [
     },
 ];
 
-static GLOBAL_V2: [VocabClass; 18] = [
+static GLOBAL_V2: [VocabClass; 19] = [
+    VocabClass {
+        name: "OOB",
+        members: &["OOB"],
+    },
     VocabClass {
         name: "EMPTY",
         members: &[
@@ -156,7 +164,11 @@ static GLOBAL_V2: [VocabClass; 18] = [
     },
 ];
 
-static POV_V1: [VocabClass; 6] = [
+static POV_V1: [VocabClass; 7] = [
+    VocabClass {
+        name: "OOB",
+        members: &["OOB"],
+    },
     VocabClass {
         name: "EMPTY",
         members: &["EMPTY"],
@@ -211,7 +223,11 @@ static POV_V1: [VocabClass; 6] = [
     },
 ];
 
-static POV_V2: [VocabClass; 9] = [
+static POV_V2: [VocabClass; 10] = [
+    VocabClass {
+        name: "OOB",
+        members: &["OOB"],
+    },
     VocabClass {
         name: "EMPTY",
         members: &["EMPTY"],
@@ -273,7 +289,11 @@ static POV_V2: [VocabClass; 9] = [
     },
 ];
 
-static COARSE_V1: [VocabClass; 9] = [
+static COARSE_V1: [VocabClass; 10] = [
+    VocabClass {
+        name: "OOB",
+        members: &["OOB"],
+    },
     VocabClass {
         name: "EMPTY",
         members: &["EMPTY"],

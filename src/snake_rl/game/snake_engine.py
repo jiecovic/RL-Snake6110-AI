@@ -47,6 +47,11 @@ def tile_empty_id() -> int:
     return int(core.TILE_EMPTY)
 
 
+def tile_oob_id() -> int:
+    core = ensure_rust_core()
+    return int(core.TILE_OOB)
+
+
 def tileset_tile_count() -> int:
     global _TILE_ID_COUNT
     if _TILE_ID_COUNT is None:
@@ -247,6 +252,7 @@ __all__ = [
     "SnakeEngine",
     "ensure_rust_core",
     "has_rust_core",
+    "tile_oob_id",
     "tile_empty_id",
     "tileset_tile_count",
     "tileset_tile_names",

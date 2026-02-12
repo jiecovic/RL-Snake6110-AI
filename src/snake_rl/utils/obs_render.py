@@ -7,6 +7,7 @@ import numpy as np
 
 from snake_rl.game.snake_engine import (
     tile_empty_id,
+    tile_oob_id,
     tileset_tile_count,
     tileset_tile_size,
     tileset_tiles,
@@ -48,13 +49,17 @@ def obs_last_frame_and_kind(
     kind:
       - "pixel": values in [0,255] representing an actual pixel image
       - "mask01": values in {0,1} (binary mask semantics; matches game.pixel_buffer)
-      - "tile_id": values are Rust tile ids (uint8), not pixels
+      - "categorical": values are Rust tile ids (uint8), not pixels
     """
     # Explicit override if the caller already knows the kind.
     if kind_hint is not None:
         kind = str(kind_hint).strip().lower()
-        if kind not in {"pixel", "mask01", "tile_id"}:
-            raise ValueError(f"kind_hint must be one of pixel|mask01|tile_id, got {kind_hint!r}")
+        if kind in {"tile_id", "tile"}:
+            kind = "categorical"
+        if kind not in {"pixel", "mask01", "categorical"}:
+            raise ValueError(
+                f"kind_hint must be one of pixel|mask01|categorical, got {kind_hint!r}"
+            )
         arr = obs if isinstance(obs, np.ndarray) else np.asarray(obs)
         if isinstance(obs, dict):
             if pixel_key not in obs:
@@ -79,10 +84,10 @@ def obs_last_frame_and_kind(
 
         vmax = int(frame.max()) if frame.size else 0
         vmin = int(frame.min()) if frame.size else 0
-        # If values are within tile id range and non-negative, it's likely tile ids.
+        # If values are within tile id range and non-negative, it's likely categorical ids.
         max_tid = int(tileset_tile_count()) - 1
         if vmin >= 0 and vmax <= max_tid:
-            return frame, "tile_id"
+            return frame, "categorical"
 
         return frame, "pixel"
 
@@ -96,18 +101,19 @@ def obs_last_frame_and_kind(
     vmax = int(frame.max()) if frame.size else 0
     vmin = int(frame.min()) if frame.size else 0
     max_tid = int(tileset_tile_count()) - 1
-    kind = "tile_id" if vmin >= 0 and vmax <= max_tid else "pixel"
+    kind = "categorical" if vmin >= 0 and vmax <= max_tid else "pixel"
     return frame, kind
 
 
-def tile_id_frame_to_pixels(
+def categorical_frame_to_pixels(
     tile_ids: np.ndarray,  # (H,W) uint8 of Rust tile ids
     *,
     tiles: np.ndarray | None = None,
     tile_size: int | None = None,
 ) -> np.ndarray:
     """
-    Convert a (H,W) tile-id grid into a (H*td, W*td) uint8 pixel image using the built-in tileset.
+    Convert a (H,W) categorical grid into a (H*td, W*td) uint8 pixel image using
+    the built-in tileset.
     """
     if tile_ids.ndim != 2:
         raise TypeError(f"tile_ids must be 2D (H,W), got {tile_ids.shape}")
@@ -122,17 +128,18 @@ def tile_id_frame_to_pixels(
 
     out = np.zeros((h * td, w * td), dtype=np.uint8)
 
+    oob_id = int(tile_oob_id())
     empty_id = int(tile_empty_id())
     cache: dict[int, np.ndarray] = {}
     for tid in range(int(tileset_tile_count())):
-        if tid == empty_id:
+        if tid in {oob_id, empty_id}:
             continue
         cache[int(tid)] = np.asarray(tiles[int(tid)], dtype=np.uint8)
 
     for y in range(h):
         for x in range(w):
             tid = int(tile_ids[y, x])
-            if tid == empty_id:
+            if tid in {oob_id, empty_id}:
                 continue
             tile = cache.get(tid)
             if tile is None:
@@ -141,6 +148,18 @@ def tile_id_frame_to_pixels(
             out[y0 : y0 + td, x0 : x0 + td] = tile
 
     return out
+
+
+def tile_id_frame_to_pixels(
+    tile_ids: np.ndarray,  # (H,W) uint8 of Rust tile ids
+    *,
+    tiles: np.ndarray | None = None,
+    tile_size: int | None = None,
+) -> np.ndarray:
+    """
+    Back-compat alias for categorical_frame_to_pixels.
+    """
+    return categorical_frame_to_pixels(tile_ids, tiles=tiles, tile_size=tile_size)
 
 
 def obs_frame_to_pixels(
@@ -155,11 +174,11 @@ def obs_frame_to_pixels(
 
     - "pixel": returned as-is (uint8 [0..255])
     - "mask01": returned as-is (uint8 {0,1}) -- agent-view should render via gray01 pipeline
-    - "tile_id": converted via built-in Rust tileset
+    - "categorical": converted via built-in Rust tileset
     """
     frame, kind = obs_last_frame_and_kind(obs, pixel_key=pixel_key)
 
     if kind in ("pixel", "mask01"):
         return frame
 
-    return tile_id_frame_to_pixels(frame, tiles=tiles, tile_size=tile_size)
+    return categorical_frame_to_pixels(frame, tiles=tiles, tile_size=tile_size)

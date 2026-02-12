@@ -11,7 +11,7 @@ from snake_rl.models.vits.vit_utils import POS_MODES, GridPositionalEncoding, po
 
 def _infer_chw(space: spaces.Box) -> tuple[int, int, int]:
     """
-    Return (C, H, W) for supported tile-id observations.
+    Return (C, H, W) for supported categorical observations.
     Supported shapes:
       - (H, W)
       - (C, H, W)   (e.g. VecFrameStack -> channels-first stacking)
@@ -36,7 +36,7 @@ def _infer_chw(space: spaces.Box) -> tuple[int, int, int]:
 
 class TileViTExtractor(BaseFeaturesExtractor):
     """
-    ViT-like encoder-only Transformer features extractor for symbolic tile-ID grids.
+    ViT-like encoder-only Transformer features extractor for categorical grids.
 
     Positional modes (single source of truth via `pos_mode`):
       - "abs_2d"     : learned row+col embeddings (classic ViT-ish)
@@ -44,7 +44,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
       - "head_center" : learned offsets from grid center (anchor at center)
 
     Optional masking (attention padding mask):
-      - if use_token_mask=True, tokens with tile_id == mask_token_id are ignored by attention
+      - if use_token_mask=True, tokens with categorical_id == mask_token_id are ignored by attention
       - CLS token is never masked
       - for pooling="mean"/"cls_mean", masked tokens can be excluded from the mean (mask_pool=True)
 

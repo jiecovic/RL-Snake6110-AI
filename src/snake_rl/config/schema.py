@@ -77,7 +77,7 @@ class ObservationConfig:
 
     kind:
       - pixel
-      - tile_id
+      - categorical (uint8 tile ids; 0 is reserved for OOB)
 
     view:
       - world
@@ -120,7 +120,7 @@ class FeaturesExtractorConfig:
     type:
       Feature extractor key (see models/registry.py), e.g.:
         - px_*    : pixel-based CNNs
-        - tile_*  : symbolic tile-id models (MLP, ViT, ...)
+        - tile_*  : categorical models (MLP, ViT, ...)
 
     features_dim:
       Output feature dimension exposed to the policy MLP.

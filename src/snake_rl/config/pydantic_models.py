@@ -59,6 +59,16 @@ class ObservationConfigModel(_BaseConfigModel):
     params: dict[str, Any] = Field(default_factory=dict)
     features: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("kind")
+    @classmethod
+    def _normalize_kind(cls, v: str) -> str:
+        s = str(v).strip().lower()
+        if s in {"pixel", "pixels"}:
+            return "pixel"
+        if s in {"categorical", "cat", "tile_id", "tile", "tiles", "symbolic"}:
+            return "categorical"
+        return str(v)
+
 
 class FrameStackConfigModel(_BaseConfigModel):
     n_frames: int = 1
@@ -306,8 +316,10 @@ class TrainConfigModel(_BaseConfigModel):
                 "world_pixel_dir": ("pixel", "world", {"direction": True}),
                 "head_pixel": ("pixel", "head", {}),
                 "head_pixel_fill": ("pixel", "head", {"fill": {"enabled": True}}),
-                "world_tile_id": ("tile_id", "world", {}),
-                "head_tile_id": ("tile_id", "head", {}),
+                "world_tile_id": ("categorical", "world", {}),
+                "head_tile_id": ("categorical", "head", {}),
+                "world_categorical": ("categorical", "world", {}),
+                "head_categorical": ("categorical", "head", {}),
             }
             if key in mapping:
                 kind, view, feats = mapping[key]

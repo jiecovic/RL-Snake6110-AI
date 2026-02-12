@@ -34,7 +34,7 @@ class TileVocab:
 
     def map_grid(self, raw_grid: np.ndarray) -> np.ndarray:
         """
-        Map a raw tile-id grid (values == Rust tile ids) to class ids via LUT.
+        Map a raw categorical grid (values == Rust tile ids) to class ids via LUT.
 
         Returns a view/copy depending on numpy advanced indexing rules.
         """

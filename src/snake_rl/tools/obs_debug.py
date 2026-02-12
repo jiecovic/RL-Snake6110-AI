@@ -17,7 +17,7 @@ def np_summary(x: np.ndarray) -> str:
 
 def print_tile_grid(grid_hw: np.ndarray, *, max_h: int = 13, max_w: int = 22) -> None:
     """
-    Pretty-print a 2D uint tile-id grid as integers (clipped to max_h/max_w).
+    Pretty-print a 2D uint categorical grid as integers (clipped to max_h/max_w).
     """
     if grid_hw.ndim != 2:
         print(f"[obs_debug] expected 2D grid, got shape={tuple(grid_hw.shape)}", flush=True)

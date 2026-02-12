@@ -8,7 +8,7 @@ training, evaluation, and visualization.
 ## Highlights
 - Rust-backed Snake engine (fast, deterministic RNG)
 - PPO agents with Stable-Baselines3 + Gymnasium
-- Multiple observation modes (pixels, head/world views, symbolic tile IDs)
+- Multiple observation modes (pixels, head/world views, categorical grids)
 - Reproducible runs via config snapshots
 - TensorBoard logging and live watch mode
 

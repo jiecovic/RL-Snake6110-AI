@@ -2,14 +2,14 @@ defaults:
   - run: default
   - board: small
   - reward: default
-  - env: world_tile_id
+  - env: world_categorical
   - feature_extractor: tile_mlp
   - train: ppo
   - logging: default
   - _self_
 
 run:
-  name: world_tile_mlp_large
+  name: world_categorical_mlp_large
 
 
 

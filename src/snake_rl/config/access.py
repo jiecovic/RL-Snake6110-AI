@@ -69,8 +69,10 @@ def _legacy_env_id_to_obs(env_id: str) -> dict[str, Any] | None:
             "view": "head",
             "features": {"fill": {"enabled": True}},
         },
-        "world_tile_id": {"kind": "tile_id", "view": "world"},
-        "head_tile_id": {"kind": "tile_id", "view": "head"},
+        "world_tile_id": {"kind": "categorical", "view": "world"},
+        "head_tile_id": {"kind": "categorical", "view": "head"},
+        "world_categorical": {"kind": "categorical", "view": "world"},
+        "head_categorical": {"kind": "categorical", "view": "head"},
     }
     return mapping.get(key)
 
