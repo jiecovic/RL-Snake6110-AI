@@ -3,13 +3,10 @@ from __future__ import annotations
 
 import argparse
 import time
-from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import numpy as np
-from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 
@@ -26,21 +23,13 @@ from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.rl.env_factory import apply_frame_stack
-from snake_rl.tools.agent_view_stream import AgentViewStream
 from snake_rl.tools.obs_debug import debug_print_obs
 from snake_rl.utils.checkpoints import pick_checkpoint
 from snake_rl.utils.logging import setup_logger
 from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
 from snake_rl.utils.models import load_ppo
 from snake_rl.utils.obs import sanitize_observation
-from snake_rl.utils.obs_render import obs_frame_to_pixels
 from snake_rl.utils.paths import relpath, repo_root, resolve_run_dir
-
-try:
-    # Optional dependency: only needed for tile_vocab runs.
-    from snake_rl.vocab import load_tile_vocab
-except Exception:  # pragma: no cover
-    load_tile_vocab = None  # type: ignore[assignment]
 
 
 def _ts() -> str:
@@ -53,84 +42,6 @@ def _make_engine_from_board_params(board: dict[str, int]) -> SnakeEngine:
         board=core_board,
         food_count=int(board["food_count"]),
     )
-
-
-def _infer_num_classes_from_obs_space(obs_space: spaces.Space) -> int | None:
-    """
-    For tile/class-id Box spaces, infer K from high=max_id => K=max_id+1.
-    Supports Box directly or Dict{"tiles": Box} (future-proof).
-    """
-    box: spaces.Box | None = None
-    if isinstance(obs_space, spaces.Box):
-        box = obs_space
-    elif isinstance(obs_space, spaces.Dict) and "tiles" in obs_space.spaces:
-        sub = obs_space.spaces["tiles"]
-        if isinstance(sub, spaces.Box):
-            box = sub
-
-    if box is None:
-        return None
-
-    hi = box.high
-    try:
-        max_hi = float(np.asarray(hi).max())
-    except Exception:
-        return None
-    return int(max_hi) + 1
-
-
-def _obs_has_pixel_key(obs: Any, *, pixel_key: str = "pixel") -> bool:
-    return isinstance(obs, dict) and (pixel_key in obs)
-
-
-def _extract_tile_grid_2d(obs: Any) -> np.ndarray | None:
-    """
-    Convert the current observation into a 2D uint8 grid of categorical ids.
-
-    Supported shapes:
-      - Box obs from VecEnv: np.ndarray with shape (n_envs, C, H, W)
-      - Box obs without channel: (n_envs, H, W)
-
-    We always take env index 0 (watch uses DummyVecEnv with 1 env),
-    and if C>1 (frame stack), we take the LAST channel as "latest frame".
-    """
-    if isinstance(obs, dict) and "tiles" in obs:
-        obs = obs.get("tiles")
-
-    if not isinstance(obs, np.ndarray):
-        return None
-
-    if obs.ndim == 4:
-        g = obs[0]  # (C,H,W)
-        if g.shape[0] < 1:
-            return None
-        g2 = g[-1]  # latest stacked frame
-        return np.asarray(g2, dtype=np.uint8)
-    if obs.ndim == 3:
-        g2 = obs[0]  # (H,W)
-        return np.asarray(g2, dtype=np.uint8)
-    return None
-
-
-def _load_num_classes_from_obs_params(obs_cfg: dict[str, Any]) -> int | None:
-    """
-    If this run used a named tile_vocab, prefer using its num_classes (true K)
-    instead of inferring from observation_space.high (which should match, but
-    this is more explicit and gives us class_names too, later).
-    """
-    params = obs_cfg.get("params", {})
-    if not isinstance(params, dict):
-        return None
-    name = params.get("tile_vocab")
-    if name is None:
-        return None
-    if load_tile_vocab is None:
-        return None
-    try:
-        vocab = load_tile_vocab(str(name))
-        return int(vocab.num_classes)
-    except Exception:
-        return None
 
 
 def parse_args() -> argparse.Namespace:
@@ -189,39 +100,6 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         help="Hydra override (repeatable). Only used when --config is under configs/.",
-    )
-
-    # Agent-view window
-    p.add_argument(
-        "--show-agent-view",
-        action="store_true",
-        help="Open a separate window that renders the agent's observation.",
-    )
-    p.add_argument(
-        "--agent-view-max-size",
-        type=int,
-        default=1080,
-        help="Max window side in screen pixels (auto scale).",
-    )
-    p.add_argument(
-        "--agent-view-fps",
-        type=int,
-        default=0,
-        help="If >0, cap agent-view updates to this FPS. 0 => send every tick.",
-    )
-    p.add_argument(
-        "--agent-view-keep-stderr",
-        action="store_true",
-        help="Keep agent-view subprocess stderr (useful for debugging).",
-    )
-    p.add_argument(
-        "--agent-view-pixel-size",
-        type=int,
-        default=0,
-        help=(
-            "If >0, force pixel_size for agent-view window. 0 => auto. "
-            "Defaults to --pixel-size if unset."
-        ),
     )
 
     return p.parse_args()
@@ -378,11 +256,6 @@ def main() -> None:
         pixel_key=str(obs_spec.frame_stack_key() or "pixel"),
     )
 
-    # Precompute num_classes if possible (used by agent-view ids mode)
-    num_classes_from_vocab = _load_num_classes_from_obs_params(obs_cfg)
-    num_classes_from_space = _infer_num_classes_from_obs_space(vec_env.observation_space)
-    num_classes = num_classes_from_vocab or num_classes_from_space
-
     controller = WatchController(
         vec_env=vec_env,
         model=model,
@@ -398,55 +271,8 @@ def main() -> None:
         repo=repo,
     )
 
-    agent_view = AgentViewStream()
-    if args.show_agent_view:
-        av_ps = int(args.agent_view_pixel_size)
-        if av_ps <= 0:
-            av_ps = int(args.pixel_size)
-
-        agent_view.start(
-            caption="Snake (agent view)",
-            max_size=int(args.agent_view_max_size),
-            fps=int(args.agent_view_fps),
-            keep_stderr=bool(args.agent_view_keep_stderr),
-            pixel_size=av_ps,
-        )
-
     def _controller_step() -> None:
         controller.step()
-
-        if not agent_view.is_alive():
-            return
-
-        try:
-            # Case A: Dict obs with pixels (pixel envs)
-            if _obs_has_pixel_key(controller.obs, pixel_key="pixel"):
-                frame = obs_frame_to_pixels(
-                    controller.obs,
-                    tile_size=game.tile_size,
-                    pixel_key="pixel",
-                )
-                agent_view.send_frame(
-                    frame,
-                    mode="gray255",
-                    max_fps=int(args.agent_view_fps),
-                )
-                return
-
-            # Case B: Box obs (tile/class-id envs)
-            grid = _extract_tile_grid_2d(controller.obs)
-            if grid is not None:
-                k = int(num_classes) if num_classes is not None else (int(grid.max()) + 1)
-                agent_view.send_frame(
-                    grid,
-                    mode="ids",
-                    num_classes=int(k),
-                    max_fps=int(args.agent_view_fps),
-                )
-                return
-
-        except Exception:
-            pass
 
     try:
         run_pygame_app(
@@ -457,12 +283,12 @@ def main() -> None:
                 pixel_size=int(args.pixel_size),
                 caption=f"Snake (watch: {run_dir.name} / {args.which})",
                 enable_human_input=False,
+                agent_view_spec=obs_spec,
+                agent_view_vocab=obs_spec.load_tile_vocab(),
             ),
             step_fn=_controller_step,
         )
     finally:
-        with suppress(Exception):
-            agent_view.close()
         vec_env.close()
 
 

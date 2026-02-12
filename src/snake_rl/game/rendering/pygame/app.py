@@ -3,13 +3,21 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from snake_rl import _core as core
 from snake_rl.game.rendering.pygame.renderer import PygameRenderer
-from snake_rl.game.rendering.pygame.window import PygameRenderContext, create_pygame_context
+from snake_rl.game.rendering.pygame.window import (
+    LayoutConfig,
+    PygameRenderContext,
+    create_pygame_context,
+)
 from snake_rl.game.snake_engine import SnakeEngine
+
+if TYPE_CHECKING:
+    from snake_rl.envs.specs import ObservationSpec
+    from snake_rl.vocab import TileVocab
 
 try:
     import pygame as _pygame
@@ -32,6 +40,10 @@ class AppConfig:
     # Human input (optional)
     enable_human_input: bool = False
     turn_keys: tuple[int, int] | None = None  # left, right
+    # Agent view (optional)
+    agent_view_spec: ObservationSpec | None = None
+    agent_view_vocab: TileVocab | None = None
+    layout: LayoutConfig = field(default_factory=LayoutConfig)
 
 
 _END_MASK: int = (
@@ -69,12 +81,19 @@ def run_pygame_app(
 
     pygame.init()
     try:
+        agent_view_grid = _compute_agent_view_grid(game=game, spec=cfg.agent_view_spec)
         ctx: PygameRenderContext = create_pygame_context(
             game=game,
             pixel_size=cfg.pixel_size,
             caption=cfg.caption,
+            agent_view_grid=agent_view_grid,
+            layout=cfg.layout,
         )
-        renderer = PygameRenderer(pixel_size=cfg.pixel_size)
+        renderer = PygameRenderer(
+            pixel_size=cfg.pixel_size,
+            agent_view_spec=cfg.agent_view_spec,
+            agent_view_vocab=cfg.agent_view_vocab,
+        )
 
         paused = False
         queued_turn: int | None = None  # buffered human input
@@ -86,12 +105,14 @@ def run_pygame_app(
 
         sim_hz = int(cfg.sim_hz) if cfg.sim_hz is not None else int(cfg.fps)
         sim_hz = max(1, sim_hz)
+        ctx.target_sim_hz = int(sim_hz)
         step_dt = 1.0 / float(sim_hz)
 
         last_time = time.perf_counter()
         accumulator = 0.0
         sim_tick_t0 = last_time
         sim_steps = 0
+        total_steps = 0
 
         while True:
             for event in pygame.event.get():
@@ -149,6 +170,7 @@ def run_pygame_app(
                     accumulator -= step_dt
                     steps += 1
                     sim_steps += 1
+                    total_steps += 1
 
                 # Prevent spiral of death when rendering stalls.
                 if steps >= int(cfg.max_steps_per_frame):
@@ -160,6 +182,8 @@ def run_pygame_app(
                 ctx.sim_fps = float(sim_steps) / elapsed
                 sim_steps = 0
                 sim_tick_t0 = now
+            ctx.sim_steps = int(total_steps)
+            ctx.paused = bool(paused)
 
             renderer.draw(game=game, ctx=ctx)
             pygame.display.flip()
@@ -169,3 +193,30 @@ def run_pygame_app(
                 ctx.clock.tick(0)
     finally:
         pygame.quit()
+
+
+def _compute_agent_view_grid(
+    *,
+    game: SnakeEngine,
+    spec: ObservationSpec | None,
+) -> tuple[int, int] | None:
+    if spec is None:
+        return None
+    kind = spec.kind_norm()
+    view = spec.view_norm()
+    tile_size = int(game.tile_size)
+
+    if view == "world":
+        h = int(game.height)
+        w = int(game.width)
+        if spec._remove_border():
+            h = max(0, h - 2)
+            w = max(0, w - 2)
+        return (w * tile_size, h * tile_size)
+
+    ry, rx = spec._view_radius()
+    view_h = (2 * int(ry) + 1) * tile_size
+    view_w = (2 * int(rx) + 1) * tile_size
+    if kind not in {"pixel", "categorical"}:
+        return None
+    return (view_w, view_h)
