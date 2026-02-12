@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover
 
 pygame: Any = _pygame
 
-StepFn = Callable[[], None]
+StepFn = Callable[[int | None], None]
 
 
 @dataclass(slots=True)
@@ -147,6 +147,8 @@ def run_pygame_app(
                         return
                     if event.key == pygame.K_p:
                         paused = not paused
+                        if not paused:
+                            queued_turn = None
                     elif event.key == pygame.K_r:
                         # NOTE: In step_fn mode, resetting only the game can desync env state.
                         # We keep this for legacy/human mode. For watch, don't press R.
@@ -179,7 +181,11 @@ def run_pygame_app(
                 accumulator = 0.0
                 if step_once:
                     if step_fn is not None:
-                        step_fn()
+                        if cfg.enable_human_input and queued_turn is not None:
+                            step_fn(int(queued_turn))
+                            queued_turn = None
+                        else:
+                            step_fn(None)
                     else:
                         if game.running:
                             if cfg.enable_human_input:
@@ -218,7 +224,7 @@ def run_pygame_app(
                 while accumulator >= step_dt and steps < int(cfg.max_steps_per_frame):
                     if step_fn is not None:
                         # RL-consistent mode: caller owns stepping (env.step()).
-                        step_fn()
+                        step_fn(None)
                     else:
                         # Human mode: pygame loop steps the game directly.
                         if game.running:

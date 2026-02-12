@@ -157,19 +157,22 @@ class WatchController:
     def reload_age_seconds(self) -> float:
         return max(0.0, time.time() - self.last_reload_at)
 
-    def step(self) -> None:
+    def step(self, action_override: int | None = None) -> None:
         self.maybe_reload()
 
-        obs_for_model = sanitize_observation(self.obs)
-        action, _ = self.model.predict(obs_for_model, deterministic=True)
+        if action_override is None:
+            obs_for_model = sanitize_observation(self.obs)
+            action, _ = self.model.predict(obs_for_model, deterministic=True)
 
-        if np.isscalar(action):
-            if isinstance(action, (bool, int, np.integer, np.floating)):
-                act = np.array([int(action)], dtype=np.int64)
+            if np.isscalar(action):
+                if isinstance(action, (bool, int, np.integer, np.floating)):
+                    act = np.array([int(action)], dtype=np.int64)
+                else:
+                    raise TypeError(f"Unsupported scalar action type: {type(action)!r}")
             else:
-                raise TypeError(f"Unsupported scalar action type: {type(action)!r}")
+                act = np.asarray(action, dtype=np.int64).reshape((1,))
         else:
-            act = np.asarray(action, dtype=np.int64).reshape((1,))
+            act = np.asarray([int(action_override)], dtype=np.int64).reshape((1,))
 
         obs_next, reward, dones, infos = self.vec_env.step(act)
         done0 = bool(np.asarray(dones).reshape((-1,))[0])
@@ -296,8 +299,8 @@ def main() -> None:
         "action": str(action_spec.type),
     }
 
-    def _controller_step() -> None:
-        controller.step()
+    def _controller_step(action_override: int | None = None) -> None:
+        controller.step(action_override)
         hud_info["reload"] = f"{controller.reload_age_seconds():.1f}s"
         hud_info["wins"] = str(controller.win_count)
         hud_info["reward"] = f"{controller.last_reward:+.3f}"
@@ -311,7 +314,7 @@ def main() -> None:
                 sim_hz=int(args.sim_hz),
                 pixel_size=int(args.pixel_size),
                 caption=f"Snake (watch: {run_dir.name} / {args.which})",
-                enable_human_input=False,
+                enable_human_input=True,
                 agent_view_spec=obs_spec,
                 agent_view_vocab_name=obs_spec.tile_vocab_name(),
                 agent_view_vocab_num_classes=obs_spec.tile_vocab_num_classes(),
