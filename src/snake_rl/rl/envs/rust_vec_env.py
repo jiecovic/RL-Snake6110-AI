@@ -125,7 +125,6 @@ class RustVecEnv(VecEnv):
                 | core.MOVE_HIT_WALL
                 | core.MOVE_HIT_BOUNDARY
                 | core.MOVE_NOT_RUNNING
-                | core.MOVE_WIN
             )
         ) > 0
 
@@ -135,7 +134,7 @@ class RustVecEnv(VecEnv):
         reward[is_win] += float(self.reward.win_reward)
         reward[~is_win] -= float(self.tiny_reward)
 
-        if np.any(is_food):
+        if np.any(is_food & ~is_win):
             food_bonus = float(self.reward.food_speed_bonus) * (
                 1.0 - (self.current_step_since_last_food / float(self.max_steps))
             )
@@ -146,11 +145,13 @@ class RustVecEnv(VecEnv):
         if np.any(is_fatal):
             reward[is_fatal] -= float(self.reward.fatal_penalty)
 
-        is_truncated = (self.current_step_since_last_food >= int(self.max_steps)) & (~is_fatal)
+        is_truncated = (
+            (self.current_step_since_last_food >= int(self.max_steps)) & (~is_fatal) & (~is_win)
+        )
         if np.any(is_truncated):
             reward[is_truncated] -= float(self.reward.timeout_penalty)
 
-        terminated = is_fatal
+        terminated = is_fatal | is_win
         truncated = is_truncated
         dones = terminated | truncated
 
