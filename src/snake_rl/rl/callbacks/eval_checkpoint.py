@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
@@ -223,13 +224,41 @@ class EvalCheckpointCallback(BaseCallback):
 
         # Table output will show eval rows; avoid separate start/done lines.
 
+        pbar = None
+        try:
+            from tqdm.auto import tqdm  # type: ignore
+
+            if self.verbose > 0:
+                pbar = tqdm(
+                    total=int(episodes),
+                    desc="eval",
+                    leave=False,
+                    dynamic_ncols=True,
+                )
+        except Exception:
+            pbar = None
+
+        on_episode_cb: Callable[[int, int, float | None], None] | None = None
+        if pbar is not None:
+            last_done = {"n": 0}
+
+            def _on_episode(done: int, total: int, _reward: float | None) -> None:
+                if done > last_done["n"]:
+                    pbar.update(done - last_done["n"])
+                    last_done["n"] = done
+
+            on_episode_cb = _on_episode
+
         metrics = evaluate_model(
             model=self.model,
             cfg=self.cfg,
             episodes=episodes,
             deterministic=deterministic,
             seed_base=seed_base,
+            on_episode=on_episode_cb,
         )
+        if pbar is not None:
+            pbar.close()
 
         metrics["phase"] = "periodic"
         metrics["timesteps"] = int(self.num_timesteps)

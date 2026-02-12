@@ -46,6 +46,28 @@ def _extract_policy_kwargs_from_train(cfg: TrainConfig) -> dict[str, Any]:
     return dict(policy_kwargs)
 
 
+def _resolve_activation_fn(value: Any) -> type[nn.Module]:
+    if value is None:
+        return nn.GELU
+    if isinstance(value, type) and issubclass(value, nn.Module):
+        return value
+    if isinstance(value, str):
+        key = value.strip().lower()
+        mapping: dict[str, type[nn.Module]] = {
+            "relu": nn.ReLU,
+            "gelu": nn.GELU,
+            "tanh": nn.Tanh,
+            "elu": nn.ELU,
+            "leaky_relu": nn.LeakyReLU,
+            "silu": nn.SiLU,
+            "swish": nn.SiLU,
+        }
+        if key in mapping:
+            return mapping[key]
+        raise ValueError("activation_fn must be one of: " + ", ".join(sorted(mapping.keys())))
+    raise TypeError("activation_fn must be a torch.nn.Module type or a string")
+
+
 def build_policy_kwargs(
     *,
     cfg: TrainConfig,
@@ -75,6 +97,7 @@ def build_policy_kwargs(
         policy_extra.update(extra_policy_kwargs)
 
     net_arch = policy_extra.get("net_arch", [])
+    activation_override = policy_extra.pop("activation_fn", None)
 
     try:
         extractor_cls = FEATURE_EXTRACTOR_REGISTRY[extractor_key]
@@ -86,7 +109,7 @@ def build_policy_kwargs(
 
     policy_kwargs: dict[str, Any] = {
         "net_arch": list(net_arch) if isinstance(net_arch, list) else list(net_arch or []),
-        "activation_fn": nn.GELU,  # oder nn.ReLU
+        "activation_fn": _resolve_activation_fn(activation_override),
         "features_extractor_class": extractor_cls,
     }
 
