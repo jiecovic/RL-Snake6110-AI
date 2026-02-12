@@ -57,8 +57,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--reload",
         type=float,
-        default=0.0,
-        help="If >0, poll for newer checkpoint every N seconds.",
+        default=5.0,
+        help="Poll for newer checkpoint every N seconds (0 = disable).",
     )
     p.add_argument("--fps", type=int, default=0, help="Render FPS cap (0 = uncapped).")
     p.add_argument("--sim-hz", type=int, default=25, help="Simulation steps per second.")
