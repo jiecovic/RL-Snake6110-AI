@@ -1,4 +1,4 @@
-# src\snake_rl\envs\view_radius.py
+# src/snake_rl/envs/view_radius.py
 
 from typing import Any
 

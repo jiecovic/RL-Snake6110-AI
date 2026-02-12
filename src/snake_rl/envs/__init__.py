@@ -1,1 +1,1 @@
-# src\snake_rl\envs\__init__.py
+# src/snake_rl/envs/__init__.py

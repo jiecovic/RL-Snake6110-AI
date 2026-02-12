@@ -1,1 +1,1 @@
-# src\snake_rl\tools\__init__.py
+# src/snake_rl/tools/__init__.py

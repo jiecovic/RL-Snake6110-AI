@@ -1,4 +1,4 @@
-# src\snake_rl\models\vits\tile_vit_extractor.py
+# src/snake_rl/models/vits/tile_vit_extractor.py
 from __future__ import annotations
 
 import torch
@@ -55,7 +55,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
       - "flatten"  : no pooling; flatten all (non-CLS) tokens and project.
 
         When pooling="flatten" and `flatten_mlp_hidden_dim` is not None,
-        a LayerNorm + MLP (flatten → hidden → GELU → features_dim) is
+        a LayerNorm + MLP (flatten -> hidden -> GELU -> features_dim) is
         applied before projecting to features_dim. When `flatten_mlp_hidden_dim`
         is None (the default), a simple Linear(in_dim, features_dim) is used,
         which is backwards-compatible with older checkpoints.
@@ -146,8 +146,9 @@ class TileViTExtractor(BaseFeaturesExtractor):
         # Optional: embed the "frame/channel" index if we have C>1.
         self.frame_emb: nn.Embedding | None = None
         if self.in_channels > 1 and self.use_frame_embed:
-            self.frame_emb = nn.Embedding(self.in_channels, self.d_model)
-            nn.init.normal_(self.frame_emb.weight, mean=0.0, std=0.02)
+            frame_emb = nn.Embedding(self.in_channels, self.d_model)
+            nn.init.normal_(frame_emb.weight, mean=0.0, std=0.02)
+            self.frame_emb = frame_emb
 
         # Shared positional encoding on the tile grid (H,W)
         self.pos_enc = GridPositionalEncoding(

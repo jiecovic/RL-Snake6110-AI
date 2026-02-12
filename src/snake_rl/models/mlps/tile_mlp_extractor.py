@@ -1,4 +1,4 @@
-# src\snake_rl\models\mlps\tile_mlp_extractor.py
+# src/snake_rl/models/mlps/tile_mlp_extractor.py
 from __future__ import annotations
 
 from collections.abc import Iterable

@@ -1,4 +1,5 @@
-// rust\src\engine\constants.rs
+// rust/src/engine/constants.rs
+pub const MOVE_OK: u32 = 1 << 0;
 pub const MOVE_FOOD: u32 = 1 << 1;
 pub const MOVE_HIT_BOUNDARY: u32 = 1 << 2;
 pub const MOVE_HIT_WALL: u32 = 1 << 3;
@@ -8,6 +9,14 @@ pub const MOVE_TIMEOUT: u32 = 1 << 6;
 pub const MOVE_WIN: u32 = 1 << 7;
 
 pub const TILE_EMPTY: u8 = 0;
+pub const TILE_WALL_TL: u8 = 1;
+pub const TILE_WALL_TR: u8 = 2;
+pub const TILE_WALL_BL: u8 = 3;
+pub const TILE_WALL_BR: u8 = 4;
+pub const TILE_WALL_TOP: u8 = 5;
+pub const TILE_WALL_BOTTOM: u8 = 6;
+pub const TILE_WALL_LEFT: u8 = 7;
+pub const TILE_WALL_RIGHT: u8 = 8;
 pub const TILE_HEAD_UP: u8 = 9;
 pub const TILE_HEAD_DOWN: u8 = 10;
 pub const TILE_HEAD_LEFT: u8 = 11;

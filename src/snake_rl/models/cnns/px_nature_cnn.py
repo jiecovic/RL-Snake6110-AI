@@ -1,4 +1,4 @@
-# src\snake_rl\models\cnns\px_nature_cnn.py
+# src/snake_rl/models/cnns/px_nature_cnn.py
 from __future__ import annotations
 
 from gymnasium import spaces

@@ -1,4 +1,4 @@
-# src\snake_rl\envs\registry.py
+# src/snake_rl/envs/registry.py
 from __future__ import annotations
 
 from snake_rl.envs.base import BaseSnakeEnv

@@ -1,4 +1,4 @@
-# src\snake_rl\envs\obs_utils.py
+# src/snake_rl/envs/obs_utils.py
 from __future__ import annotations
 
 from typing import Literal, overload
@@ -6,21 +6,41 @@ from typing import Literal, overload
 import numpy as np
 
 from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.geometry import Direction, Point
-from snake_rl.game.tile_types import TileType
+from snake_rl.game.snakegame import tile_empty_id
 
 
-def _rotate_tile_block(block: np.ndarray, d: Direction) -> np.ndarray:
+def _normalize_head(head: tuple[int, int] | list[int] | np.ndarray) -> tuple[int, int]:
+    if isinstance(head, np.ndarray):
+        if head.size < 2:
+            raise ValueError(f"head must have 2 elements, got shape {head.shape}")
+        return int(head[0]), int(head[1])
+    if isinstance(head, (tuple, list)):
+        if len(head) != 2:
+            raise ValueError(f"head must have 2 elements, got {len(head)}")
+        return int(head[0]), int(head[1])
+    if hasattr(head, "x") and hasattr(head, "y"):
+        return int(head.x), int(head.y)
+    raise TypeError(f"unsupported head type: {type(head).__name__}")
+
+
+def _normalize_direction(direction: int) -> int:
+    if direction is None:
+        raise ValueError("direction must not be None")
+    return int(direction)
+
+
+def _rotate_tile_block(block: np.ndarray, d: int) -> np.ndarray:
     """
     Rotate a tile's pixel block so the egocentric view has "forward == UP".
+    Direction encoding matches Rust core: 0=UP, 1=RIGHT, 2=DOWN, 3=LEFT.
     """
-    if d == Direction.UP:
+    if d == 0:
         k = 0
-    elif d == Direction.RIGHT:
+    elif d == 1:
         k = 1
-    elif d == Direction.DOWN:
+    elif d == 2:
         k = 2
-    elif d == Direction.LEFT:
+    elif d == 3:
         k = 3
     else:
         k = 0
@@ -47,8 +67,8 @@ def pov_pixel_frame(
     *,
     pixel_grid: np.ndarray,
     tile_size: int,
-    head: Point,
-    direction: Direction,
+    head: tuple[int, int] | list[int] | np.ndarray,
+    direction: int,
     view_radius: int | tuple[int, int],
     rotate_to_head: bool = True,
     oob_fill_value: int = 0,
@@ -61,8 +81,8 @@ def pov_pixel_frame(
     *,
     pixel_grid: np.ndarray,
     tile_size: int,
-    head: Point,
-    direction: Direction,
+    head: tuple[int, int] | list[int] | np.ndarray,
+    direction: int,
     view_radius: int | tuple[int, int],
     rotate_to_head: bool = True,
     oob_fill_value: int = 0,
@@ -74,8 +94,8 @@ def pov_pixel_frame(
     *,
     pixel_grid: np.ndarray,
     tile_size: int,
-    head: Point,
-    direction: Direction,
+    head: tuple[int, int] | list[int] | np.ndarray,
+    direction: int,
     view_radius: int | tuple[int, int],
     rotate_to_head: bool = True,
     oob_fill_value: int = 0,
@@ -88,7 +108,7 @@ def pov_pixel_frame(
     view_h = view_tiles_y * tilesize
     view_w = view_tiles_x * tilesize
 
-    head_x, head_y = int(head.x), int(head.y)
+    head_x, head_y = _normalize_head(head)
     grid_w = pixel_grid.shape[1] // tilesize
     grid_h = pixel_grid.shape[0] // tilesize
 
@@ -129,23 +149,23 @@ def pov_pixel_frame(
             return vision, valid
         return vision
 
-    d = direction
+    d = _normalize_direction(direction)
 
     for oy in range(-ry, ry + 1):
         for ox in range(-rx, rx + 1):
             dx_ego = ox
             dy_ego = oy
 
-            if d == Direction.UP:
+            if d == 0:
                 dx_w = dx_ego
                 dy_w = dy_ego
-            elif d == Direction.RIGHT:
+            elif d == 1:
                 dx_w = -dy_ego
                 dy_w = dx_ego
-            elif d == Direction.DOWN:
+            elif d == 2:
                 dx_w = -dx_ego
                 dy_w = -dy_ego
-            elif d == Direction.LEFT:
+            elif d == 3:
                 dx_w = dy_ego
                 dy_w = -dx_ego
             else:
@@ -190,19 +210,20 @@ def global_tile_frame(*, tile_grid: np.ndarray, remove_border: bool) -> np.ndarr
 def pov_tile_frame_with_valid(
     *,
     tile_grid: np.ndarray,
-    head: Point,
-    direction: Direction,
+    head: tuple[int, int] | list[int] | np.ndarray,
+    direction: int,
     view_radius: int | tuple[int, int],
     rotate_to_head: bool = True,
+    empty_id: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     g = tile_grid
-
-    hx, hy = int(head.x), int(head.y)
+    hx, hy = _normalize_head(head)
     ry, rx = parse_view_radius(view_radius)
     vy = 2 * ry + 1
     vx = 2 * rx + 1
 
-    out = np.full((vy, vx), int(TileType.EMPTY.value), dtype=np.uint8)
+    empty = int(tile_empty_id()) if empty_id is None else int(empty_id)
+    out = np.full((vy, vx), empty, dtype=np.uint8)
     valid = np.zeros((vy, vx), dtype=np.bool_)
 
     if not rotate_to_head:
@@ -223,21 +244,21 @@ def pov_tile_frame_with_valid(
         valid[oy0:oy1, ox0:ox1] = True
         return out, valid
 
-    d = direction
+    d = _normalize_direction(direction)
     ys = np.arange(-ry, ry + 1, dtype=np.int32)
     xs = np.arange(-rx, rx + 1, dtype=np.int32)
     dy_ego, dx_ego = np.meshgrid(ys, xs, indexing="ij")
 
-    if d == Direction.UP:
+    if d == 0:
         dx_w = dx_ego
         dy_w = dy_ego
-    elif d == Direction.RIGHT:
+    elif d == 1:
         dx_w = -dy_ego
         dy_w = dx_ego
-    elif d == Direction.DOWN:
+    elif d == 2:
         dx_w = -dx_ego
         dy_w = -dy_ego
-    elif d == Direction.LEFT:
+    elif d == 3:
         dx_w = dy_ego
         dy_w = -dx_ego
     else:

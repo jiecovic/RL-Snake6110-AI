@@ -1,4 +1,4 @@
-# src\snake_rl\game\rendering\pygame\renderer.py
+# src/snake_rl/game/rendering/pygame/renderer.py
 from __future__ import annotations
 
 from snake_rl.game.rendering.pygame.surf import gray255_to_surface

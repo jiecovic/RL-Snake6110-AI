@@ -1,4 +1,4 @@
-# src\snake_rl\app\watch_app.py
+# src/snake_rl/app/watch_app.py
 from __future__ import annotations
 
 import argparse
@@ -22,7 +22,6 @@ from snake_rl.config.access import (
 )
 from snake_rl.config.loader import load_train_config_from_path
 from snake_rl.envs.registry import get_env_cls
-from snake_rl.game.level import EmptyLevel
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snakegame import SnakeGame
 from snake_rl.rl.env_factory import apply_frame_stack
@@ -48,9 +47,9 @@ def _ts() -> str:
 
 
 def _make_game_from_level_params(level: dict[str, int]) -> SnakeGame:
-    lvl = EmptyLevel(height=int(level["height"]), width=int(level["width"]))
     return SnakeGame(
-        level=lvl,
+        width=int(level["width"]),
+        height=int(level["height"]),
         food_count=int(level["food_count"]),
     )
 
@@ -439,7 +438,7 @@ def main() -> None:
             if _obs_has_pixel_key(controller.obs, pixel_key="pixel"):
                 frame = obs_frame_to_pixels(
                     controller.obs,
-                    tileset=game.tileset,
+                    tile_size=game.tile_size,
                     pixel_key="pixel",
                 )
                 agent_view.send_frame(

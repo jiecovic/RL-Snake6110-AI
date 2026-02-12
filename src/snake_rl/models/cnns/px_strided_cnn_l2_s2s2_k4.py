@@ -1,4 +1,4 @@
-# src\snake_rl\models\cnns\px_strided_cnn_l2_s2s2_k4.py
+# src/snake_rl/models/cnns/px_strided_cnn_l2_s2s2_k4.py
 from __future__ import annotations
 
 from gymnasium import spaces
@@ -26,7 +26,7 @@ class PxStridedCNN_L2_S2S2_K4(BaseCNNExtractor):
 
     Output:
       - build_stem() returns a spatial feature map [B, 2c, H', W']
-      - BaseCNNExtractor applies: Flatten → Linear → ReLU to produce features_dim
+      - BaseCNNExtractor applies: Flatten â†’ Linear â†’ ReLU to produce features_dim
     """
 
     def build_stem(self, observation_space: spaces.Box) -> nn.Module:

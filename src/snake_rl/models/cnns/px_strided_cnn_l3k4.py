@@ -1,4 +1,4 @@
-# src\snake_rl\models\cnns\px_strided_cnn_l3k4.py
+# src/snake_rl/models/cnns/px_strided_cnn_l3k4.py
 from __future__ import annotations
 
 from gymnasium import spaces
@@ -18,7 +18,7 @@ class PxStridedCNN_L3K4(BaseCNNExtractor):
 
     Channel scaling:
       - Base channels c are computed via BaseCNNExtractor.c(1) using c_mult
-      - Effective channels: c → 2c → 2c
+      - Effective channels: c â†’ 2c â†’ 2c
 
     Notes:
       - Strong inductive bias toward tile-level structure.
@@ -27,7 +27,7 @@ class PxStridedCNN_L3K4(BaseCNNExtractor):
 
     Output:
       - build_stem() returns a spatial feature map [B, 2c, H', W']
-      - BaseCNNExtractor applies: Flatten → Linear → ReLU to produce features_dim
+      - BaseCNNExtractor applies: Flatten â†’ Linear â†’ ReLU to produce features_dim
     """
 
     def build_stem(self, observation_space: spaces.Box) -> nn.Module:

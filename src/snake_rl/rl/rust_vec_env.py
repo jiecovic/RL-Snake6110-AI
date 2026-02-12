@@ -1,4 +1,4 @@
-# src\snake_rl\rl\rust_vec_env.py
+# src/snake_rl/rl/rust_vec_env.py
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 from gymnasium import spaces
-from stable_baselines3.common.vec_env.base_vec_env import VecEnv
+from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvIndices
 
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.obs_utils import (
@@ -14,18 +14,12 @@ from snake_rl.envs.obs_utils import (
     pov_tile_frame_with_valid,
 )
 from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.geometry import Direction, Point
-from snake_rl.game.level import BaseLevel
 from snake_rl.game.snakegame import (
     MoveResult,
-    build_level_grid,
-    build_tileset_array,
-    dir_to_i8,
     ensure_rust_core,
-    spawn_from_level,
+    tileset_tile_count,
+    tileset_tile_size,
 )
-from snake_rl.game.tile_types import TileType
-from snake_rl.game.tileset import Tileset
 from snake_rl.vocab import load_tile_vocab
 
 
@@ -41,7 +35,8 @@ class RustVecEnv(VecEnv):
         *,
         env_id: str,
         env_params: dict[str, Any],
-        level: BaseLevel,
+        width: int,
+        height: int,
         food_count: int,
         reward: RewardConfig,
         num_envs: int,
@@ -49,36 +44,25 @@ class RustVecEnv(VecEnv):
     ) -> None:
         self.env_id = str(env_id)
         self.env_params = dict(env_params)
-        self.level = level
+        self.width = int(width)
+        self.height = int(height)
         self.reward = reward
         self.num_envs = int(num_envs)
 
-        self.tileset = Tileset()
+        self.tile_size = tileset_tile_size()
         tile_vocab_name = self.env_params.get("tile_vocab")
         self._tile_vocab = load_tile_vocab(tile_vocab_name) if tile_vocab_name is not None else None
-        core = ensure_rust_core()
-        grid = build_level_grid(level)
-        tiles = build_tileset_array(self.tileset)
-        sp = spawn_from_level(level)
+        ext = ensure_rust_core()
 
         seed_list = None
         if seeds is not None:
             seed_list = [int(s) for s in seeds]
 
-        self._vec_game = core.VecGame(
+        self._vec_game = ext.VecGame(
             n=int(self.num_envs),
-            width=int(level.width),
-            height=int(level.height),
-            level_grid=grid,
-            spawn_len=int(sp.length),
-            spawn_dir=dir_to_i8(sp.direction),
-            spawn_random_dir=bool(sp.random_direction),
-            spawn_jitter=int(sp.jitter),
+            width=int(self.width),
+            height=int(self.height),
             food_count=int(food_count),
-            tile_size=int(self.tileset.tile_size),
-            tiles=tiles,
-            spawn_x=sp.x,
-            spawn_y=sp.y,
             seeds=seed_list,
         )
 
@@ -100,9 +84,9 @@ class RustVecEnv(VecEnv):
     def _make_observation_space(self) -> spaces.Space:
         env_id = self.env_id
         p = self.env_params
-        ts = int(self.tileset.tile_size)
-        h = int(self.level.height)
-        w = int(self.level.width)
+        ts = int(self.tile_size)
+        h = int(self.height)
+        w = int(self.width)
 
         if env_id in {"global_pixel", "global_pixel_dir"}:
             remove_border = bool(p.get("remove_border", True))
@@ -141,7 +125,7 @@ class RustVecEnv(VecEnv):
             if self._tile_vocab is not None:
                 base_num = int(self._tile_vocab.num_classes)
             else:
-                base_num = int(max(int(t.value) for t in TileType) + 1)
+                base_num = int(tileset_tile_count())
 
             if env_id == "global_tile_id":
                 remove_border = bool(p.get("remove_border", True))
@@ -261,35 +245,33 @@ class RustVecEnv(VecEnv):
     def close(self) -> None:
         return None
 
-    def seed(self, seed: int | None = None):
+    def seed(self, seed: int | None = None) -> list[int | None]:
         if seed is None:
-            return None
+            return [None for _ in range(self.num_envs)]
         ss = np.random.SeedSequence(int(seed))
         return [int(s.generate_state(1, dtype=np.uint32)[0]) for s in ss.spawn(self.num_envs)]
 
-    def get_attr(self, attr_name: str, indices: Iterable[int] | None = None):
+    def get_attr(self, attr_name: str, indices: VecEnvIndices | None = None):
         value = getattr(self, attr_name)
-        if indices is None:
-            return [value for _ in range(self.num_envs)]
-        return [value for _ in indices]
+        idxs = _normalize_indices(indices, self.num_envs)
+        return [value for _ in idxs]
 
-    def set_attr(self, attr_name: str, value, indices: Iterable[int] | None = None):
+    def set_attr(self, attr_name: str, value, indices: VecEnvIndices | None = None):
         setattr(self, attr_name, value)
 
     def env_method(
         self,
         method_name: str,
         *method_args,
-        indices: Iterable[int] | None = None,
+        indices: VecEnvIndices | None = None,
         **method_kwargs,
     ):
         if method_name != "reset":
             raise AttributeError(f"Unsupported env_method: {method_name}")
 
-        if indices is None:
-            indices = range(self.num_envs)
+        idxs = _normalize_indices(indices, self.num_envs)
         results = []
-        for i in indices:
+        for i in idxs:
             seed = method_kwargs.get("seed")
             self._vec_game.reset_one(int(i), seed=None if seed is None else int(seed))
             self.current_step_since_last_food[int(i)] = 0
@@ -299,20 +281,19 @@ class RustVecEnv(VecEnv):
             results.append((obs_i, {}))
         return results
 
-    def render(self):
+    def render(self, mode: str = "human"):
         return None
 
-    def env_is_wrapped(self, wrapper_class, indices: Iterable[int] | None = None):
-        if indices is None:
-            return [False for _ in range(self.num_envs)]
-        return [False for _ in indices]
+    def env_is_wrapped(self, wrapper_class, indices: VecEnvIndices | None = None):
+        idxs = _normalize_indices(indices, self.num_envs)
+        return [False for _ in idxs]
 
     # ---- internal obs building ----
 
     def _build_obs(self):
         env_id = self.env_id
         p = self.env_params
-        ts = int(self.tileset.tile_size)
+        ts = int(self.tile_size)
 
         if env_id in {"global_pixel", "global_pixel_dir"}:
             pixels = np.asarray(self._vec_game.pixel_grids(), dtype=np.uint8)
@@ -345,7 +326,7 @@ class RustVecEnv(VecEnv):
                 d = _dir_from_i8(int(dirs[i]))
                 if d is None:
                     raise RuntimeError("direction is None in rust vec env")
-                head = Point(int(head_pos[i][0]), int(head_pos[i][1]))
+                head = (int(head_pos[i][0]), int(head_pos[i][1]))
                 if add_oob_mask:
                     frame, valid = pov_pixel_frame(
                         pixel_grid=pixels[i],
@@ -421,7 +402,7 @@ class RustVecEnv(VecEnv):
                 d = _dir_from_i8(int(dirs[i]))
                 if d is None:
                     raise RuntimeError("direction is None in rust vec env")
-                head = Point(int(head_pos[i][0]), int(head_pos[i][1]))
+                head = (int(head_pos[i][0]), int(head_pos[i][1]))
                 frame, valid = pov_tile_frame_with_valid(
                     tile_grid=grids[i],
                     head=head,
@@ -450,10 +431,10 @@ class RustVecEnv(VecEnv):
         raise ValueError(f"Unsupported env_id for RustVecEnv: {env_id}")
 
 
-def _dir_from_i8(v: int) -> Direction | None:
+def _dir_from_i8(v: int) -> int | None:
     if v < 0:
         return None
-    return Direction(int(v))
+    return int(v)
 
 
 def _termination_cause(mask: int, truncated: bool) -> str:
@@ -467,27 +448,36 @@ def _termination_cause(mask: int, truncated: bool) -> str:
     ]
     for r in priority:
         if mask & int(r):
-            return _cause_label(r)
+            return _cause_label(int(r))
     if truncated:
         return "timeout"
     return "unknown"
 
 
-def _cause_label(result: MoveResult) -> str:
-    return {
-        MoveResult.WIN: "win",
-        MoveResult.HIT_WALL: "hit_wall",
-        MoveResult.HIT_SELF: "hit_self",
-        MoveResult.HIT_BOUNDARY: "hit_boundary",
-        MoveResult.GAME_NOT_RUNNING: "not_running",
-        MoveResult.TIMEOUT: "timeout",
-    }.get(result, "unknown")
+def _cause_label(result: int) -> str:
+    labels: dict[int, str] = {
+        int(MoveResult.WIN): "win",
+        int(MoveResult.HIT_WALL): "hit_wall",
+        int(MoveResult.HIT_SELF): "hit_self",
+        int(MoveResult.HIT_BOUNDARY): "hit_boundary",
+        int(MoveResult.GAME_NOT_RUNNING): "not_running",
+        int(MoveResult.TIMEOUT): "timeout",
+    }
+    return labels.get(int(result), "unknown")
 
 
 def _index_obs(obs, indices: np.ndarray):
     if isinstance(obs, dict):
         return [{k: v[i].copy() for k, v in obs.items()} for i in indices.tolist()]
     return [obs[i].copy() for i in indices.tolist()]
+
+
+def _normalize_indices(indices: VecEnvIndices | None, n: int) -> list[int]:
+    if indices is None:
+        return list(range(n))
+    if isinstance(indices, int):
+        return [indices]
+    return [int(i) for i in indices]
 
 
 def _compute_fill(*, snake_len, initial_len, max_playable: int, fill_bins: int | None):

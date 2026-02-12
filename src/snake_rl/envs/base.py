@@ -1,15 +1,15 @@
-# src\snake_rl\envs\base.py
+# src/snake_rl/envs/base.py
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
 
 import gymnasium as gym
+import snake_rl._core as core
 from gymnasium import spaces
 
 from snake_rl.config.schema import RewardConfig
-from snake_rl.game.geometry import RelativeDirection
-from snake_rl.game.snakegame import MoveResult, SnakeGame
+from snake_rl.game.snakegame import SnakeGame
 
 
 class BaseSnakeEnv(gym.Env, ABC):
@@ -23,29 +23,29 @@ class BaseSnakeEnv(gym.Env, ABC):
     """
 
     FATAL_MASK = (
-        MoveResult.HIT_SELF
-        | MoveResult.HIT_WALL
-        | MoveResult.HIT_BOUNDARY
-        | MoveResult.GAME_NOT_RUNNING
-        | MoveResult.WIN
+        core.MOVE_HIT_SELF
+        | core.MOVE_HIT_WALL
+        | core.MOVE_HIT_BOUNDARY
+        | core.MOVE_NOT_RUNNING
+        | core.MOVE_WIN
     )
 
     TERMINATION_PRIORITY = [
-        MoveResult.WIN,
-        MoveResult.HIT_WALL,
-        MoveResult.HIT_SELF,
-        MoveResult.HIT_BOUNDARY,
-        MoveResult.TIMEOUT,
-        MoveResult.GAME_NOT_RUNNING,
+        core.MOVE_WIN,
+        core.MOVE_HIT_WALL,
+        core.MOVE_HIT_SELF,
+        core.MOVE_HIT_BOUNDARY,
+        core.MOVE_TIMEOUT,
+        core.MOVE_NOT_RUNNING,
     ]
 
     TERMINATION_CAUSES = {
-        MoveResult.WIN: "win",
-        MoveResult.HIT_WALL: "hit_wall",
-        MoveResult.HIT_SELF: "hit_self",
-        MoveResult.HIT_BOUNDARY: "hit_boundary",
-        MoveResult.GAME_NOT_RUNNING: "not_running",
-        MoveResult.TIMEOUT: "timeout",
+        core.MOVE_WIN: "win",
+        core.MOVE_HIT_WALL: "hit_wall",
+        core.MOVE_HIT_SELF: "hit_self",
+        core.MOVE_HIT_BOUNDARY: "hit_boundary",
+        core.MOVE_NOT_RUNNING: "not_running",
+        core.MOVE_TIMEOUT: "timeout",
     }
 
     def __init__(self, game: SnakeGame, *, reward: RewardConfig | dict[str, Any] | None = None):
@@ -55,7 +55,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         self.game: SnakeGame = game
 
         # 0 = forward, 1 = left, 2 = right
-        self.action_space: spaces.Discrete = spaces.Discrete(3)
+        self.action_space: spaces.Space = spaces.Discrete(3)
 
         if reward is None:
             reward_cfg = RewardConfig()
@@ -80,8 +80,8 @@ class BaseSnakeEnv(gym.Env, ABC):
 
         self.current_step_since_last_food: int = 0
 
-    def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
+    def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
+        super().reset(seed=seed, options=options)
 
         # Bind the game's RNG to the env RNG. This makes seeding robust and
         # consistent with Gymnasium/SB3 behavior (per-env streams).
@@ -98,19 +98,21 @@ class BaseSnakeEnv(gym.Env, ABC):
         food = self.game.get_food_positions()
         if not food:
             return None
-        return min(abs(head.x - f.x) + abs(head.y - f.y) for f in food)
+        hx, hy = int(head[0]), int(head[1])
+        return min(abs(hx - int(f[0])) + abs(hy - int(f[1])) for f in food)
 
     def step(self, action: int):
         reward = 0.0
-        direction = RelativeDirection(action)
-        results = self.game.move(direction)
+        if action not in (0, 1, 2):
+            raise ValueError(f"action must be 0|1|2, got {action!r}")
+        results = self.game.move(int(action))
         obs = self.get_obs()
 
         self.current_step_since_last_food += 1
 
-        is_win = bool(results & MoveResult.WIN)
+        is_win = bool(results & core.MOVE_WIN)
         is_fatal = bool(results & self.FATAL_MASK)
-        is_food = bool(results & MoveResult.FOOD_EATEN)
+        is_food = bool(results & core.MOVE_FOOD)
         is_truncated = self.current_step_since_last_food >= self.max_steps
 
         if is_win:
@@ -141,12 +143,12 @@ class BaseSnakeEnv(gym.Env, ABC):
         info: dict[str, Any] = {"move_results": int(results)}
 
         if terminated or truncated:
-            result_for_cause: MoveResult | None = next(
+            result_for_cause: int | None = next(
                 (r for r in self.TERMINATION_PRIORITY if (results & r)),
                 None,
             )
             if truncated and result_for_cause is None:
-                result_for_cause = MoveResult.TIMEOUT
+                result_for_cause = core.MOVE_TIMEOUT
 
             if result_for_cause is None:
                 cause = "unknown"

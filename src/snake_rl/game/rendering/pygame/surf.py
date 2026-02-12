@@ -1,11 +1,18 @@
-# src\snake_rl\game\rendering\pygame\surf.py
+# src/snake_rl/game/rendering/pygame/surf.py
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
-import pygame
+
+try:
+    import pygame as _pygame
+except Exception:  # pragma: no cover
+    _pygame = None
+pygame: Any = _pygame
 
 
-def gray255_to_surface(frame: np.ndarray, *, pixel_size: int) -> pygame.Surface:
+def gray255_to_surface(frame: np.ndarray, *, pixel_size: int) -> Any:
     """
     Convert a (H,W) uint8 grayscale frame with values in [0,255]
     into a pygame Surface.
@@ -17,6 +24,9 @@ def gray255_to_surface(frame: np.ndarray, *, pixel_size: int) -> pygame.Surface:
 
     This is the single canonical conversion used by pygame renderers.
     """
+    if pygame is None:  # pragma: no cover
+        raise RuntimeError("pygame is not installed")
+
     arr = frame if isinstance(frame, np.ndarray) else np.asarray(frame)
     if arr.ndim != 2:
         raise TypeError(f"expected 2D frame (H,W), got {arr.shape}")

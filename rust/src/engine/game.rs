@@ -1,5 +1,6 @@
-// rust\src\engine\game.rs
-use rand::{Rng, SeedableRng};
+// rust/src/engine/game.rs
+use rand::seq::index::sample;
+use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use super::constants::*;
@@ -8,12 +9,11 @@ use super::geometry::{
     is_straight_spawn_valid,
 };
 use super::tiles::{body_tile, head_tile, tail_tile};
+use super::tileset::{tileset_tile_size, tileset_tiles};
 
 #[derive(Debug)]
 pub enum EngineError {
     InvalidGridLen,
-    InvalidTileSize,
-    InvalidTileCache,
     SpawnFailed,
     DirectionNone,
 }
@@ -22,10 +22,8 @@ impl std::fmt::Display for EngineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             EngineError::InvalidGridLen => {
-                write!(f, "static_grid length does not match width*height")
+                write!(f, "invalid grid dimensions (width and height must be > 0)")
             }
-            EngineError::InvalidTileSize => write!(f, "tile_size must be > 0"),
-            EngineError::InvalidTileCache => write!(f, "tile_cache is invalid or too small"),
             EngineError::SpawnFailed => write!(f, "could not find a valid snake spawn"),
             EngineError::DirectionNone => write!(f, "direction is None"),
         }
@@ -43,10 +41,8 @@ pub struct GameCore {
     wall_mask: Vec<bool>,
     wall_count: usize,
 
-    spawn_x: Option<i32>,
-    spawn_y: Option<i32>,
     spawn_len: usize,
-    spawn_dir: Option<i8>,
+    spawn_dir: i8,
     spawn_random_dir: bool,
     spawn_jitter: i32,
 
@@ -69,38 +65,32 @@ pub struct GameCore {
 }
 
 impl GameCore {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         width: usize,
         height: usize,
-        static_grid: Vec<u8>,
-        spawn_x: Option<i32>,
-        spawn_y: Option<i32>,
-        spawn_len: usize,
-        spawn_dir: Option<i8>,
-        spawn_random_dir: bool,
-        spawn_jitter: i32,
         food_count: usize,
-        tile_size: usize,
-        tile_cache: Vec<Vec<u8>>,
         seed: Option<u64>,
     ) -> Result<Self, EngineError> {
         if width == 0 || height == 0 {
             return Err(EngineError::InvalidGridLen);
         }
-        if static_grid.len() != width * height {
-            return Err(EngineError::InvalidGridLen);
+
+        let tile_size = tileset_tile_size();
+        let tile_cache = tileset_tiles();
+
+        let mut static_grid = vec![TILE_EMPTY; width * height];
+        for x in 0..width {
+            static_grid[idx(x as i32, 0, width)] = TILE_WALL_TOP;
+            static_grid[idx(x as i32, (height - 1) as i32, width)] = TILE_WALL_BOTTOM;
         }
-        if tile_size == 0 {
-            return Err(EngineError::InvalidTileSize);
+        for y in 0..height {
+            static_grid[idx(0, y as i32, width)] = TILE_WALL_LEFT;
+            static_grid[idx((width - 1) as i32, y as i32, width)] = TILE_WALL_RIGHT;
         }
-        if tile_cache.is_empty() || tile_cache.len() <= TILE_FOOD as usize {
-            return Err(EngineError::InvalidTileCache);
-        }
-        let tile_len = tile_size * tile_size;
-        if tile_cache.iter().any(|t| t.len() != tile_len) {
-            return Err(EngineError::InvalidTileCache);
-        }
+        static_grid[idx(0, 0, width)] = TILE_WALL_TL;
+        static_grid[idx((width - 1) as i32, 0, width)] = TILE_WALL_TR;
+        static_grid[idx(0, (height - 1) as i32, width)] = TILE_WALL_BL;
+        static_grid[idx((width - 1) as i32, (height - 1) as i32, width)] = TILE_WALL_BR;
 
         let mut wall_mask = vec![false; width * height];
         let mut wall_count = 0usize;
@@ -113,7 +103,7 @@ impl GameCore {
 
         let rng = match seed {
             Some(s) => ChaCha8Rng::seed_from_u64(s),
-            None => ChaCha8Rng::seed_from_u64(0),
+            None => ChaCha8Rng::seed_from_u64(rand::thread_rng().next_u64()),
         };
 
         Ok(Self {
@@ -123,12 +113,10 @@ impl GameCore {
             static_grid,
             wall_mask,
             wall_count,
-            spawn_x,
-            spawn_y,
-            spawn_len,
-            spawn_dir,
-            spawn_random_dir,
-            spawn_jitter,
+            spawn_len: 3,
+            spawn_dir: 1,
+            spawn_random_dir: false,
+            spawn_jitter: 0,
             target_food_count: food_count,
             rng,
             snake: Vec::new(),
@@ -247,19 +235,12 @@ impl GameCore {
         let direction = if self.spawn_random_dir {
             self.rng.gen_range(0..4) as i8
         } else {
-            self.spawn_dir.unwrap_or(1)
+            self.spawn_dir
         };
 
-        let base = if self.spawn_x.is_none() || self.spawn_y.is_none() {
-            Point {
-                x: (self.width / 2) as i32,
-                y: (self.height / 2) as i32,
-            }
-        } else {
-            Point {
-                x: self.spawn_x.unwrap(),
-                y: self.spawn_y.unwrap(),
-            }
+        let base = Point {
+            x: (self.width / 2) as i32,
+            y: (self.height / 2) as i32,
         };
 
         let jitter = if self.spawn_jitter < 0 {

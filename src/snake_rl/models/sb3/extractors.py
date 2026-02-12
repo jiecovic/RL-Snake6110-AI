@@ -1,4 +1,4 @@
-# src\snake_rl\models\sb3\extractors.py
+# src/snake_rl/models/sb3/extractors.py
 from __future__ import annotations
 
 import inspect

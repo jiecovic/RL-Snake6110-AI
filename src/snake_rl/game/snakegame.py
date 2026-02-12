@@ -1,42 +1,38 @@
-# src\snake_rl\game\snakegame.py
+# src/snake_rl/game/snakegame.py
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import IntFlag
 from typing import Any
 
 import numpy as np
 
-from snake_rl.game.geometry import Direction, Point, RelativeDirection
-from snake_rl.game.level import BaseLevel
-from snake_rl.game.tile_types import TileType
-from snake_rl.game.tileset import Tileset
-
 try:
-    import snake_rl._core as rust_core
+    import snake_rl.core as rust_core
 except Exception:  # pragma: no cover
     rust_core = None  # type: ignore[assignment]
 
 
+def _move_flag(name: str, fallback: int) -> int:
+    if rust_core is None:
+        return fallback
+    return int(getattr(rust_core, name))
+
+
 class MoveResult(IntFlag):
-    OK = 1 << 0
-    FOOD_EATEN = 1 << 1
-    HIT_BOUNDARY = 1 << 2
-    HIT_WALL = 1 << 3
-    HIT_SELF = 1 << 4
-    GAME_NOT_RUNNING = 1 << 5
-    TIMEOUT = 1 << 6
-    WIN = 1 << 7
+    OK = _move_flag("MOVE_OK", 1 << 0)
+    FOOD_EATEN = _move_flag("MOVE_FOOD", 1 << 1)
+    HIT_BOUNDARY = _move_flag("MOVE_HIT_BOUNDARY", 1 << 2)
+    HIT_WALL = _move_flag("MOVE_HIT_WALL", 1 << 3)
+    HIT_SELF = _move_flag("MOVE_HIT_SELF", 1 << 4)
+    GAME_NOT_RUNNING = _move_flag("MOVE_NOT_RUNNING", 1 << 5)
+    TIMEOUT = _move_flag("MOVE_TIMEOUT", 1 << 6)
+    WIN = _move_flag("MOVE_WIN", 1 << 7)
 
 
-@dataclass(frozen=True)
-class SpawnSpecData:
-    x: int | None
-    y: int | None
-    length: int
-    direction: Direction | None
-    random_direction: bool
-    jitter: int
+_TILESET_TILES: np.ndarray | None = None
+_TILESET_TILE_SIZE: int | None = None
+_TILE_ID_COUNT: int | None = None
+_TILE_NAMES: list[str] | None = None
 
 
 def has_rust_core() -> bool:
@@ -51,51 +47,48 @@ def ensure_rust_core() -> Any:
     return rust_core
 
 
-def spawn_from_level(level: BaseLevel) -> SpawnSpecData:
-    sp = level.spawn
-    return SpawnSpecData(
-        x=sp.x,
-        y=sp.y,
-        length=int(sp.length),
-        direction=sp.direction,
-        random_direction=bool(sp.random_direction),
-        jitter=int(sp.jitter),
-    )
+def tileset_tile_size() -> int:
+    global _TILESET_TILE_SIZE
+    if _TILESET_TILE_SIZE is None:
+        core = ensure_rust_core()
+        _TILESET_TILE_SIZE = int(core.tileset_tile_size())
+    return _TILESET_TILE_SIZE
 
 
-def build_level_grid(level: BaseLevel) -> np.ndarray:
-    h = int(level.height)
-    w = int(level.width)
-    grid = np.zeros((h, w), dtype=np.uint8)
-    for y in range(h):
-        for x in range(w):
-            grid[y, x] = np.uint8(int(level.grid[y][x].value))
-    return grid
+def tileset_tiles() -> np.ndarray:
+    global _TILESET_TILES
+    if _TILESET_TILES is None:
+        core = ensure_rust_core()
+        _TILESET_TILES = np.asarray(core.tileset_tiles(), dtype=np.uint8)
+    return _TILESET_TILES
 
 
-def build_tileset_array(tileset: Tileset) -> np.ndarray:
-    max_id = int(max(int(t.value) for t in TileType))
-    tile_size = int(tileset.tile_size)
-    tiles = np.zeros((max_id + 1, tile_size, tile_size), dtype=np.uint8)
-    for t in TileType:
-        raw = np.array(tileset[t], dtype=np.uint8)
-        if raw.size and int(raw.max()) <= 1:
-            raw = (raw * np.uint8(255)).astype(np.uint8, copy=False)
-        tiles[int(t.value)] = raw
-    return tiles
+def tile_empty_id() -> int:
+    core = ensure_rust_core()
+    return int(core.TILE_EMPTY)
 
 
-def dir_to_i8(d: Direction | None) -> int:
-    if d is None:
-        return -1
-    return int(d.value)
+def tileset_tile_count() -> int:
+    global _TILE_ID_COUNT
+    if _TILE_ID_COUNT is None:
+        core = ensure_rust_core()
+        _TILE_ID_COUNT = int(core.tileset_tile_count())
+    return _TILE_ID_COUNT
 
 
-def i8_to_dir(v: int) -> Direction | None:
+def tileset_tile_names() -> list[str]:
+    global _TILE_NAMES
+    if _TILE_NAMES is None:
+        core = ensure_rust_core()
+        _TILE_NAMES = [str(x) for x in core.tileset_tile_names()]
+    return list(_TILE_NAMES)
+
+
+def _i8_to_dir(v: int) -> int | None:
     iv = int(v)
     if iv < 0:
         return None
-    return Direction(iv)
+    return iv
 
 
 class SnakeGame:
@@ -109,68 +102,55 @@ class SnakeGame:
 
     def __init__(
         self,
-        level: BaseLevel,
+        *,
+        width: int,
+        height: int,
         food_count: int | None = None,
-        tileset: Tileset | None = None,
         seed: int | None = None,
     ):
         if food_count is None:
             raise ValueError("food_count must be provided (level does not encode food).")
 
         core = ensure_rust_core()
-
-        self.level = level
-        self.tileset = tileset or Tileset()
-
-        grid = build_level_grid(level)
-        tiles = build_tileset_array(self.tileset)
-        sp = spawn_from_level(level)
-
         self._core = core.Game(
-            width=int(level.width),
-            height=int(level.height),
-            level_grid=grid,
-            spawn_len=int(sp.length),
-            spawn_dir=dir_to_i8(sp.direction),
-            spawn_random_dir=bool(sp.random_direction),
-            spawn_jitter=int(sp.jitter),
+            width=int(width),
+            height=int(height),
             food_count=int(food_count),
-            tile_size=int(self.tileset.tile_size),
-            tiles=tiles,
-            spawn_x=sp.x,
-            spawn_y=sp.y,
-            seed=None if seed is None else int(seed),
+            seed=None,
         )
 
         self._tile_grid: np.ndarray | None = None
         self._pixel_buffer: np.ndarray | None = None
-        self._direction: Direction | None = None
+        self._direction: int | None = None
         self._score: int = 0
         self._running: bool = True
         self._snake_len: int = 0
-        self._head_pos: Point = Point(0, 0)
-        self._food_positions: list[Point] = []
+        self._head_pos: tuple[int, int] = (0, 0)
+        self._food_positions: list[tuple[int, int]] = []
         self._spawnable_count: int = 0
+
+        self._core.reset(None if seed is None else int(seed))
+        self._refresh_state()
 
     def reset(self, seed: int | None = None) -> None:
         self._core.reset(None if seed is None else int(seed))
         self._refresh_state()
 
-    def move(self, rel_dir: RelativeDirection = RelativeDirection.FORWARD) -> MoveResult:
-        mask = int(self._core.step(int(rel_dir.value)))
+    def move(self, rel_dir: int = 0) -> MoveResult:
+        mask = int(self._core.step(int(rel_dir)))
         self._refresh_state()
         return MoveResult(mask)
 
     def _refresh_state(self) -> None:
         self._tile_grid = np.asarray(self._core.tile_grid(), dtype=np.uint8)
         self._pixel_buffer = np.asarray(self._core.pixel_grid(), dtype=np.uint8)
-        self._direction = i8_to_dir(int(self._core.direction()))
+        self._direction = _i8_to_dir(int(self._core.direction()))
         self._score = int(self._core.score)
         self._running = bool(self._core.running)
         self._snake_len = int(self._core.snake_len())
         hx, hy = self._core.head_pos()
-        self._head_pos = Point(int(hx), int(hy))
-        self._food_positions = [Point(int(x), int(y)) for x, y in self._core.food_positions()]
+        self._head_pos = (int(hx), int(hy))
+        self._food_positions = [(int(x), int(y)) for x, y in self._core.food_positions()]
         self._spawnable_count = int(self._core.spawnable_count())
 
     # ---- properties used by envs/renderers ----
@@ -182,6 +162,10 @@ class SnakeGame:
     @property
     def height(self) -> int:
         return int(self._core.height)
+
+    @property
+    def tile_size(self) -> int:
+        return int(self._core.tile_size)
 
     @property
     def tile_grid(self) -> np.ndarray:
@@ -196,7 +180,7 @@ class SnakeGame:
         return self._pixel_buffer
 
     @property
-    def direction(self) -> Direction | None:
+    def direction(self) -> int | None:
         return self._direction
 
     @property
@@ -211,10 +195,10 @@ class SnakeGame:
     def snake_len(self) -> int:
         return self._snake_len
 
-    def get_head_position(self) -> Point:
+    def get_head_position(self) -> tuple[int, int]:
         return self._head_pos
 
-    def get_food_positions(self) -> list[Point]:
+    def get_food_positions(self) -> list[tuple[int, int]]:
         return list(self._food_positions)
 
     @property
@@ -229,12 +213,11 @@ class SnakeGame:
 __all__ = [
     "MoveResult",
     "SnakeGame",
-    "SpawnSpecData",
-    "build_level_grid",
-    "build_tileset_array",
-    "dir_to_i8",
     "ensure_rust_core",
     "has_rust_core",
-    "i8_to_dir",
-    "spawn_from_level",
+    "tile_empty_id",
+    "tileset_tile_count",
+    "tileset_tile_names",
+    "tileset_tile_size",
+    "tileset_tiles",
 ]

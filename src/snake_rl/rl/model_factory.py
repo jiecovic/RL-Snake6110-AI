@@ -1,4 +1,4 @@
-# src\snake_rl\rl\model_factory.py
+# src/snake_rl/rl/model_factory.py
 from __future__ import annotations
 
 import inspect

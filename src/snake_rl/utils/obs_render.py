@@ -1,12 +1,16 @@
-# src\snake_rl\utils\obs_render.py
+# src/snake_rl/utils/obs_render.py
 from __future__ import annotations
 
 from typing import Any
 
 import numpy as np
 
-from snake_rl.game.tile_types import TileType
-from snake_rl.game.tileset import Tileset
+from snake_rl.game.snakegame import (
+    tile_empty_id,
+    tileset_tile_count,
+    tileset_tile_size,
+    tileset_tiles,
+)
 
 
 def _as_u8_2d_last_frame(arr: np.ndarray) -> np.ndarray:
@@ -44,7 +48,7 @@ def obs_last_frame_and_kind(
     kind:
       - "pixel": values in [0,255] representing an actual pixel image
       - "mask01": values in {0,1} (binary mask semantics; matches game.pixel_buffer)
-      - "tile_id": values are TileType ids (uint8), not pixels
+      - "tile_id": values are Rust tile ids (uint8), not pixels
     """
     # Explicit override if the caller already knows the kind.
     if kind_hint is not None:
@@ -75,8 +79,8 @@ def obs_last_frame_and_kind(
 
         vmax = int(frame.max()) if frame.size else 0
         vmin = int(frame.min()) if frame.size else 0
-        # If values are within TileType range and non-negative, it's likely tile ids.
-        max_tid = max(int(t.value) for t in TileType)
+        # If values are within tile id range and non-negative, it's likely tile ids.
+        max_tid = int(tileset_tile_count()) - 1
         if vmin >= 0 and vmax <= max_tid:
             return frame, "tile_id"
 
@@ -91,38 +95,44 @@ def obs_last_frame_and_kind(
 
     vmax = int(frame.max()) if frame.size else 0
     vmin = int(frame.min()) if frame.size else 0
-    max_tid = max(int(t.value) for t in TileType)
+    max_tid = int(tileset_tile_count()) - 1
     kind = "tile_id" if vmin >= 0 and vmax <= max_tid else "pixel"
     return frame, kind
 
 
 def tile_id_frame_to_pixels(
-    tile_ids: np.ndarray,  # (H,W) uint8 of TileType.value
+    tile_ids: np.ndarray,  # (H,W) uint8 of Rust tile ids
     *,
-    tileset: Tileset,
+    tiles: np.ndarray | None = None,
+    tile_size: int | None = None,
 ) -> np.ndarray:
     """
-    Convert a (H,W) tile-id grid into a (H*td, W*td) uint8 pixel image using the project's Tileset.
+    Convert a (H,W) tile-id grid into a (H*td, W*td) uint8 pixel image using the built-in tileset.
     """
     if tile_ids.ndim != 2:
         raise TypeError(f"tile_ids must be 2D (H,W), got {tile_ids.shape}")
 
-    td = int(tileset.tile_size)
+    if tiles is None:
+        tiles = tileset_tiles()
+    if tile_size is None:
+        tile_size = tileset_tile_size()
+
+    td = int(tile_size)
     h, w = int(tile_ids.shape[0]), int(tile_ids.shape[1])
 
     out = np.zeros((h * td, w * td), dtype=np.uint8)
 
+    empty_id = int(tile_empty_id())
     cache: dict[int, np.ndarray] = {}
-    for tt in TileType:
-        if tt == TileType.EMPTY:
+    for tid in range(int(tileset_tile_count())):
+        if tid == empty_id:
             continue
-        if tt in tileset:
-            cache[int(tt.value)] = np.array(tileset[tt], dtype=np.uint8)
+        cache[int(tid)] = np.asarray(tiles[int(tid)], dtype=np.uint8)
 
     for y in range(h):
         for x in range(w):
             tid = int(tile_ids[y, x])
-            if tid == int(TileType.EMPTY.value):
+            if tid == empty_id:
                 continue
             tile = cache.get(tid)
             if tile is None:
@@ -136,22 +146,20 @@ def tile_id_frame_to_pixels(
 def obs_frame_to_pixels(
     obs: Any,
     *,
-    tileset: Tileset | None = None,
+    tiles: np.ndarray | None = None,
+    tile_size: int | None = None,
     pixel_key: str = "pixel",
 ) -> np.ndarray:
     """
     Extract last frame and convert to pixels if needed.
 
     - "pixel": returned as-is (uint8 [0..255])
-    - "mask01": returned as-is (uint8 {0,1}) — agent-view should render via gray01 pipeline
-    - "tile_id": converted via tileset (tileset required)
+    - "mask01": returned as-is (uint8 {0,1}) -- agent-view should render via gray01 pipeline
+    - "tile_id": converted via built-in Rust tileset
     """
     frame, kind = obs_last_frame_and_kind(obs, pixel_key=pixel_key)
 
     if kind in ("pixel", "mask01"):
         return frame
 
-    if tileset is None:
-        raise ValueError("tileset is required to render tile-id observations")
-
-    return tile_id_frame_to_pixels(frame, tileset=tileset)
+    return tile_id_frame_to_pixels(frame, tiles=tiles, tile_size=tile_size)

@@ -1,5 +1,6 @@
-// rust\src\engine\tiles.rs
-use super::geom::Point;
+// rust/src/engine/tiles.rs
+use super::constants::*;
+use super::geometry::Point;
 
 pub fn head_tile(direction: i8) -> u8 {
     match direction {

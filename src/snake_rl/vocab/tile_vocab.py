@@ -1,4 +1,4 @@
-# src\snake_rl\vocab\tile_vocab.py
+# src/snake_rl/vocab/tile_vocab.py
 from __future__ import annotations
 
 import hashlib
@@ -8,15 +8,15 @@ from typing import Any
 
 import numpy as np
 import yaml
+from snake_rl.core import tileset_tile_count, tileset_tile_names
 
-from snake_rl.game.tile_types import TileType
 from snake_rl.utils.paths import asset_path
 
 
 @dataclass(frozen=True)
 class TileVocab:
     """
-    A compiled mapping from raw TileType.value IDs -> compact class IDs [0..K-1].
+    A compiled mapping from raw tile IDs -> compact class IDs [0..K-1].
 
     - name: human-readable identifier (from YAML)
     - path: source YAML path
@@ -35,7 +35,7 @@ class TileVocab:
 
     def map_grid(self, raw_grid: np.ndarray) -> np.ndarray:
         """
-        Map a raw tile-id grid (values == TileType.value) to class ids via LUT.
+        Map a raw tile-id grid (values == Rust tile ids) to class ids via LUT.
 
         Returns a view/copy depending on numpy advanced indexing rules.
         """
@@ -75,8 +75,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def _raw_vocab_size() -> int:
-    # Assumes TileType values are 0..K
-    return int(max(int(t.value) for t in TileType) + 1)
+    return int(tileset_tile_count())
 
 
 def _all_yaml_files(root: Path) -> list[Path]:
@@ -164,11 +163,13 @@ def resolve_tile_vocab_path(name: str) -> Path:
     return p
 
 
-def _parse_classes(d: Any, *, ctx: str, path: Path) -> list[tuple[str, list[TileType]]]:
+def _parse_classes(d: Any, *, ctx: str, path: Path) -> list[tuple[str, list[int]]]:
     if not isinstance(d, dict):
         raise TypeError(f"Expected '{ctx}' to be a dict in {path}")
 
-    out: list[tuple[str, list[TileType]]] = []
+    tile_names = tileset_tile_names()
+    name_to_id = {name: i for i, name in enumerate(tile_names)}
+    out: list[tuple[str, list[int]]] = []
     for class_name, members_v in d.items():
         cname = str(class_name).strip()
         if not cname:
@@ -177,17 +178,17 @@ def _parse_classes(d: Any, *, ctx: str, path: Path) -> list[tuple[str, list[Tile
         if not isinstance(members_v, list) or not members_v:
             raise TypeError(f"Expected '{ctx}.{cname}' to be a non-empty list in {path}")
 
-        members: list[TileType] = []
+        members: list[int] = []
         for item in members_v:
             s = str(item).strip()
             if not s:
-                raise ValueError(f"Empty TileType in '{ctx}.{cname}' in {path}")
+                raise ValueError(f"Empty tile name in '{ctx}.{cname}' in {path}")
             try:
-                members.append(TileType[s])
+                members.append(int(name_to_id[s]))
             except KeyError as e:
-                valid = ", ".join(t.name for t in TileType)
+                valid = ", ".join(tile_names)
                 raise ValueError(
-                    f"Unknown TileType {s!r} in '{ctx}.{cname}' in {path}. Valid TileTypes: {valid}"
+                    f"Unknown tile name {s!r} in '{ctx}.{cname}' in {path}. Valid tiles: {valid}"
                 ) from e
 
         out.append((cname, members))
@@ -195,27 +196,28 @@ def _parse_classes(d: Any, *, ctx: str, path: Path) -> list[tuple[str, list[Tile
     return out
 
 
-def _compile_lut(*, classes: list[tuple[str, list[TileType]]], path: Path) -> np.ndarray:
+def _compile_lut(*, classes: list[tuple[str, list[int]]], path: Path) -> np.ndarray:
     raw_size = _raw_vocab_size()
 
     # Track coverage
-    seen: dict[TileType, str] = {}
+    seen: dict[int, str] = {}
     lut = np.zeros((raw_size,), dtype=np.uint8)
 
     for class_id, (cname, members) in enumerate(classes):
-        for t in members:
-            if t in seen:
+        for tid in members:
+            if tid in seen:
                 raise ValueError(
-                    f"TileType {t.name} appears in multiple classes in {path}: "
-                    f"{seen[t]!r} and {cname!r}"
+                    f"Tile id {tid} appears in multiple classes in {path}: "
+                    f"{seen[tid]!r} and {cname!r}"
                 )
-            seen[t] = cname
-            lut[int(t.value)] = np.uint8(class_id)
+            seen[tid] = cname
+            lut[int(tid)] = np.uint8(class_id)
 
-    missing = [t for t in TileType if t not in seen]
+    tile_names = tileset_tile_names()
+    missing = [i for i in range(raw_size) if i not in seen]
     if missing:
-        miss = ", ".join(t.name for t in missing)
-        raise ValueError(f"Tile vocab in {path} is missing TileTypes: {miss}")
+        miss = ", ".join(tile_names[i] for i in missing)
+        raise ValueError(f"Tile vocab in {path} is missing tiles: {miss}")
 
     # Also ensure no extras beyond enum (already guaranteed by parsing)
     return lut

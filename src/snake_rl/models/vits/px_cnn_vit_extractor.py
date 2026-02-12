@@ -1,4 +1,4 @@
-# src\snake_rl\models\vits\px_cnn_vit_extractor.py
+# src/snake_rl/models/vits/px_cnn_vit_extractor.py
 from __future__ import annotations
 
 import importlib

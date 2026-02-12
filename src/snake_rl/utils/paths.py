@@ -1,4 +1,4 @@
-# src\snake_rl\utils\paths.py
+# src/snake_rl/utils/paths.py
 from __future__ import annotations
 
 import os
@@ -77,7 +77,7 @@ def runs_root() -> Path:
 def asset_path(rel: str) -> Path:
     """
     Resolve an asset path relative to assets_dir().
-    Example: asset_path('levels/test_level.yaml')
+    Example: asset_path('vocabs/tile_vocab_global_v1.yaml')
     """
     return assets_dir() / rel
 

@@ -1,4 +1,4 @@
-# src\snake_rl\config\snapshot.py
+# src/snake_rl/config/snapshot.py
 from __future__ import annotations
 
 from pathlib import Path

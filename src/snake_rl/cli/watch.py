@@ -1,4 +1,4 @@
-# src\snake_rl\cli\watch.py
+# src/snake_rl/cli/watch.py
 from __future__ import annotations
 
 from snake_rl.app.watch_app import main

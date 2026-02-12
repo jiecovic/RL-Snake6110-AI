@@ -1,12 +1,15 @@
-// rust\src\lib.rs
+// rust/src/lib.rs
+#![allow(unsafe_op_in_unsafe_fn)]
 
 mod engine;
 
+use engine::constants::*;
 use engine::{
     EngineError, GameCore, MOVE_FOOD, MOVE_HIT_BOUNDARY, MOVE_HIT_SELF, MOVE_HIT_WALL,
-    MOVE_NOT_RUNNING, MOVE_OK, MOVE_TIMEOUT, MOVE_WIN,
+    MOVE_NOT_RUNNING, MOVE_OK, MOVE_TIMEOUT, MOVE_WIN, tileset_tile_count, tileset_tile_names,
+    tileset_tile_size, tileset_tiles,
 };
-use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray2, PyReadonlyArray3, ndarray};
+use numpy::{IntoPyArray, PyArray2, PyArray3, ndarray};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
@@ -17,36 +20,11 @@ fn map_engine_err(err: EngineError) -> PyErr {
     }
 }
 
-fn build_static_grid(
-    width: usize,
-    height: usize,
-    level_grid: PyReadonlyArray2<u8>,
-) -> PyResult<Vec<u8>> {
-    let grid = level_grid.as_array();
-    if grid.shape() != [height, width] {
-        return Err(PyValueError::new_err(
-            "level_grid shape does not match height/width",
-        ));
+fn validate_dims(width: usize, height: usize) -> PyResult<()> {
+    if width == 0 || height == 0 {
+        return Err(PyValueError::new_err("width and height must be > 0"));
     }
-    Ok(grid.iter().copied().collect())
-}
-
-fn build_tile_cache(tile_size: usize, tiles: PyReadonlyArray3<u8>) -> PyResult<Vec<Vec<u8>>> {
-    let tiles_arr = tiles.as_array();
-    let tiles_shape = tiles_arr.shape();
-    if tiles_shape.len() != 3 {
-        return Err(PyValueError::new_err("tiles must be a 3D array"));
-    }
-    if tiles_shape[1] != tile_size || tiles_shape[2] != tile_size {
-        return Err(PyValueError::new_err("tiles tile_size mismatch"));
-    }
-
-    let mut tile_cache: Vec<Vec<u8>> = Vec::with_capacity(tiles_shape[0]);
-    for i in 0..tiles_shape[0] {
-        let tile = tiles_arr.index_axis(ndarray::Axis(0), i);
-        tile_cache.push(tile.iter().copied().collect());
-    }
-    Ok(tile_cache)
+    Ok(())
 }
 
 #[pyclass]
@@ -57,60 +35,10 @@ struct Game {
 #[pymethods]
 impl Game {
     #[new]
-    #[pyo3(
-        signature = (
-            width,
-            height,
-            level_grid,
-            spawn_len,
-            spawn_dir,
-            spawn_random_dir,
-            spawn_jitter,
-            food_count,
-            tile_size,
-            tiles,
-            spawn_x = None,
-            spawn_y = None,
-            seed = None
-        )
-    )]
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        width: usize,
-        height: usize,
-        level_grid: PyReadonlyArray2<u8>,
-        spawn_len: usize,
-        spawn_dir: i8,
-        spawn_random_dir: bool,
-        spawn_jitter: i32,
-        food_count: usize,
-        tile_size: usize,
-        tiles: PyReadonlyArray3<u8>,
-        spawn_x: Option<i32>,
-        spawn_y: Option<i32>,
-        seed: Option<u64>,
-    ) -> PyResult<Self> {
-        let static_grid = build_static_grid(width, height, level_grid)?;
-        let tile_cache = build_tile_cache(tile_size, tiles)?;
-        let spawn_dir = if spawn_dir < 0 { None } else { Some(spawn_dir) };
-
-        let game = GameCore::new(
-            width,
-            height,
-            static_grid,
-            spawn_x,
-            spawn_y,
-            spawn_len,
-            spawn_dir,
-            spawn_random_dir,
-            spawn_jitter,
-            food_count,
-            tile_size,
-            tile_cache,
-            seed,
-        )
-        .map_err(map_engine_err)?;
-
+    #[pyo3(signature = (width, height, food_count, seed = None))]
+    fn new(width: usize, height: usize, food_count: usize, seed: Option<u64>) -> PyResult<Self> {
+        validate_dims(width, height)?;
+        let game = GameCore::new(width, height, food_count, seed).map_err(map_engine_err)?;
         Ok(Self { inner: game })
     }
 
@@ -197,64 +125,19 @@ struct VecGame {
 #[pymethods]
 impl VecGame {
     #[new]
-    #[pyo3(
-        signature = (
-            n,
-            width,
-            height,
-            level_grid,
-            spawn_len,
-            spawn_dir,
-            spawn_random_dir,
-            spawn_jitter,
-            food_count,
-            tile_size,
-            tiles,
-            spawn_x = None,
-            spawn_y = None,
-            seeds = None
-        )
-    )]
-    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (n, width, height, food_count, seeds = None))]
     fn new(
         n: usize,
         width: usize,
         height: usize,
-        level_grid: PyReadonlyArray2<u8>,
-        spawn_len: usize,
-        spawn_dir: i8,
-        spawn_random_dir: bool,
-        spawn_jitter: i32,
         food_count: usize,
-        tile_size: usize,
-        tiles: PyReadonlyArray3<u8>,
-        spawn_x: Option<i32>,
-        spawn_y: Option<i32>,
         seeds: Option<Vec<u64>>,
     ) -> PyResult<Self> {
-        let static_grid = build_static_grid(width, height, level_grid)?;
-        let tile_cache = build_tile_cache(tile_size, tiles)?;
-        let spawn_dir = if spawn_dir < 0 { None } else { Some(spawn_dir) };
-
+        validate_dims(width, height)?;
         let mut games = Vec::with_capacity(n);
         for i in 0..n {
             let seed = seeds.as_ref().and_then(|s| s.get(i)).copied();
-            let mut g = GameCore::new(
-                width,
-                height,
-                static_grid.clone(),
-                spawn_x,
-                spawn_y,
-                spawn_len,
-                spawn_dir,
-                spawn_random_dir,
-                spawn_jitter,
-                food_count,
-                tile_size,
-                tile_cache.clone(),
-                seed,
-            )
-            .map_err(map_engine_err)?;
+            let mut g = GameCore::new(width, height, food_count, seed).map_err(map_engine_err)?;
             g.reset(None).map_err(map_engine_err)?;
             games.push(g);
         }
@@ -357,10 +240,43 @@ impl VecGame {
     }
 }
 
+#[pyfunction(name = "tileset_tile_size")]
+fn tileset_tile_size_py() -> usize {
+    tileset_tile_size()
+}
+
+#[pyfunction(name = "tileset_tiles")]
+fn tileset_tiles_py(py: Python<'_>) -> Py<PyArray3<u8>> {
+    let tiles = tileset_tiles();
+    let tile_count = tiles.len();
+    let tile_size = tileset_tile_size();
+    let mut data = Vec::with_capacity(tile_count * tile_size * tile_size);
+    for t in tiles.iter() {
+        data.extend_from_slice(t);
+    }
+    let arr = ndarray::Array3::from_shape_vec((tile_count, tile_size, tile_size), data).unwrap();
+    arr.into_pyarray_bound(py).unbind()
+}
+
+#[pyfunction(name = "tileset_tile_count")]
+fn tileset_tile_count_py() -> usize {
+    tileset_tile_count()
+}
+
+#[pyfunction(name = "tileset_tile_names")]
+fn tileset_tile_names_py() -> Vec<String> {
+    tileset_tile_names()
+}
+
 #[pymodule]
 fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Game>()?;
     m.add_class::<VecGame>()?;
+
+    m.add_function(wrap_pyfunction!(tileset_tile_size_py, m)?)?;
+    m.add_function(wrap_pyfunction!(tileset_tiles_py, m)?)?;
+    m.add_function(wrap_pyfunction!(tileset_tile_count_py, m)?)?;
+    m.add_function(wrap_pyfunction!(tileset_tile_names_py, m)?)?;
 
     m.add("MOVE_OK", MOVE_OK)?;
     m.add("MOVE_FOOD", MOVE_FOOD)?;
@@ -370,6 +286,33 @@ fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("MOVE_NOT_RUNNING", MOVE_NOT_RUNNING)?;
     m.add("MOVE_TIMEOUT", MOVE_TIMEOUT)?;
     m.add("MOVE_WIN", MOVE_WIN)?;
+
+    m.add("TILE_EMPTY", TILE_EMPTY)?;
+    m.add("TILE_WALL_TL", TILE_WALL_TL)?;
+    m.add("TILE_WALL_TR", TILE_WALL_TR)?;
+    m.add("TILE_WALL_BL", TILE_WALL_BL)?;
+    m.add("TILE_WALL_BR", TILE_WALL_BR)?;
+    m.add("TILE_WALL_TOP", TILE_WALL_TOP)?;
+    m.add("TILE_WALL_BOTTOM", TILE_WALL_BOTTOM)?;
+    m.add("TILE_WALL_LEFT", TILE_WALL_LEFT)?;
+    m.add("TILE_WALL_RIGHT", TILE_WALL_RIGHT)?;
+    m.add("TILE_HEAD_UP", TILE_HEAD_UP)?;
+    m.add("TILE_HEAD_DOWN", TILE_HEAD_DOWN)?;
+    m.add("TILE_HEAD_LEFT", TILE_HEAD_LEFT)?;
+    m.add("TILE_HEAD_RIGHT", TILE_HEAD_RIGHT)?;
+    m.add("TILE_BODY_VERTICAL_UP", TILE_BODY_VERTICAL_UP)?;
+    m.add("TILE_BODY_VERTICAL_DOWN", TILE_BODY_VERTICAL_DOWN)?;
+    m.add("TILE_BODY_HORIZONTAL_LEFT", TILE_BODY_HORIZONTAL_LEFT)?;
+    m.add("TILE_BODY_HORIZONTAL_RIGHT", TILE_BODY_HORIZONTAL_RIGHT)?;
+    m.add("TILE_BODY_BR", TILE_BODY_BR)?;
+    m.add("TILE_BODY_BL", TILE_BODY_BL)?;
+    m.add("TILE_BODY_TR", TILE_BODY_TR)?;
+    m.add("TILE_BODY_TL", TILE_BODY_TL)?;
+    m.add("TILE_TAIL_UP", TILE_TAIL_UP)?;
+    m.add("TILE_TAIL_DOWN", TILE_TAIL_DOWN)?;
+    m.add("TILE_TAIL_LEFT", TILE_TAIL_LEFT)?;
+    m.add("TILE_TAIL_RIGHT", TILE_TAIL_RIGHT)?;
+    m.add("TILE_FOOD", TILE_FOOD)?;
 
     Ok(())
 }

@@ -139,11 +139,14 @@ celerybeat.pid
 .env
 .envrc
 .venv
+.venv_tools/
+.venv_maturin/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+pyrightconfig.tmp.json
 
 # Spyder project settings
 .spyderproject

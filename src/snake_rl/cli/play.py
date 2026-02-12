@@ -1,9 +1,8 @@
-# src\snake_rl\cli\play.py
+# src/snake_rl/cli/play.py
 from __future__ import annotations
 
 import argparse
 
-from snake_rl.game.level import EmptyLevel
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snakegame import SnakeGame
 
@@ -20,7 +19,7 @@ def parse_args():
 
 def main() -> None:
     args = parse_args()
-    game = SnakeGame(EmptyLevel(args.height, args.width), food_count=args.food)
+    game = SnakeGame(width=int(args.width), height=int(args.height), food_count=args.food)
 
     run_pygame_app(
         game=game,

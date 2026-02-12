@@ -1,4 +1,4 @@
-# src\snake_rl\app\eval_app.py
+# src/snake_rl/app/eval_app.py
 from __future__ import annotations
 
 import argparse
@@ -21,6 +21,10 @@ try:
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 except Exception:  # pragma: no cover
     Progress = None  # type: ignore[assignment]
+    SpinnerColumn = None  # type: ignore[assignment]
+    TextColumn = None  # type: ignore[assignment]
+    BarColumn = None  # type: ignore[assignment]
+    TimeElapsedColumn = None  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -172,6 +176,10 @@ def main() -> None:
     task_id = None
 
     if use_rich and Progress is not None:
+        assert SpinnerColumn is not None
+        assert TextColumn is not None
+        assert BarColumn is not None
+        assert TimeElapsedColumn is not None
         progress = Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),

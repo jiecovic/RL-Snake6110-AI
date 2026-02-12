@@ -1,4 +1,4 @@
-# src\snake_rl\utils\resume.py
+# src/snake_rl/utils/resume.py
 from __future__ import annotations
 
 from pathlib import Path

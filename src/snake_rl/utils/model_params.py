@@ -1,4 +1,4 @@
-# src\snake_rl\utils\model_params.py
+# src/snake_rl/utils/model_params.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -88,12 +88,16 @@ def format_sb3_param_report(model: Any) -> str:
         policy_net = _get_attr(mlp_extractor, "policy_net")
         if isinstance(policy_net, torch.nn.Module):
             pc = _count_params(policy_net)
-            lines.append(f"[params]  ├─ policy_net: total={pc.total:,} trainable={pc.trainable:,}")
+            lines.append(
+                f"[params]  â”œâ”€ policy_net: total={pc.total:,} trainable={pc.trainable:,}"
+            )
 
         value_net = _get_attr(mlp_extractor, "value_net")
         if isinstance(value_net, torch.nn.Module):
             pc = _count_params(value_net)
-            lines.append(f"[params]  └─ value_net : total={pc.total:,} trainable={pc.trainable:,}")
+            lines.append(
+                f"[params]  â””â”€ value_net : total={pc.total:,} trainable={pc.trainable:,}"
+            )
 
     # Actor/Critic direct modules (some policies expose these)
     for name in ("action_net", "value_net", "actor", "critic", "qf0", "qf1"):

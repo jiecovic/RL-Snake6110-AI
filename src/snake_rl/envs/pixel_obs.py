@@ -1,4 +1,4 @@
-# src\snake_rl\envs\pixel_obs.py
+# src/snake_rl/envs/pixel_obs.py
 from __future__ import annotations
 
 from typing import Literal, overload
@@ -21,7 +21,7 @@ class PixelObsEnvBase:
 
     def __init__(self, game: SnakeGame):
         self.game = game
-        self._tilesize = self.game.tileset.tile_size
+        self._tilesize = self.game.tile_size
 
     def _global_pixel_frame(self) -> np.ndarray:
         """

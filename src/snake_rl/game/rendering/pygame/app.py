@@ -1,15 +1,22 @@
-# src\snake_rl\game\rendering\pygame\app.py
+# src/snake_rl/game/rendering/pygame/app.py
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
-import pygame
+import snake_rl._core as core
 
-from snake_rl.game.geometry import RelativeDirection
 from snake_rl.game.rendering.pygame.renderer import PygameRenderer
 from snake_rl.game.rendering.pygame.window import PygameRenderContext, create_pygame_context
-from snake_rl.game.snakegame import MoveResult, SnakeGame
+from snake_rl.game.snakegame import SnakeGame
+
+try:
+    import pygame as _pygame
+except Exception:  # pragma: no cover
+    _pygame = None
+
+pygame: Any = _pygame
 
 StepFn = Callable[[], None]
 
@@ -22,16 +29,16 @@ class AppConfig:
     reset_on_done: bool = True
     # Human input (optional)
     enable_human_input: bool = False
-    turn_keys: tuple[int, int] = (pygame.K_a, pygame.K_d)  # left, right
+    turn_keys: tuple[int, int] | None = None  # left, right
 
 
-_END_MASK: MoveResult = (
-    MoveResult.HIT_WALL
-    | MoveResult.HIT_SELF
-    | MoveResult.HIT_BOUNDARY
-    | MoveResult.GAME_NOT_RUNNING
-    | MoveResult.TIMEOUT
-    | MoveResult.WIN
+_END_MASK: int = (
+    core.MOVE_HIT_WALL
+    | core.MOVE_HIT_SELF
+    | core.MOVE_HIT_BOUNDARY
+    | core.MOVE_NOT_RUNNING
+    | core.MOVE_TIMEOUT
+    | core.MOVE_WIN
 )
 
 
@@ -47,9 +54,12 @@ def run_pygame_app(
     Modes:
       - step_fn mode (preferred for RL watch): the caller advances the environment
         by exactly one step inside step_fn(); this function does NOT call game.move().
-      - internal stepping (human): computes RelativeDirection from buffered input
+      - internal stepping (human): uses relative action ints from buffered input
         and calls game.move().
     """
+    if pygame is None:  # pragma: no cover
+        raise RuntimeError("pygame is not installed")
+
     pygame.init()
     try:
         ctx: PygameRenderContext = create_pygame_context(
@@ -60,9 +70,12 @@ def run_pygame_app(
         renderer = PygameRenderer(pixel_size=cfg.pixel_size)
 
         paused = False
-        queued_turn: RelativeDirection | None = None  # buffered human input
+        queued_turn: int | None = None  # buffered human input
 
-        left_key, right_key = cfg.turn_keys
+        if cfg.turn_keys is None:
+            left_key, right_key = (pygame.K_a, pygame.K_d)
+        else:
+            left_key, right_key = cfg.turn_keys
 
         while True:
             for event in pygame.event.get():
@@ -81,9 +94,9 @@ def run_pygame_app(
                     elif cfg.enable_human_input:
                         # Buffer exactly one upcoming turn (latest wins)
                         if event.key == left_key:
-                            queued_turn = RelativeDirection.LEFT
+                            queued_turn = 1
                         elif event.key == right_key:
-                            queued_turn = RelativeDirection.RIGHT
+                            queued_turn = 2
 
             if not paused:
                 if step_fn is not None:
@@ -93,16 +106,12 @@ def run_pygame_app(
                     # Human mode: pygame loop steps the game directly.
                     if game.running:
                         if cfg.enable_human_input:
-                            rel = (
-                                queued_turn
-                                if queued_turn is not None
-                                else RelativeDirection.FORWARD
-                            )
+                            rel = queued_turn if queued_turn is not None else 0
                             queued_turn = None  # consume once per step
                         else:
-                            rel = RelativeDirection.FORWARD
+                            rel = 0
 
-                        results = game.move(rel)
+                        results = game.move(int(rel))
                         if cfg.reset_on_done and (results & _END_MASK):
                             game.reset()
                             queued_turn = None

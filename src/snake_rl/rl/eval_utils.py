@@ -1,4 +1,4 @@
-# src\snake_rl\rl\eval_utils.py
+# src/snake_rl/rl/eval_utils.py
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -13,7 +13,6 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
 from snake_rl.config.access import cfg_get, get_env_id, get_env_params, get_frame_stack_n
 from snake_rl.config.schema import RewardConfig
-from snake_rl.game.level import EmptyLevel
 from snake_rl.rl.env_factory import apply_frame_stack, make_single_env
 from snake_rl.rl.rust_vec_env import RustVecEnv
 from snake_rl.utils.obs import sanitize_observation
@@ -53,14 +52,11 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
 
     if engine == "rust":
         reward = _get_reward_from_cfg(cfg)
-        level = EmptyLevel(
-            height=int(cfg_get(cfg, "level.height")),
-            width=int(cfg_get(cfg, "level.width")),
-        )
         vec: VecEnv = RustVecEnv(
             env_id=str(get_env_id(cfg)),
             env_params=dict(env_params),
-            level=level,
+            width=int(cfg_get(cfg, "level.width")),
+            height=int(cfg_get(cfg, "level.height")),
             food_count=int(cfg_get(cfg, "level.food_count")),
             reward=reward,
             num_envs=len(seeds),

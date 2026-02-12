@@ -1,4 +1,4 @@
-# src\snake_rl\cli\train.py
+# src/snake_rl/cli/train.py
 from __future__ import annotations
 
 from snake_rl.app.train_app import main

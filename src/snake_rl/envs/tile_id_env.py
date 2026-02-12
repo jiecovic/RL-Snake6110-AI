@@ -1,4 +1,4 @@
-# src\snake_rl\envs\tile_id_env.py
+# src/snake_rl/envs/tile_id_env.py
 from __future__ import annotations
 
 import numpy as np
@@ -8,15 +8,13 @@ from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.base import BaseSnakeEnv
 from snake_rl.envs.obs_utils import global_tile_frame, pov_tile_frame_with_valid
 from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.snakegame import SnakeGame
-from snake_rl.game.tile_types import TileType
+from snake_rl.game.snakegame import SnakeGame, tileset_tile_count
 from snake_rl.vocab import load_tile_vocab
 
 
 def _tile_vocab_size() -> int:
-    # We store TileType.value directly in SnakeGame.tile_grid (uint8).
-    # Vocab size is max enum value + 1, assuming values are 0..K.
-    return int(max(int(t.value) for t in TileType) + 1)
+    # Raw tile ids come from Rust tileset (0..K-1).
+    return int(tileset_tile_count())
 
 
 class GlobalTileIdEnv(BaseSnakeEnv):
@@ -28,7 +26,7 @@ class GlobalTileIdEnv(BaseSnakeEnv):
         value == class_id in [0, num_classes-1]
 
     Notes:
-    - If tile_vocab is None (default), class_id == TileType.value (raw IDs).
+    - If tile_vocab is None (default), class_id == raw Rust tile ids.
     - Intended for transformer / symbolic models.
     - Frame stacking works out-of-the-box (stacked along channel dimension).
     - Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
@@ -56,10 +54,10 @@ class GlobalTileIdEnv(BaseSnakeEnv):
             h -= 2
             w -= 2
 
-        # Raw TileType vocab size (TileType.value)
+        # Raw tile vocab size (Rust tile ids)
         self.raw_vocab_size: int = _tile_vocab_size()
 
-        # Optional: map raw TileType IDs -> compact class IDs.
+        # Optional: map raw tile IDs -> compact class IDs.
         self._tile_vocab = None
         if tile_vocab is not None:
             self._tile_vocab = load_tile_vocab(tile_vocab)
@@ -115,7 +113,7 @@ class PovTileIdEnv(BaseSnakeEnv):
       VX = 2*rx + 1
 
     Notes:
-    - If tile_vocab is None (default), class_id == TileType.value (raw IDs).
+    - If tile_vocab is None (default), class_id == raw Rust tile ids.
     - rotate_to_head=True uses an egocentric view where:
         ry = forward/back radius
         rx = left/right radius
@@ -153,10 +151,10 @@ class PovTileIdEnv(BaseSnakeEnv):
         vy = 2 * self.view_radius_y + 1
         vx = 2 * self.view_radius_x + 1
 
-        # Raw TileType vocab size (TileType.value)
+        # Raw tile vocab size (Rust tile ids)
         self.raw_vocab_size: int = _tile_vocab_size()
 
-        # Optional: map raw TileType IDs -> compact class IDs.
+        # Optional: map raw tile IDs -> compact class IDs.
         self._tile_vocab = None
         if tile_vocab is not None:
             self._tile_vocab = load_tile_vocab(tile_vocab)
@@ -190,7 +188,7 @@ class PovTileIdEnv(BaseSnakeEnv):
         """
         Return (raw_frame, valid_mask), both (VY,VX).
 
-        raw_frame contains TileType.value IDs. OOB is filled with EMPTY in raw_frame;
+        raw_frame contains raw Rust tile ids. OOB is filled with EMPTY in raw_frame;
         valid_mask indicates which entries correspond to real board coordinates.
         """
         d = self.game.direction

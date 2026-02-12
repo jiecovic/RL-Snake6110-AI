@@ -1,1 +1,1 @@
-# src\snake_rl\game\rendering\__init__.py
+# src/snake_rl/game/rendering/__init__.py

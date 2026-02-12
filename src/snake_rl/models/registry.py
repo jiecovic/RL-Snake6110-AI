@@ -1,4 +1,4 @@
-# src\snake_rl\models\registry.py
+# src/snake_rl/models/registry.py
 from __future__ import annotations
 
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
@@ -14,7 +14,7 @@ from snake_rl.models.cnns.px_strided_cnn_l3k8 import PxStridedCNN_L3K8
 # symbolic tile-id models
 from snake_rl.models.mlps.tile_mlp_extractor import TileMLPExtractor
 
-# hybrid CNN → ViT
+# hybrid CNN â†’ ViT
 from snake_rl.models.vits.px_cnn_vit_extractor import PxCnnViTExtractor
 from snake_rl.models.vits.tile_vit_extractor import TileViTExtractor
 
@@ -26,7 +26,7 @@ FEATURE_EXTRACTOR_REGISTRY: dict[str, type[BaseFeaturesExtractor]] = {
     "px_strided_cnn_l3k8": PxStridedCNN_L3K8,
     "px_nature_cnn": PxNatureCNN,
     "px_snake_global": PxSnakeGlobal,
-    # hybrid CNN → ViT
+    # hybrid CNN â†’ ViT
     "px_cnn_vit": PxCnnViTExtractor,
     # symbolic tile-id models
     "tile_vit": TileViTExtractor,

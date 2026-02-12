@@ -1,4 +1,4 @@
-# src\snake_rl\config\pydantic_models.py
+# src/snake_rl/config/pydantic_models.py
 
 from typing import Any
 

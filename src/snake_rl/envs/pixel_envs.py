@@ -1,4 +1,4 @@
-# src\snake_rl\envs\pixel_envs.py
+# src/snake_rl/envs/pixel_envs.py
 from __future__ import annotations
 
 import numpy as np
@@ -20,7 +20,7 @@ def _global_pixel_dims(game: SnakeGame, *, remove_border: bool) -> tuple[int, in
     if not remove_border:
         return int(h), int(w)
 
-    ts = int(game.tileset.tile_size)
+    ts = int(game.tile_size)
     if h <= 2 * ts or w <= 2 * ts:
         raise ValueError(
             f"remove_border=True requires pixel dims > 2*tile_size; got h={h} w={w} tile_size={ts}"
@@ -31,7 +31,7 @@ def _global_pixel_dims(game: SnakeGame, *, remove_border: bool) -> tuple[int, in
 def _maybe_crop(frame: np.ndarray, game: SnakeGame, *, remove_border: bool) -> np.ndarray:
     if not remove_border:
         return frame
-    ts = int(game.tileset.tile_size)
+    ts = int(game.tile_size)
     return frame[ts:-ts, ts:-ts]
 
 
@@ -110,7 +110,7 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
 
         d = self.game.direction
         assert d is not None, "SnakeGame.direction is None (did you call game.reset()?)"
-        direction = int(d.value)
+        direction = int(d)
 
         return {
             "pixel": pixel,

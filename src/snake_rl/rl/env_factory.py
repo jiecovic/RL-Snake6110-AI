@@ -1,4 +1,4 @@
-# src\snake_rl\rl\env_factory.py
+# src/snake_rl/rl/env_factory.py
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -17,7 +17,6 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 from snake_rl.config.access import cfg_get, get_env_params, get_frame_stack_n, require_int
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.registry import get_env_cls
-from snake_rl.game.level import EmptyLevel
 from snake_rl.game.snakegame import SnakeGame
 from snake_rl.rl.rust_vec_env import RustVecEnv
 
@@ -195,16 +194,11 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
     env_cls = get_env_cls(env_id)
 
     def _init():
-        # Create static level
-        level = EmptyLevel(
-            height=require_int(cfg, "level.height"),
-            width=require_int(cfg, "level.width"),
-        )
-
         # Create game WITHOUT a seed.
         # RNG will be injected from the env's np_random during reset().
         game = SnakeGame(
-            level=level,
+            width=require_int(cfg, "level.width"),
+            height=require_int(cfg, "level.height"),
             food_count=require_int(cfg, "level.food_count"),
         )
 
@@ -250,15 +244,12 @@ def make_vec_env(*, cfg: Any):
     env_params_clean.pop("engine", None)
 
     if engine == "rust":
-        level = EmptyLevel(
-            height=require_int(cfg, "level.height"),
-            width=require_int(cfg, "level.width"),
-        )
         reward_cfg = _get_reward_from_cfg(cfg)
         vec_env = RustVecEnv(
             env_id=str(cfg_get(cfg, "env.id")),
             env_params=env_params_clean,
-            level=level,
+            width=require_int(cfg, "level.width"),
+            height=require_int(cfg, "level.height"),
             food_count=require_int(cfg, "level.food_count"),
             reward=reward_cfg,
             num_envs=num_envs,

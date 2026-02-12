@@ -1,30 +1,23 @@
-# src\snake_rl\tools\print_tileset.py
+# src/snake_rl/tools/print_tileset.py
 from __future__ import annotations
 
-from snake_rl.game.tile_types import TileType
-from snake_rl.game.tileset import Tileset
+from snake_rl.game.snakegame import tileset_tile_names, tileset_tile_size, tileset_tiles
 
 
 def main() -> None:
-    try:
-        tileset = Tileset()
-    except (FileNotFoundError, RuntimeError) as e:
-        print(f"❌ Failed to load tileset: {e}")
-        return
+    tiles = tileset_tiles()
+    tile_size = tileset_tile_size()
 
-    print(f"✅ Loaded tileset from: {tileset.filepath}")
-    print(f"Tile size: {tileset.tile_size}")
+    print(f"Tile size: {tile_size}")
     print()
 
-    for tile_type in TileType:
-        if tile_type in tileset:
-            print(f"🧩 Tile: {tile_type.name}")
-            tile = tileset[tile_type]
-            for row in tile:
-                print("".join(str(x) for x in row))
-            print()
-        else:
-            print(f"⚠️  Tile missing: {tile_type.name}")
+    names = tileset_tile_names()
+    for tile_id, name in enumerate(names):
+        print(f"Tile: {name}")
+        tile = tiles[int(tile_id)]
+        for row in tile:
+            print("".join("1" if int(v) else "0" for v in row))
+        print()
 
 
 if __name__ == "__main__":
