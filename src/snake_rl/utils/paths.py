@@ -77,7 +77,7 @@ def runs_root() -> Path:
 def asset_path(rel: str) -> Path:
     """
     Resolve an asset path relative to assets_dir().
-    Example: asset_path('vocabs/tile_vocab_global_v1.yaml')
+    Example: asset_path('some_asset.bin')
     """
     return assets_dir() / rel
 

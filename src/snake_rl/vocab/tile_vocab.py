@@ -2,15 +2,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
 
 import numpy as np
-import yaml
-from snake_rl.core import tileset_tile_count, tileset_tile_names
 
-from snake_rl.utils.paths import asset_path
+from snake_rl import _core as core
 
 
 @dataclass(frozen=True)
@@ -18,16 +15,16 @@ class TileVocab:
     """
     A compiled mapping from raw tile IDs -> compact class IDs [0..K-1].
 
-    - name: human-readable identifier (from YAML)
-    - path: source YAML path
-    - sha256: content hash for reproducibility
+    - name: human-readable identifier
+    - source: provenance string (builtin today; Rust can own later)
+    - sha256: stable hash of the expanded vocab definition
     - class_names: ordered list of class labels (defines IDs)
     - lut: numpy array of shape [raw_vocab_size], mapping raw_id -> class_id
     - num_classes: number of classes (K)
     """
 
     name: str
-    path: Path
+    source: str
     sha256: str
     class_names: tuple[str, ...]
     lut: np.ndarray
@@ -39,196 +36,108 @@ class TileVocab:
 
         Returns a view/copy depending on numpy advanced indexing rules.
         """
-        if raw_grid.dtype != np.uint8 and raw_grid.dtype != np.int32 and raw_grid.dtype != np.int64:
+        if raw_grid.dtype not in (np.uint8, np.int32, np.int64):
             raw_grid = raw_grid.astype(np.int64, copy=False)
         return self.lut[raw_grid]
 
 
-# --- internal cache (process-local) ---
-_REGISTRY_CACHE: dict[str, Path] | None = None
 _VOCAB_CACHE: dict[str, TileVocab] = {}
 
 
-def _assets_vocab_dir() -> Path:
-    # Convention: put YAML vocab files into assets/vocabs/
-    return asset_path("vocabs")
+def _all_tile_names() -> list[str]:
+    return [str(x) for x in core.tileset_tile_names()]
 
 
-def _read_yaml(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        raise FileNotFoundError(f"Tile vocab YAML not found: {path}")
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    if not isinstance(data, dict):
-        raise TypeError(
-            f"Tile vocab YAML top-level must be a dict, got {type(data).__name__}: {path}"
-        )
-    return data
-
-
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _raw_vocab_size() -> int:
-    return int(tileset_tile_count())
-
-
-def _all_yaml_files(root: Path) -> list[Path]:
-    files: list[Path] = []
-    if root.is_dir():
-        files.extend(sorted(root.glob("*.yaml")))
-        files.extend(sorted(root.glob("*.yml")))
-    return files
-
-
-def _build_registry() -> dict[str, Path]:
-    """
-    Scan assets/vocabs/*.ya?ml and return mapping: vocab_name -> file_path.
-
-    The vocab_name is taken from the YAML field: `name: ...`
-
-    Raises if:
-      - a file is missing 'name'
-      - the same name appears in multiple files
-    """
-    root = _assets_vocab_dir()
-    if not root.is_dir():
-        raise FileNotFoundError(f"Vocab directory not found: {root}")
-
-    by_name: dict[str, Path] = {}
-    collisions: dict[str, list[Path]] = {}
-
-    for p in _all_yaml_files(root):
-        data = _read_yaml(p)
-        name_v = data.get("name", None)
-        if name_v is None:
-            raise KeyError(f"Missing required key 'name' in tile vocab YAML: {p}")
-        name = str(name_v).strip()
-        if not name:
-            raise ValueError(f"Tile vocab YAML has empty 'name': {p}")
-
-        if name in by_name:
-            collisions.setdefault(name, [by_name[name]]).append(p)
-        else:
-            by_name[name] = p
-
-    if collisions:
-        lines = ["Tile vocab name collision(s) detected:"]
-        for name, paths in sorted(collisions.items(), key=lambda kv: kv[0]):
-            ps = ", ".join(str(x) for x in paths)
-            lines.append(f"  - name={name!r} in: {ps}")
-        raise ValueError("\n".join(lines))
-
-    if not by_name:
-        raise FileNotFoundError(
-            f"No tile vocab YAML files found in: {root} (expected *.yaml or *.yml)"
-        )
-    return by_name
-
-
-def list_tile_vocabs() -> list[str]:
-    """
-    Return available vocab names from assets/vocabs.
-    """
-    global _REGISTRY_CACHE
-    if _REGISTRY_CACHE is None:
-        _REGISTRY_CACHE = _build_registry()
-    return sorted(_REGISTRY_CACHE.keys())
-
-
-def resolve_tile_vocab_path(name: str) -> Path:
-    """
-    Resolve a vocab by its YAML `name:` field, independent of filename.
-    """
-    global _REGISTRY_CACHE
-    if _REGISTRY_CACHE is None:
-        _REGISTRY_CACHE = _build_registry()
-
-    key = str(name).strip()
-    if not key:
-        raise ValueError("tile_vocab name must be a non-empty string")
-
-    p = _REGISTRY_CACHE.get(key, None)
-    if p is None:
-        # Friendly suggestion list
-        avail = list_tile_vocabs()
-        preview = ", ".join(avail[:20])
-        more = "" if len(avail) <= 20 else f" ... (+{len(avail) - 20} more)"
-        raise KeyError(f"Unknown tile_vocab={key!r}. Available: {preview}{more}")
-    return p
-
-
-def _parse_classes(d: Any, *, ctx: str, path: Path) -> list[tuple[str, list[int]]]:
-    if not isinstance(d, dict):
-        raise TypeError(f"Expected '{ctx}' to be a dict in {path}")
-
-    tile_names = tileset_tile_names()
-    name_to_id = {name: i for i, name in enumerate(tile_names)}
-    out: list[tuple[str, list[int]]] = []
-    for class_name, members_v in d.items():
-        cname = str(class_name).strip()
-        if not cname:
-            raise ValueError(f"Empty class name in {ctx} in {path}")
-
-        if not isinstance(members_v, list) or not members_v:
-            raise TypeError(f"Expected '{ctx}.{cname}' to be a non-empty list in {path}")
-
-        members: list[int] = []
-        for item in members_v:
-            s = str(item).strip()
-            if not s:
-                raise ValueError(f"Empty tile name in '{ctx}.{cname}' in {path}")
-            try:
-                members.append(int(name_to_id[s]))
-            except KeyError as e:
-                valid = ", ".join(tile_names)
-                raise ValueError(
-                    f"Unknown tile name {s!r} in '{ctx}.{cname}' in {path}. Valid tiles: {valid}"
-                ) from e
-
-        out.append((cname, members))
-
+def _normalize_classes(
+    classes: tuple[tuple[str, tuple[str, ...]], ...],
+) -> list[tuple[str, list[str]]]:
+    out: list[tuple[str, list[str]]] = []
+    for cname, members in classes:
+        cls = str(cname).strip()
+        if not cls:
+            raise ValueError("Tile vocab class name must be non-empty")
+        if not members:
+            raise ValueError(f"Tile vocab class {cls!r} has no members")
+        out.append((cls, [str(x).strip() for x in members if str(x).strip()]))
     return out
 
 
-def _compile_lut(*, classes: list[tuple[str, list[int]]], path: Path) -> np.ndarray:
-    raw_size = _raw_vocab_size()
+def _compile_lut(classes: list[tuple[str, list[str]]]) -> np.ndarray:
+    tile_names = _all_tile_names()
+    name_to_id = {name: i for i, name in enumerate(tile_names)}
+    raw_size = len(tile_names)
 
-    # Track coverage
     seen: dict[int, str] = {}
     lut = np.zeros((raw_size,), dtype=np.uint8)
 
     for class_id, (cname, members) in enumerate(classes):
-        for tid in members:
+        for tname in members:
+            if tname not in name_to_id:
+                valid = ", ".join(tile_names)
+                raise ValueError(
+                    f"Unknown tile name {tname!r} in class {cname!r}. Valid tiles: {valid}"
+                )
+            tid = int(name_to_id[tname])
             if tid in seen:
                 raise ValueError(
-                    f"Tile id {tid} appears in multiple classes in {path}: "
-                    f"{seen[tid]!r} and {cname!r}"
+                    f"Tile id {tid} appears in multiple classes: {seen[tid]!r} and {cname!r}"
                 )
             seen[tid] = cname
-            lut[int(tid)] = np.uint8(class_id)
+            lut[tid] = np.uint8(class_id)
 
-    tile_names = tileset_tile_names()
     missing = [i for i in range(raw_size) if i not in seen]
     if missing:
         miss = ", ".join(tile_names[i] for i in missing)
-        raise ValueError(f"Tile vocab in {path} is missing tiles: {miss}")
+        raise ValueError(f"Tile vocab is missing tiles: {miss}")
 
-    # Also ensure no extras beyond enum (already guaranteed by parsing)
     return lut
 
 
-def load_tile_vocab(name: str) -> TileVocab:
-    """
-    Load and compile a tile vocab by its internal YAML `name:`.
+def _sha256_vocab(name: str, classes: list[tuple[str, list[str]]]) -> str:
+    payload = {
+        "name": name,
+        "classes": [(cname, members) for cname, members in classes],
+    }
+    data = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
 
-    This is cached per process. Use a unique name per vocab.
-    """
+
+def _collect_vocab_defs() -> dict[str, tuple[tuple[str, tuple[str, ...]], ...]]:
+    ext = getattr(core, "tile_vocab_defs", None)
+    if not callable(ext):
+        raise RuntimeError("Rust core does not expose tile_vocab_defs()")
+
+    defs: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {}
+    for item in ext():
+        if not isinstance(item, dict):
+            raise TypeError("tile_vocab_defs() items must be dicts")
+        name = str(item.get("name", "")).strip()
+        classes_v = item.get("classes", None)
+        if not name:
+            raise ValueError("tile_vocab_defs() item missing name")
+        if classes_v is None:
+            raise ValueError(f"tile_vocab_defs() missing classes for {name!r}")
+        if name in defs:
+            raise ValueError(f"Duplicate tile_vocab name from Rust: {name!r}")
+
+        classes: list[tuple[str, tuple[str, ...]]] = []
+        if isinstance(classes_v, dict):
+            for cname, members in classes_v.items():
+                classes.append((str(cname), tuple(str(x) for x in members)))
+        else:
+            for entry in classes_v:
+                cname, members = entry
+                classes.append((str(cname), tuple(str(x) for x in members)))
+
+        defs[name] = tuple(classes)
+    return defs
+
+
+def list_tile_vocabs() -> list[str]:
+    return sorted(_collect_vocab_defs().keys())
+
+
+def load_tile_vocab(name: str) -> TileVocab:
     key = str(name).strip()
     if not key:
         raise ValueError("tile_vocab name must be a non-empty string")
@@ -237,33 +146,22 @@ def load_tile_vocab(name: str) -> TileVocab:
     if cached is not None:
         return cached
 
-    path = resolve_tile_vocab_path(key)
-    data = _read_yaml(path)
+    defs = _collect_vocab_defs()
+    classes_raw = defs.get(key)
+    if classes_raw is None:
+        avail = list_tile_vocabs()
+        preview = ", ".join(avail[:20])
+        more = "" if len(avail) <= 20 else f" ... (+{len(avail) - 20} more)"
+        raise KeyError(f"Unknown tile_vocab={key!r}. Available: {preview}{more}")
 
-    # name must match request (guard against mismatched lookup)
-    yaml_name = str(data.get("name", "")).strip()
-    if yaml_name != key:
-        raise ValueError(
-            f"Tile vocab registry resolved name={key!r} to {path}, but YAML name is {yaml_name!r}. "
-            f"Fix the YAML 'name' field or rename your request."
-        )
-
-    classes_v = data.get("classes", None)
-    if classes_v is None:
-        raise KeyError(f"Missing required key 'classes' in tile vocab YAML: {path}")
-
-    classes = _parse_classes(classes_v, ctx="classes", path=path)
-    if len(classes) < 2:
-        raise ValueError(f"Tile vocab must define >= 2 classes, got {len(classes)} in {path}")
-
-    lut = _compile_lut(classes=classes, path=path)
+    classes = _normalize_classes(classes_raw)
+    lut = _compile_lut(classes)
+    sha = _sha256_vocab(key, classes)
     class_names = tuple(cname for cname, _ in classes)
-
-    sha = _sha256_file(path)
 
     vocab = TileVocab(
         name=key,
-        path=path,
+        source=f"rust:{key}",
         sha256=sha,
         class_names=class_names,
         lut=lut,
@@ -271,3 +169,6 @@ def load_tile_vocab(name: str) -> TileVocab:
     )
     _VOCAB_CACHE[key] = vocab
     return vocab
+
+
+__all__ = ["TileVocab", "list_tile_vocabs", "load_tile_vocab"]

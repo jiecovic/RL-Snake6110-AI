@@ -1,4 +1,4 @@
-// rust/src/engine/game.rs
+// rust/src/engine/snake_engine.rs
 use rand::seq::index::sample;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -32,7 +32,7 @@ impl std::fmt::Display for EngineError {
 
 impl std::error::Error for EngineError {}
 
-pub struct GameCore {
+pub struct SnakeEngine {
     width: usize,
     height: usize,
     tile_size: usize,
@@ -64,7 +64,7 @@ pub struct GameCore {
     tile_cache: Vec<Vec<u8>>,
 }
 
-impl GameCore {
+impl SnakeEngine {
     pub fn new(
         width: usize,
         height: usize,
@@ -224,7 +224,7 @@ impl GameCore {
     }
 }
 
-impl GameCore {
+impl SnakeEngine {
     fn spawn_snake(&mut self) -> Result<(), EngineError> {
         let length = if self.spawn_len < 2 {
             2

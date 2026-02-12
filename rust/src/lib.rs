@@ -5,13 +5,15 @@ mod engine;
 
 use engine::constants::*;
 use engine::{
-    EngineError, GameCore, MOVE_FOOD, MOVE_HIT_BOUNDARY, MOVE_HIT_SELF, MOVE_HIT_WALL,
-    MOVE_NOT_RUNNING, MOVE_OK, MOVE_TIMEOUT, MOVE_WIN, tileset_tile_count, tileset_tile_names,
-    tileset_tile_size, tileset_tiles,
+    Board as EngineBoard, EngineError, MOVE_FOOD, MOVE_HIT_BOUNDARY, MOVE_HIT_SELF, MOVE_HIT_WALL,
+    MOVE_NOT_RUNNING, MOVE_OK, MOVE_TIMEOUT, MOVE_WIN, SnakeEngine as EngineSnakeEngine,
+    tileset_tile_count, tileset_tile_names, tileset_tile_size, tileset_tiles, vocab_defs,
 };
 use numpy::{IntoPyArray, PyArray2, PyArray3, ndarray};
+use pyo3::ToPyObject;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 fn map_engine_err(err: EngineError) -> PyErr {
     match err {
@@ -20,25 +22,47 @@ fn map_engine_err(err: EngineError) -> PyErr {
     }
 }
 
-fn validate_dims(width: usize, height: usize) -> PyResult<()> {
-    if width == 0 || height == 0 {
-        return Err(PyValueError::new_err("width and height must be > 0"));
-    }
-    Ok(())
-}
-
-#[pyclass]
-struct Game {
-    inner: GameCore,
+#[pyclass(name = "Board")]
+struct PyBoard {
+    inner: EngineBoard,
 }
 
 #[pymethods]
-impl Game {
+impl PyBoard {
     #[new]
-    #[pyo3(signature = (width, height, food_count, seed = None))]
-    fn new(width: usize, height: usize, food_count: usize, seed: Option<u64>) -> PyResult<Self> {
-        validate_dims(width, height)?;
-        let game = GameCore::new(width, height, food_count, seed).map_err(map_engine_err)?;
+    fn new(width: usize, height: usize) -> PyResult<Self> {
+        let inner = EngineBoard::new(width, height).map_err(map_engine_err)?;
+        Ok(Self { inner })
+    }
+
+    #[getter]
+    fn width(&self) -> usize {
+        self.inner.width()
+    }
+
+    #[getter]
+    fn height(&self) -> usize {
+        self.inner.height()
+    }
+}
+
+#[pyclass(name = "SnakeEngine")]
+struct PySnakeEngine {
+    inner: EngineSnakeEngine,
+}
+
+#[pymethods]
+impl PySnakeEngine {
+    #[new]
+    #[pyo3(signature = (board, food_count, seed = None))]
+    fn new(board: &PyBoard, food_count: usize, seed: Option<u64>) -> PyResult<Self> {
+        let game = EngineSnakeEngine::new(
+            board.inner.width(),
+            board.inner.height(),
+            food_count,
+            seed,
+        )
+            .map_err(map_engine_err)?;
         Ok(Self { inner: game })
     }
 
@@ -117,27 +141,31 @@ impl Game {
     }
 }
 
-#[pyclass]
-struct VecGame {
-    games: Vec<GameCore>,
+#[pyclass(name = "VecSnakeEngine")]
+struct PyVecSnakeEngine {
+    games: Vec<EngineSnakeEngine>,
 }
 
 #[pymethods]
-impl VecGame {
+impl PyVecSnakeEngine {
     #[new]
-    #[pyo3(signature = (n, width, height, food_count, seeds = None))]
+    #[pyo3(signature = (n, board, food_count, seeds = None))]
     fn new(
         n: usize,
-        width: usize,
-        height: usize,
+        board: &PyBoard,
         food_count: usize,
         seeds: Option<Vec<u64>>,
     ) -> PyResult<Self> {
-        validate_dims(width, height)?;
         let mut games = Vec::with_capacity(n);
         for i in 0..n {
             let seed = seeds.as_ref().and_then(|s| s.get(i)).copied();
-            let mut g = GameCore::new(width, height, food_count, seed).map_err(map_engine_err)?;
+            let mut g = EngineSnakeEngine::new(
+                board.inner.width(),
+                board.inner.height(),
+                food_count,
+                seed,
+            )
+                .map_err(map_engine_err)?;
             g.reset(None).map_err(map_engine_err)?;
             games.push(g);
         }
@@ -268,15 +296,37 @@ fn tileset_tile_names_py() -> Vec<String> {
     tileset_tile_names()
 }
 
+#[pyfunction(name = "tile_vocab_defs")]
+fn tile_vocab_defs_py(py: Python<'_>) -> PyResult<Vec<PyObject>> {
+    let mut out: Vec<PyObject> = Vec::new();
+    for def in vocab_defs() {
+        let dict = PyDict::new_bound(py);
+        dict.set_item("name", def.name)?;
+
+        let mut classes: Vec<PyObject> = Vec::with_capacity(def.classes.len());
+        for class_def in def.classes {
+            let members: Vec<String> = class_def.members.iter().map(|s| s.to_string()).collect();
+            let tup = (class_def.name.to_string(), members).to_object(py);
+            classes.push(tup);
+        }
+
+        dict.set_item("classes", classes)?;
+        out.push(dict.into());
+    }
+    Ok(out)
+}
+
 #[pymodule]
 fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<Game>()?;
-    m.add_class::<VecGame>()?;
+    m.add_class::<PyBoard>()?;
+    m.add_class::<PySnakeEngine>()?;
+    m.add_class::<PyVecSnakeEngine>()?;
 
     m.add_function(wrap_pyfunction!(tileset_tile_size_py, m)?)?;
     m.add_function(wrap_pyfunction!(tileset_tiles_py, m)?)?;
     m.add_function(wrap_pyfunction!(tileset_tile_count_py, m)?)?;
     m.add_function(wrap_pyfunction!(tileset_tile_names_py, m)?)?;
+    m.add_function(wrap_pyfunction!(tile_vocab_defs_py, m)?)?;
 
     m.add("MOVE_OK", MOVE_OK)?;
     m.add("MOVE_FOOD", MOVE_FOOD)?;
