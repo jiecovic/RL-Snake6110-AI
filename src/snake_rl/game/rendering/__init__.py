@@ -1,1 +1,2 @@
 # src/snake_rl/game/rendering/__init__.py
+

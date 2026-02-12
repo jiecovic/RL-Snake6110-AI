@@ -9,7 +9,7 @@ def cfg_get(cfg: Any, path: str, default: Any = None) -> Any:
     Read nested config values from either:
       - TrainConfig-like objects (attr access)
       - dict configs (key access)
-    path like: "env.id" or "level.height"
+    path like: "env.id" or "board.height"
     """
     cur: Any = cfg
     for part in path.split("."):
@@ -65,12 +65,17 @@ def get_env_params(cfg: Any) -> dict[str, Any]:
     return dict(v)
 
 
-def get_level_params(cfg: Any) -> dict[str, int]:
-    h = cfg_get(cfg, "level.height", None)
-    w = cfg_get(cfg, "level.width", None)
-    f = cfg_get(cfg, "level.food_count", None)
+def get_board_params(cfg: Any) -> dict[str, int]:
+    h = cfg_get(cfg, "board.height", None)
+    w = cfg_get(cfg, "board.width", None)
+    f = cfg_get(cfg, "board.food_count", None)
     if h is None or w is None or f is None:
-        raise KeyError("Config missing one of: level.height, level.width, level.food_count")
+        # Back-compat: older configs used `level.*`.
+        h = cfg_get(cfg, "level.height", None)
+        w = cfg_get(cfg, "level.width", None)
+        f = cfg_get(cfg, "level.food_count", None)
+    if h is None or w is None or f is None:
+        raise KeyError("Config missing one of: board.height, board.width, board.food_count")
     return {"height": int(h), "width": int(w), "food_count": int(f)}
 
 

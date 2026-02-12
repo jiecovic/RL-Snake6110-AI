@@ -1,4 +1,5 @@
-level:
+board:
   height: 13
   width: 22
   food_count: 1
+

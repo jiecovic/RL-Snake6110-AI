@@ -6,7 +6,7 @@ from typing import Literal, overload
 import numpy as np
 
 from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.snakegame import tile_empty_id
+from snake_rl.game.snake_engine import tile_empty_id
 
 
 def _normalize_head(head: tuple[int, int] | list[int] | np.ndarray) -> tuple[int, int]:

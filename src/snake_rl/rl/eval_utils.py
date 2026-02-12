@@ -11,7 +11,8 @@ from gymnasium import Env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-from snake_rl.config.access import cfg_get, get_env_id, get_env_params, get_frame_stack_n
+from snake_rl import _core as core
+from snake_rl.config.access import get_board_params, get_env_id, get_env_params, get_frame_stack_n
 from snake_rl.config.schema import RewardConfig
 from snake_rl.rl.env_factory import apply_frame_stack, make_single_env
 from snake_rl.rl.rust_vec_env import RustVecEnv
@@ -52,12 +53,16 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
 
     if engine == "rust":
         reward = _get_reward_from_cfg(cfg)
+        board_cfg = get_board_params(cfg)
+        board = core.Board(
+            width=int(board_cfg["width"]),
+            height=int(board_cfg["height"]),
+        )
         vec: VecEnv = RustVecEnv(
             env_id=str(get_env_id(cfg)),
             env_params=dict(env_params),
-            width=int(cfg_get(cfg, "level.width")),
-            height=int(cfg_get(cfg, "level.height")),
-            food_count=int(cfg_get(cfg, "level.food_count")),
+            board=board,
+            food_count=int(board_cfg["food_count"]),
             reward=reward,
             num_envs=len(seeds),
             seeds=seeds,

@@ -1,6 +1,6 @@
 defaults:
   - run: standard
-  - level: small
+  - board: small
   - reward: standard
   - env: pov_tile_id
   - feature_extractor: tile_vit
@@ -10,3 +10,4 @@ defaults:
 
 run:
   name: pov_tile_vit_small
+

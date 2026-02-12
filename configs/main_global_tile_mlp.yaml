@@ -1,6 +1,6 @@
 defaults:
   - run: standard
-  - level: small
+  - board: small
   - reward: standard
   - env: global_tile_id
   - feature_extractor: tile_mlp
@@ -10,3 +10,4 @@ defaults:
 
 run:
   name: global_tile_mlp_large
+

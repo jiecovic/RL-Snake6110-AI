@@ -7,14 +7,14 @@ from gymnasium import spaces
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.base import BaseSnakeEnv
 from snake_rl.envs.pixel_obs import FillFeature, PixelObsEnvBase
-from snake_rl.game.snakegame import SnakeGame
+from snake_rl.game.snake_engine import SnakeEngine
 
 
 def _u8(x: int) -> np.uint8:
     return np.uint8(int(x) & 0xFF)
 
 
-def _global_pixel_dims(game: SnakeGame, *, remove_border: bool) -> tuple[int, int]:
+def _global_pixel_dims(game: SnakeEngine, *, remove_border: bool) -> tuple[int, int]:
     game.reset()
     h, w = game.pixel_buffer.shape
     if not remove_border:
@@ -28,7 +28,7 @@ def _global_pixel_dims(game: SnakeGame, *, remove_border: bool) -> tuple[int, in
     return int(h - 2 * ts), int(w - 2 * ts)
 
 
-def _maybe_crop(frame: np.ndarray, game: SnakeGame, *, remove_border: bool) -> np.ndarray:
+def _maybe_crop(frame: np.ndarray, game: SnakeEngine, *, remove_border: bool) -> np.ndarray:
     if not remove_border:
         return frame
     ts = int(game.tile_size)
@@ -42,13 +42,13 @@ class GlobalPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
     Observation: Box (1,H,W) uint8
     Stacking: handled by wrappers (train/eval/watch should see consistent behavior).
 
-    Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
+    Optional cropping (remove_border) is handled here (env-level), not in SnakeEngine.
     This mirrors GlobalTileIdEnv behavior for symbolic obs.
     """
 
     def __init__(
         self,
-        game: SnakeGame,
+        game: SnakeEngine,
         *,
         remove_border: bool = True,
         reward: RewardConfig | dict | None = None,
@@ -79,12 +79,12 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
 
     Stacking: handled by wrappers (stack pixel only, keep direction passthrough).
 
-    Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
+    Optional cropping (remove_border) is handled here (env-level), not in SnakeEngine.
     """
 
     def __init__(
         self,
-        game: SnakeGame,
+        game: SnakeEngine,
         *,
         remove_border: bool = True,
         reward: RewardConfig | dict | None = None,
@@ -109,7 +109,7 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
         pixel = frame[None, :, :].astype(np.uint8, copy=False)
 
         d = self.game.direction
-        assert d is not None, "SnakeGame.direction is None (did you call game.reset()?)"
+        assert d is not None, "SnakeEngine.direction is None (did you call game.reset()?)"
         direction = int(d)
 
         return {
@@ -139,7 +139,7 @@ class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
 
     def __init__(
         self,
-        game: SnakeGame,
+        game: SnakeEngine,
         *,
         view_radius: int,
         rotate_to_head: bool = True,
@@ -225,7 +225,7 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
 
     def __init__(
         self,
-        game: SnakeGame,
+        game: SnakeEngine,
         *,
         view_radius: int,
         fill_bins: int | None = None,

@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import argparse
 
+from snake_rl import _core as core
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
-from snake_rl.game.snakegame import SnakeGame
+from snake_rl.game.snake_engine import SnakeEngine
 
 
 def parse_args():
@@ -19,7 +20,8 @@ def parse_args():
 
 def main() -> None:
     args = parse_args()
-    game = SnakeGame(width=int(args.width), height=int(args.height), food_count=args.food)
+    board = core.Board(width=int(args.width), height=int(args.height))
+    game = SnakeEngine(board=board, food_count=args.food)
 
     run_pygame_app(
         game=game,

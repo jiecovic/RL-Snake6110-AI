@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from snake_rl.game.rendering.pygame.surf import gray255_to_surface
 from snake_rl.game.rendering.pygame.window import PygameRenderContext
-from snake_rl.game.snakegame import SnakeGame
+from snake_rl.game.snake_engine import SnakeEngine
 
 
 class PygameRenderer:
     def __init__(self, *, pixel_size: int = 10):
         self.pixel_size = int(pixel_size)
 
-    def draw(self, *, game: SnakeGame, ctx: PygameRenderContext) -> None:
+    def draw(self, *, game: SnakeEngine, ctx: PygameRenderContext) -> None:
         if game.pixel_buffer is None or game.pixel_buffer.size == 0:
             return
 

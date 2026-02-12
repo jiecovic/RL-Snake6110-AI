@@ -8,7 +8,7 @@ from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.base import BaseSnakeEnv
 from snake_rl.envs.obs_utils import global_tile_frame, pov_tile_frame_with_valid
 from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.snakegame import SnakeGame, tileset_tile_count
+from snake_rl.game.snake_engine import SnakeEngine, tileset_tile_count
 from snake_rl.vocab import load_tile_vocab
 
 
@@ -29,12 +29,12 @@ class GlobalTileIdEnv(BaseSnakeEnv):
     - If tile_vocab is None (default), class_id == raw Rust tile ids.
     - Intended for transformer / symbolic models.
     - Frame stacking works out-of-the-box (stacked along channel dimension).
-    - Optional cropping (remove_border) is handled here (env-level), not in SnakeGame.
+    - Optional cropping (remove_border) is handled here (env-level), not in SnakeEngine.
     """
 
     def __init__(
         self,
-        game: SnakeGame,
+        game: SnakeEngine,
         *,
         remove_border: bool = True,
         tile_vocab: str | None = None,
@@ -127,7 +127,7 @@ class PovTileIdEnv(BaseSnakeEnv):
 
     def __init__(
         self,
-        game: SnakeGame,
+        game: SnakeEngine,
         *,
         view_radius: int | tuple[int, int],
         tile_vocab: str | None = None,
@@ -192,7 +192,7 @@ class PovTileIdEnv(BaseSnakeEnv):
         valid_mask indicates which entries correspond to real board coordinates.
         """
         d = self.game.direction
-        assert d is not None, "SnakeGame.direction is None (did you call game.reset()?)"
+        assert d is not None, "SnakeEngine.direction is None (did you call game.reset()?)"
         return pov_tile_frame_with_valid(
             tile_grid=self.game.tile_grid,
             head=self.game.get_head_position(),

@@ -10,10 +10,10 @@ from snake_rl.config.access import (
     cfg_get as _get,
 )
 from snake_rl.config.access import (
+    get_board_params,
     get_env_id,
     get_env_params,
     get_frame_stack_n,
-    get_level_params,
     get_run_num_envs,
     get_run_seed,
     optional_int,
@@ -65,6 +65,6 @@ __all__ = [
     "get_run_num_envs",
     "get_env_id",
     "get_env_params",
-    "get_level_params",
+    "get_board_params",
     "get_frame_stack_n",
 ]

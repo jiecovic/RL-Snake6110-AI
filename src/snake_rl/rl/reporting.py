@@ -133,7 +133,7 @@ def _resolve_tile_vocab_meta(cfg: TrainConfig) -> dict[str, Any] | None:
     vocab = load_tile_vocab(name)
     return {
         "name": vocab.name,
-        "path": str(vocab.path),
+        "source": str(vocab.source),
         "sha256": vocab.sha256,
         "num_classes": int(vocab.num_classes),
         "class_names": list(vocab.class_names),
@@ -164,10 +164,10 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "total_timesteps": int(cfg.run.total_timesteps),
             "checkpoint_freq": int(cfg.run.checkpoint_freq),
         },
-        "level": {
-            "height": int(cfg.level.height),
-            "width": int(cfg.level.width),
-            "food_count": int(cfg.level.food_count),
+        "board": {
+            "height": int(cfg.board.height),
+            "width": int(cfg.board.width),
+            "food_count": int(cfg.board.food_count),
         },
         "reward": {
             "max_steps_factor": float(cfg.reward.max_steps_factor),

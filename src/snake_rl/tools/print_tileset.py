@@ -1,7 +1,7 @@
 # src/snake_rl/tools/print_tileset.py
 from __future__ import annotations
 
-from snake_rl.game.snakegame import tileset_tile_names, tileset_tile_size, tileset_tiles
+from snake_rl.game.snake_engine import tileset_tile_names, tileset_tile_size, tileset_tiles
 
 
 def main() -> None:

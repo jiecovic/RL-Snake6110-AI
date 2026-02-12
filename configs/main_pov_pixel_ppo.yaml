@@ -1,6 +1,6 @@
 defaults:
   - run: standard
-  - level: small
+  - board: small
   - reward: standard
   - env: pov_pixel
   - feature_extractor: px_strided_cnn_l1k4
@@ -10,3 +10,4 @@ defaults:
 
 run:
   name: pov_pixel_ppo
+

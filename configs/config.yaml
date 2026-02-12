@@ -1,6 +1,6 @@
 defaults:
   - run: standard
-  - level: classic
+  - board: classic
   - reward: standard
   - env: pov_pixel
   - feature_extractor: px_strided_cnn_l1k4
@@ -14,3 +14,4 @@ hydra:
   job:
     chdir: false
   output_subdir: null
+

@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from snake_rl.game.snakegame import (
+from snake_rl.game.snake_engine import (
     tile_empty_id,
     tileset_tile_count,
     tileset_tile_size,

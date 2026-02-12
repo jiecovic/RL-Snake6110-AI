@@ -8,18 +8,14 @@ import numpy as np
 from gymnasium import spaces
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvIndices
 
+from snake_rl import _core as core
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.obs_utils import (
     pov_pixel_frame,
     pov_tile_frame_with_valid,
 )
 from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.snakegame import (
-    MoveResult,
-    ensure_rust_core,
-    tileset_tile_count,
-    tileset_tile_size,
-)
+from snake_rl.game.snake_engine import ensure_rust_core, tileset_tile_count, tileset_tile_size
 from snake_rl.vocab import load_tile_vocab
 
 
@@ -35,8 +31,7 @@ class RustVecEnv(VecEnv):
         *,
         env_id: str,
         env_params: dict[str, Any],
-        width: int,
-        height: int,
+        board: Any,
         food_count: int,
         reward: RewardConfig,
         num_envs: int,
@@ -44,8 +39,9 @@ class RustVecEnv(VecEnv):
     ) -> None:
         self.env_id = str(env_id)
         self.env_params = dict(env_params)
-        self.width = int(width)
-        self.height = int(height)
+        if not isinstance(board, core.Board):
+            raise TypeError("board must be a snake_rl._core.Board instance")
+        self.board = board
         self.reward = reward
         self.num_envs = int(num_envs)
 
@@ -58,10 +54,9 @@ class RustVecEnv(VecEnv):
         if seeds is not None:
             seed_list = [int(s) for s in seeds]
 
-        self._vec_game = ext.VecGame(
+        self._vec_game = ext.VecSnakeEngine(
             n=int(self.num_envs),
-            width=int(self.width),
-            height=int(self.height),
+            board=self.board,
             food_count=int(food_count),
             seeds=seed_list,
         )
@@ -85,8 +80,8 @@ class RustVecEnv(VecEnv):
         env_id = self.env_id
         p = self.env_params
         ts = int(self.tile_size)
-        h = int(self.height)
-        w = int(self.width)
+        h = int(self.board.height)
+        w = int(self.board.width)
 
         if env_id in {"global_pixel", "global_pixel_dir"}:
             remove_border = bool(p.get("remove_border", True))
@@ -181,16 +176,16 @@ class RustVecEnv(VecEnv):
         obs = self._build_obs()
 
         self.current_step_since_last_food += 1
-        is_win = (masks & int(MoveResult.WIN)) > 0
-        is_food = (masks & int(MoveResult.FOOD_EATEN)) > 0
+        is_win = (masks & int(core.MOVE_WIN)) > 0
+        is_food = (masks & int(core.MOVE_FOOD)) > 0
         is_fatal = (
             masks
             & int(
-                MoveResult.HIT_SELF
-                | MoveResult.HIT_WALL
-                | MoveResult.HIT_BOUNDARY
-                | MoveResult.GAME_NOT_RUNNING
-                | MoveResult.WIN
+                core.MOVE_HIT_SELF
+                | core.MOVE_HIT_WALL
+                | core.MOVE_HIT_BOUNDARY
+                | core.MOVE_NOT_RUNNING
+                | core.MOVE_WIN
             )
         ) > 0
 
@@ -439,12 +434,12 @@ def _dir_from_i8(v: int) -> int | None:
 
 def _termination_cause(mask: int, truncated: bool) -> str:
     priority = [
-        MoveResult.WIN,
-        MoveResult.HIT_WALL,
-        MoveResult.HIT_SELF,
-        MoveResult.HIT_BOUNDARY,
-        MoveResult.TIMEOUT,
-        MoveResult.GAME_NOT_RUNNING,
+        core.MOVE_WIN,
+        core.MOVE_HIT_WALL,
+        core.MOVE_HIT_SELF,
+        core.MOVE_HIT_BOUNDARY,
+        core.MOVE_TIMEOUT,
+        core.MOVE_NOT_RUNNING,
     ]
     for r in priority:
         if mask & int(r):
@@ -456,12 +451,12 @@ def _termination_cause(mask: int, truncated: bool) -> str:
 
 def _cause_label(result: int) -> str:
     labels: dict[int, str] = {
-        int(MoveResult.WIN): "win",
-        int(MoveResult.HIT_WALL): "hit_wall",
-        int(MoveResult.HIT_SELF): "hit_self",
-        int(MoveResult.HIT_BOUNDARY): "hit_boundary",
-        int(MoveResult.GAME_NOT_RUNNING): "not_running",
-        int(MoveResult.TIMEOUT): "timeout",
+        int(core.MOVE_WIN): "win",
+        int(core.MOVE_HIT_WALL): "hit_wall",
+        int(core.MOVE_HIT_SELF): "hit_self",
+        int(core.MOVE_HIT_BOUNDARY): "hit_boundary",
+        int(core.MOVE_NOT_RUNNING): "not_running",
+        int(core.MOVE_TIMEOUT): "timeout",
     }
     return labels.get(int(result), "unknown")
 

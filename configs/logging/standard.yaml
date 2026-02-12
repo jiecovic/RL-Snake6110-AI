@@ -1,3 +1,4 @@
 logging:
   no_rich: false
   level: "INFO"
+

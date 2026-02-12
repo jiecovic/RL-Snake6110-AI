@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from snake_rl.game.snakegame import SnakeGame
+from snake_rl.game.snake_engine import SnakeEngine
 
 try:
     import pygame as _pygame
@@ -26,7 +26,7 @@ class PygameRenderContext:
 
 def create_pygame_context(
     *,
-    game: SnakeGame,
+    game: SnakeEngine,
     pixel_size: int,
     caption: str,
     hud_height: int = 26,

@@ -171,7 +171,7 @@ snake-play --width 30 --height 20 --fps 15
 
 Hydra config groups live in `configs/`:
 - `env/` (env id + params + observation)
-- `level/` (grid sizes)
+- `board/` (grid sizes)
 - `reward/` (reward shaping)
 - `feature_extractor/` (feature extractor params)
 - `train/` (algorithm + eval scheduling)

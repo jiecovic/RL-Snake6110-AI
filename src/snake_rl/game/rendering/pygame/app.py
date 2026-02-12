@@ -9,7 +9,7 @@ import snake_rl._core as core
 
 from snake_rl.game.rendering.pygame.renderer import PygameRenderer
 from snake_rl.game.rendering.pygame.window import PygameRenderContext, create_pygame_context
-from snake_rl.game.snakegame import SnakeGame
+from snake_rl.game.snake_engine import SnakeEngine
 
 try:
     import pygame as _pygame
@@ -44,7 +44,7 @@ _END_MASK: int = (
 
 def run_pygame_app(
     *,
-    game: SnakeGame,
+    game: SnakeEngine,
     cfg: AppConfig,
     step_fn: StepFn | None = None,
 ) -> None:

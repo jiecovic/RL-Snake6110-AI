@@ -9,7 +9,7 @@ import snake_rl._core as core
 from gymnasium import spaces
 
 from snake_rl.config.schema import RewardConfig
-from snake_rl.game.snakegame import SnakeGame
+from snake_rl.game.snake_engine import SnakeEngine
 
 
 class BaseSnakeEnv(gym.Env, ABC):
@@ -48,11 +48,11 @@ class BaseSnakeEnv(gym.Env, ABC):
         core.MOVE_TIMEOUT: "timeout",
     }
 
-    def __init__(self, game: SnakeGame, *, reward: RewardConfig | dict[str, Any] | None = None):
+    def __init__(self, game: SnakeEngine, *, reward: RewardConfig | dict[str, Any] | None = None):
         # Avoid cooperative super() because subclasses also mix in PixelObsEnvBase.
         gym.Env.__init__(self)
 
-        self.game: SnakeGame = game
+        self.game: SnakeEngine = game
 
         # 0 = forward, 1 = left, 2 = right
         self.action_space: spaces.Space = spaces.Discrete(3)
@@ -68,7 +68,7 @@ class BaseSnakeEnv(gym.Env, ABC):
 
         self.reward: RewardConfig = reward_cfg
 
-        # Limits and rewards based on level dimensions (RL logic: keep unchanged)
+        # Limits and rewards based on board dimensions (RL logic: keep unchanged)
         max_steps = int(self.game.max_playable_tiles * float(self.reward.max_steps_factor))
         self.max_steps: int = max(1, max_steps)
         self.max_snake_length: int = self.game.max_playable_tiles

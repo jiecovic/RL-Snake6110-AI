@@ -51,8 +51,8 @@ snake-train = "snake_rl.cli.train:main"
 snake-eval = "snake_rl.cli.eval:main"
 snake-watch = "snake_rl.cli.watch:main"
 
-# New tools for level and tileset printing
-snake-print-level = "snake_rl.tools.print_level:main"
+# New tools for board and tileset printing
+snake-print-board = "snake_rl.tools.print_board:main"
 snake-print-tileset = "snake_rl.tools.print_tileset:main"
 
 [tool.ruff]

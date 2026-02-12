@@ -6,11 +6,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from snake_rl.config.schema import (
     AlgoConfig,
+    BoardConfig,
     EnvConfig,
     EvalConfig,
     FeaturesExtractorConfig,
     FrameStackConfig,
-    LevelConfig,
     ObservationConfig,
     RewardConfig,
     RunConfig,
@@ -32,7 +32,7 @@ class RunConfigModel(_BaseConfigModel):
     resume_checkpoint: str | None = None
 
 
-class LevelConfigModel(_BaseConfigModel):
+class BoardConfigModel(_BaseConfigModel):
     height: int
     width: int
     food_count: int
@@ -184,12 +184,23 @@ class TrainLoopConfigModel(_BaseConfigModel):
 
 class TrainConfigModel(_BaseConfigModel):
     run: RunConfigModel
-    level: LevelConfigModel
+    board: BoardConfigModel
     reward: RewardConfigModel = Field(default_factory=RewardConfigModel)
     env: EnvConfigModel
     observation: ObservationConfigModel
     feature_extractor: FeaturesExtractorConfigModel
     train: TrainLoopConfigModel = Field(default_factory=TrainLoopConfigModel)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _map_level_to_board(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if "board" in data or "level" not in data:
+            return data
+        out = dict(data)
+        out["board"] = out.pop("level")
+        return out
 
     @model_validator(mode="before")
     @classmethod
@@ -276,10 +287,10 @@ class TrainConfigModel(_BaseConfigModel):
                 checkpoint_freq=int(self.run.checkpoint_freq),
                 resume_checkpoint=self.run.resume_checkpoint,
             ),
-            level=LevelConfig(
-                height=int(self.level.height),
-                width=int(self.level.width),
-                food_count=int(self.level.food_count),
+            board=BoardConfig(
+                height=int(self.board.height),
+                width=int(self.board.width),
+                food_count=int(self.board.food_count),
             ),
             reward=RewardConfig(
                 max_steps_factor=float(self.reward.max_steps_factor),
@@ -327,7 +338,7 @@ __all__ = [
     "EvalConfigModel",
     "FeaturesExtractorConfigModel",
     "FrameStackConfigModel",
-    "LevelConfigModel",
+    "BoardConfigModel",
     "ObservationConfigModel",
     "RunConfigModel",
     "RewardConfigModel",

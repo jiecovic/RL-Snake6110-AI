@@ -16,7 +16,7 @@ class RunConfig:
 
 
 @dataclass(frozen=True)
-class LevelConfig:
+class BoardConfig:
     height: int
     width: int
     food_count: int
@@ -147,7 +147,7 @@ class TrainLoopConfig:
 @dataclass(frozen=True)
 class TrainConfig:
     run: RunConfig
-    level: LevelConfig
+    board: BoardConfig
     env: EnvConfig
     observation: ObservationConfig
     feature_extractor: FeaturesExtractorConfig

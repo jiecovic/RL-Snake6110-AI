@@ -6,7 +6,7 @@ from typing import Literal, overload
 import numpy as np
 
 from snake_rl.envs.obs_utils import global_pixel_frame, pov_pixel_frame
-from snake_rl.game.snakegame import SnakeGame
+from snake_rl.game.snake_engine import SnakeEngine
 
 Radius = int | tuple[int, int]
 
@@ -19,7 +19,7 @@ class PixelObsEnvBase:
     It exists to keep pixel-frame extraction logic (global vs POV) out of each env.
     """
 
-    def __init__(self, game: SnakeGame):
+    def __init__(self, game: SnakeEngine):
         self.game = game
         self._tilesize = self.game.tile_size
 
@@ -85,7 +85,7 @@ class PixelObsEnvBase:
           - optionally valid: (H,W) bool
         """
         d = self.game.direction
-        assert d is not None, "SnakeGame.direction is None (did you call game.reset()?)"
+        assert d is not None, "SnakeEngine.direction is None (did you call game.reset()?)"
         return pov_pixel_frame(
             pixel_grid=self.game.pixel_buffer.astype(np.uint8, copy=False),
             tile_size=int(self._tilesize),

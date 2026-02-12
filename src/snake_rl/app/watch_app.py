@@ -14,16 +14,17 @@ from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 
+from snake_rl import _core as core
 from snake_rl.config.access import (
+    get_board_params,
     get_env_id,
     get_env_params,
     get_frame_stack_n,
-    get_level_params,
 )
 from snake_rl.config.loader import load_train_config_from_path
 from snake_rl.envs.registry import get_env_cls
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
-from snake_rl.game.snakegame import SnakeGame
+from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.rl.env_factory import apply_frame_stack
 from snake_rl.tools.agent_view_stream import AgentViewStream
 from snake_rl.tools.obs_debug import debug_print_obs
@@ -46,11 +47,11 @@ def _ts() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
 
 
-def _make_game_from_level_params(level: dict[str, int]) -> SnakeGame:
-    return SnakeGame(
-        width=int(level["width"]),
-        height=int(level["height"]),
-        food_count=int(level["food_count"]),
+def _make_engine_from_board_params(board: dict[str, int]) -> SnakeEngine:
+    core_board = core.Board(width=int(board["width"]), height=int(board["height"]))
+    return SnakeEngine(
+        board=core_board,
+        food_count=int(board["food_count"]),
     )
 
 
@@ -367,8 +368,8 @@ def main() -> None:
     logger.info(format_sb3_param_summary(model))
     logger.info(format_sb3_param_report(model))
 
-    level = get_level_params(cfg)
-    game = _make_game_from_level_params(level)
+    board = get_board_params(cfg)
+    game = _make_engine_from_board_params(board)
 
     env_id = get_env_id(cfg)
     env_cls = get_env_cls(env_id)
@@ -384,7 +385,7 @@ def main() -> None:
 
     # IMPORTANT:
     # Seeding happens at the ENV level, not the game.
-    # This will create env.np_random and inject it into SnakeGame via reset().
+    # This will create env.np_random and inject it into SnakeEngine via reset().
     base_env.reset(seed=int(args.seed))
 
     vec_env = DummyVecEnv([lambda: base_env])

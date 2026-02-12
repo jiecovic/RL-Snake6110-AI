@@ -1,32 +1,14 @@
-# src/snake_rl/game/snakegame.py
+# src/snake_rl/game/snake_engine.py
 from __future__ import annotations
 
-from enum import IntFlag
 from typing import Any
 
 import numpy as np
 
 try:
-    import snake_rl.core as rust_core
+    from snake_rl import _core as rust_core
 except Exception:  # pragma: no cover
     rust_core = None  # type: ignore[assignment]
-
-
-def _move_flag(name: str, fallback: int) -> int:
-    if rust_core is None:
-        return fallback
-    return int(getattr(rust_core, name))
-
-
-class MoveResult(IntFlag):
-    OK = _move_flag("MOVE_OK", 1 << 0)
-    FOOD_EATEN = _move_flag("MOVE_FOOD", 1 << 1)
-    HIT_BOUNDARY = _move_flag("MOVE_HIT_BOUNDARY", 1 << 2)
-    HIT_WALL = _move_flag("MOVE_HIT_WALL", 1 << 3)
-    HIT_SELF = _move_flag("MOVE_HIT_SELF", 1 << 4)
-    GAME_NOT_RUNNING = _move_flag("MOVE_NOT_RUNNING", 1 << 5)
-    TIMEOUT = _move_flag("MOVE_TIMEOUT", 1 << 6)
-    WIN = _move_flag("MOVE_WIN", 1 << 7)
 
 
 _TILESET_TILES: np.ndarray | None = None
@@ -91,7 +73,7 @@ def _i8_to_dir(v: int) -> int | None:
     return iv
 
 
-class SnakeGame:
+class SnakeEngine:
     """
     Rust-backed core game state + rules (headless, RL-safe).
 
@@ -103,18 +85,18 @@ class SnakeGame:
     def __init__(
         self,
         *,
-        width: int,
-        height: int,
+        board: Any,
         food_count: int | None = None,
         seed: int | None = None,
     ):
         if food_count is None:
-            raise ValueError("food_count must be provided (level does not encode food).")
+            raise ValueError("food_count must be provided (board does not encode food).")
 
         core = ensure_rust_core()
-        self._core = core.Game(
-            width=int(width),
-            height=int(height),
+        if not isinstance(board, core.Board):
+            raise TypeError("board must be a snake_rl._core.Board instance")
+        self._core = core.SnakeEngine(
+            board=board,
             food_count=int(food_count),
             seed=None,
         )
@@ -136,10 +118,10 @@ class SnakeGame:
         self._core.reset(None if seed is None else int(seed))
         self._refresh_state()
 
-    def move(self, rel_dir: int = 0) -> MoveResult:
+    def move(self, rel_dir: int = 0) -> int:
         mask = int(self._core.step(int(rel_dir)))
         self._refresh_state()
-        return MoveResult(mask)
+        return mask
 
     def _refresh_state(self) -> None:
         self._tile_grid = np.asarray(self._core.tile_grid(), dtype=np.uint8)
@@ -211,8 +193,7 @@ class SnakeGame:
 
 
 __all__ = [
-    "MoveResult",
-    "SnakeGame",
+    "SnakeEngine",
     "ensure_rust_core",
     "has_rust_core",
     "tile_empty_id",
