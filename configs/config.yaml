@@ -1,11 +1,11 @@
 defaults:
-  - run: standard
+  - run: default
   - board: classic
-  - reward: standard
+  - reward: default
   - env: pov_pixel
   - feature_extractor: px_strided_cnn_l1k4
   - train: ppo
-  - logging: standard
+  - logging: default
   - _self_
 
 hydra:
@@ -14,4 +14,5 @@ hydra:
   job:
     chdir: false
   output_subdir: null
+
 
