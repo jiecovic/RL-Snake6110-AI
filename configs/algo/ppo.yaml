@@ -5,6 +5,7 @@ train:                           # Training algorithm configuration.
     params:                      # Algorithm parameters passed to SB3.
       policy_kwargs:             # Policy kwargs passed to SB3.
         net_arch: [128, 64]       # Policy MLP architecture for actor/critic.
+        activation_fn: tanh       # Activation function: tanh (SB3 default), relu, gelu, elu, leaky_relu, silu, swish.
       n_steps: 2048              # Number of steps to run for each environment per update.
       batch_size: 256            # Mini-batch size for SGD.
       n_epochs: 2                # Number of epochs per update.
