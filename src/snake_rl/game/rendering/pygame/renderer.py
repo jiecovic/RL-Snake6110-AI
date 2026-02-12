@@ -95,24 +95,29 @@ class PygameRenderer:
         paused = bool(ctx.paused)
         running = bool(game.running)
 
+        max_playable = max(1, int(game.max_playable_tiles))
+        fill_pct = (float(game.snake_len) / float(max_playable)) * 100.0
+
         line1 = (
             f"Score {int(game.score)}   "
             f"Len {int(game.snake_len)}   "
-            f"Steps {steps}   "
-            f"Running {'yes' if running else 'no'}"
+            f"Fill {fill_pct:.1f}%   "
+            f"Steps {steps}"
         )
-        line2 = (
-            f"Render {fps:.1f} fps   "
-            f"Sim {sim:.1f} fps (target {int(ctx.target_sim_hz)})   "
-            f"Empty {int(game.spawnable_count)}"
-        )
+        line2 = f"Render {fps:.1f} fps   Sim {sim:.1f} fps (target {int(ctx.target_sim_hz)})"
         if paused:
             line2 = f"{line2}   [PAUSED]"
 
+        line3 = f"Running {'yes' if running else 'no'}   Empty {int(game.spawnable_count)}"
+        line4 = "Controls: [ ] speed  P pause  R reset  A/D or Left/Right turn  Esc/Q quit"
+
         x = int(hud.x + ctx.layout.hud_padding_x)
         y = int(hud.y + ctx.layout.hud_padding_y)
+        dy = ctx.font.get_height() + 6
         ctx.screen.blit(ctx.font.render(line1, True, _TEXT), (x, y))
-        ctx.screen.blit(ctx.font.render(line2, True, _MUTED), (x, y + ctx.font.get_height() + 6))
+        ctx.screen.blit(ctx.font.render(line2, True, _MUTED), (x, y + dy))
+        ctx.screen.blit(ctx.label_font.render(line3, True, _MUTED), (x, y + 2 * dy))
+        ctx.screen.blit(ctx.label_font.render(line4, True, _MUTED), (x, y + 3 * dy))
 
     def _agent_label(self) -> str:
         if self.agent_view_spec is None:
@@ -121,7 +126,7 @@ class PygameRenderer:
         view = self.agent_view_spec.view_norm()
         vocab = self.agent_view_vocab.name if self.agent_view_vocab is not None else None
         if vocab:
-            return f"{kind}/{view} • {vocab}"
+            return f"{kind}/{view} - {vocab}"
         return f"{kind}/{view}"
 
     def _build_agent_frame(self, *, game: SnakeEngine) -> tuple[np.ndarray, str] | None:

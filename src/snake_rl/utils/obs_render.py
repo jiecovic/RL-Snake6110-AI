@@ -7,7 +7,6 @@ import numpy as np
 
 from snake_rl.game.snake_engine import (
     tile_empty_id,
-    tile_oob_id,
     tileset_tile_count,
     tileset_tile_size,
     tileset_tiles,
@@ -128,18 +127,17 @@ def categorical_frame_to_pixels(
 
     out = np.zeros((h * td, w * td), dtype=np.uint8)
 
-    oob_id = int(tile_oob_id())
     empty_id = int(tile_empty_id())
     cache: dict[int, np.ndarray] = {}
     for tid in range(int(tileset_tile_count())):
-        if tid in {oob_id, empty_id}:
+        if tid == empty_id:
             continue
         cache[int(tid)] = np.asarray(tiles[int(tid)], dtype=np.uint8)
 
     for y in range(h):
         for x in range(w):
             tid = int(tile_ids[y, x])
-            if tid in {oob_id, empty_id}:
+            if tid == empty_id:
                 continue
             tile = cache.get(tid)
             if tile is None:

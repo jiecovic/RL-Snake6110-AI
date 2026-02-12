@@ -1,66 +1,187 @@
 // rust/src/engine/tileset.rs
 const TILE_SIZE: usize = 4;
 const TILE_COUNT: usize = 27;
+// Use O/X to keep the 2D tile literals aligned and readable.
+const O: u8 = 0;
+const X: u8 = 255;
+// Keep tiles human-readable as 4x4 grids; flatten() runs at compile time.
+const fn flatten(tile: [[u8; TILE_SIZE]; TILE_SIZE]) -> [u8; 16] {
+    let mut out = [O; 16];
+    let mut y = 0usize;
+    while y < TILE_SIZE {
+        let mut x = 0usize;
+        while x < TILE_SIZE {
+            out[y * TILE_SIZE + x] = tile[y][x];
+            x += 1;
+        }
+        y += 1;
+    }
+    out
+}
+
 const TILESET: [[u8; 16]; TILE_COUNT] = [
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 0 oob
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 1 empty
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255], // 2 wall_tl
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 0, 0], // 3 wall_tr
-    [0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0], // 4 wall_bl
-    [0, 255, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 5 wall_br
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255], // 6 wall_top
-    [0, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0], // 7 wall_bottom
-    [0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255], // 8 wall_left
-    [0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0], // 9 wall_right
-    [
-        0, 0, 0, 0, 0, 255, 255, 255, 0, 255, 0, 255, 0, 255, 255, 255,
-    ], // 10 snake_head_up
-    [
-        0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 0, 255, 0, 255, 255, 255,
-    ], // 11 snake_head_down
-    [
-        0, 0, 0, 0, 0, 255, 255, 255, 0, 255, 0, 255, 0, 255, 255, 255,
-    ], // 12 snake_head_left
-    [
-        0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 255, 255, 255, 255, 255,
-    ], // 13 snake_head_right
-    [
-        0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255,
-    ], // 14 snake_body_vertical_up
-    [
-        0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255,
-    ], // 15 snake_body_vertical_down
-    [
-        0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    ], // 16 snake_body_horizontal_left
-    [
-        0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    ], // 17 snake_body_horizontal_right
-    [
-        0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    ], // 18 snake_body_br
-    [
-        0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255,
-    ], // 19 snake_body_bl
-    [
-        0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    ], // 20 snake_body_tr
-    [
-        0, 0, 0, 0, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255,
-    ], // 21 snake_body_tl
-    [
-        0, 0, 0, 0, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255,
-    ], // 22 snake_tail_up
-    [
-        0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 0, 0, 0,
-    ], // 23 snake_tail_down
-    [
-        0, 0, 0, 0, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255,
-    ], // 24 snake_tail_left
-    [
-        0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    ], // 25 snake_tail_right
-    [0, 0, 0, 0, 0, 0, 255, 0, 0, 255, 0, 255, 0, 0, 255, 0], // 26 food
+    flatten([
+        [X, O, O, X],
+        [O, X, X, O],
+        [O, X, X, O],
+        [X, O, O, X],
+    ]), // 0 oob
+    flatten([
+        [O, O, O, O],
+        [O, O, O, O],
+        [O, O, O, O],
+        [O, O, O, O],
+    ]), // 1 empty
+    flatten([
+        [O, O, O, O],
+        [O, O, O, O],
+        [O, O, O, O],
+        [O, O, O, X],
+    ]), // 2 wall_tl
+    flatten([
+        [O, O, O, O],
+        [O, O, O, O],
+        [O, O, O, O],
+        [X, X, O, O],
+    ]), // 3 wall_tr
+    flatten([
+        [O, O, O, X],
+        [O, O, O, X],
+        [O, O, O, O],
+        [O, O, O, O],
+    ]), // 4 wall_bl
+    flatten([
+        [O, X, O, O],
+        [X, X, O, O],
+        [O, O, O, O],
+        [O, O, O, O],
+    ]), // 5 wall_br
+    flatten([
+        [O, O, O, O],
+        [O, O, O, O],
+        [O, O, O, O],
+        [X, X, X, X],
+    ]), // 6 wall_top
+    flatten([
+        [O, O, O, O],
+        [X, X, X, X],
+        [O, O, O, O],
+        [O, O, O, O],
+    ]), // 7 wall_bottom
+    flatten([
+        [O, O, O, X],
+        [O, O, O, X],
+        [O, O, O, X],
+        [O, O, O, X],
+    ]), // 8 wall_left
+    flatten([
+        [O, X, O, O],
+        [O, X, O, O],
+        [O, X, O, O],
+        [O, X, O, O],
+    ]), // 9 wall_right
+    flatten([
+        [O, O, O, O],
+        [O, X, X, X],
+        [O, X, O, X],
+        [O, X, X, X],
+    ]), // 10 snake_head_up
+    flatten([
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, O, X],
+        [O, X, X, X],
+    ]), // 11 snake_head_down
+    flatten([
+        [O, O, O, O],
+        [O, X, X, X],
+        [O, X, O, X],
+        [O, X, X, X],
+    ]), // 12 snake_head_left
+    flatten([
+        [O, O, O, O],
+        [X, X, X, X],
+        [X, X, O, X],
+        [X, X, X, X],
+    ]), // 13 snake_head_right
+    flatten([
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+    ]), // 14 snake_body_vertical_up
+    flatten([
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+    ]), // 15 snake_body_vertical_down
+    flatten([
+        [O, O, O, O],
+        [X, X, X, X],
+        [X, X, X, X],
+        [X, X, X, X],
+    ]), // 16 snake_body_horizontal_left
+    flatten([
+        [O, O, O, O],
+        [X, X, X, X],
+        [X, X, X, X],
+        [X, X, X, X],
+    ]), // 17 snake_body_horizontal_right
+    flatten([
+        [O, X, X, X],
+        [X, X, X, X],
+        [X, X, X, X],
+        [X, X, X, X],
+    ]), // 18 snake_body_br
+    flatten([
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+    ]), // 19 snake_body_bl
+    flatten([
+        [O, O, O, O],
+        [X, X, X, X],
+        [X, X, X, X],
+        [X, X, X, X],
+    ]), // 20 snake_body_tr
+    flatten([
+        [O, O, O, O],
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+    ]), // 21 snake_body_tl
+    flatten([
+        [O, O, O, O],
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+    ]), // 22 snake_tail_up
+    flatten([
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, O, O, O],
+    ]), // 23 snake_tail_down
+    flatten([
+        [O, O, O, O],
+        [O, X, X, X],
+        [O, X, X, X],
+        [O, X, X, X],
+    ]), // 24 snake_tail_left
+    flatten([
+        [O, O, O, O],
+        [X, X, X, X],
+        [X, X, X, X],
+        [X, X, X, X],
+    ]), // 25 snake_tail_right
+    flatten([
+        [O, O, O, O],
+        [O, O, X, O],
+        [O, X, O, X],
+        [O, O, X, O],
+    ]), // 26 food
 ];
 const TILE_NAMES: [&str; TILE_COUNT] = [
     "OOB",

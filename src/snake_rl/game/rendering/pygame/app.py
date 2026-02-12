@@ -99,9 +99,12 @@ def run_pygame_app(
         queued_turn: int | None = None  # buffered human input
 
         if cfg.turn_keys is None:
-            left_key, right_key = (pygame.K_a, pygame.K_d)
+            left_keys = {pygame.K_a, pygame.K_LEFT}
+            right_keys = {pygame.K_d, pygame.K_RIGHT}
         else:
             left_key, right_key = cfg.turn_keys
+            left_keys = {left_key}
+            right_keys = {right_key}
 
         sim_hz = int(cfg.sim_hz) if cfg.sim_hz is not None else int(cfg.fps)
         sim_hz = max(1, sim_hz)
@@ -114,12 +117,17 @@ def run_pygame_app(
         sim_steps = 0
         total_steps = 0
 
+        speed_down = False
+        speed_up = False
+
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return
 
                 if event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                        return
                     if event.key == pygame.K_p:
                         paused = not paused
                     elif event.key == pygame.K_r:
@@ -128,12 +136,21 @@ def run_pygame_app(
                         game.reset()
                         paused = False
                         queued_turn = None
+                    elif event.key == pygame.K_LEFTBRACKET:
+                        speed_down = True
+                    elif event.key == pygame.K_RIGHTBRACKET:
+                        speed_up = True
                     elif cfg.enable_human_input:
                         # Buffer exactly one upcoming turn (latest wins)
-                        if event.key == left_key:
+                        if event.key in left_keys:
                             queued_turn = 1
-                        elif event.key == right_key:
+                        elif event.key in right_keys:
                             queued_turn = 2
+                if event.type == pygame.KEYUP:
+                    if event.key == pygame.K_LEFTBRACKET:
+                        speed_down = False
+                    elif event.key == pygame.K_RIGHTBRACKET:
+                        speed_up = False
 
             now = time.perf_counter()
             dt = now - last_time
@@ -142,6 +159,15 @@ def run_pygame_app(
             if paused:
                 accumulator = 0.0
             else:
+                if speed_down or speed_up:
+                    delta = 5 if (pygame.key.get_mods() & pygame.KMOD_SHIFT) else 1
+                    if speed_down:
+                        sim_hz = max(1, int(sim_hz) - delta)
+                    if speed_up:
+                        sim_hz = min(1000, int(sim_hz) + delta)
+                    step_dt = 1.0 / float(sim_hz)
+                    ctx.target_sim_hz = int(sim_hz)
+
                 accumulator += dt
 
                 steps = 0

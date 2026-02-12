@@ -30,7 +30,7 @@ class LayoutConfig:
     panel_gap: int = 14
     panel_padding: int = 10
     panel_label_height: int = 20
-    hud_height: int = 92
+    hud_height: int = 140
     hud_padding_x: int = 14
     hud_padding_y: int = 10
     font_name: str = "Consolas"

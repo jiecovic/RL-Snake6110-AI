@@ -262,6 +262,26 @@ impl SnakeEngine {
             None => return Err(EngineError::DirectionNone),
         };
 
+        // If we have a tileset-defined OOB tile, prefill the view with it for consistency.
+        let oob_id = TILE_OOB as usize;
+        if oob_id < self.tile_cache.len() {
+            let oob_tile = &self.tile_cache[oob_id];
+            if oob_tile.len() == tile_size * tile_size {
+                for ty in 0..vy {
+                    for tx in 0..vx {
+                        let dst_x0 = tx * tile_size;
+                        let dst_y0 = ty * tile_size;
+                        for dy in 0..tile_size {
+                            let src_row = dy * tile_size;
+                            let dst_idx = (dst_y0 + dy) * view_w + dst_x0;
+                            out[dst_idx..dst_idx + tile_size]
+                                .copy_from_slice(&oob_tile[src_row..src_row + tile_size]);
+                        }
+                    }
+                }
+            }
+        }
+
         let grid_px_w = self.width * tile_size;
 
         for oy in -ry..=ry {
