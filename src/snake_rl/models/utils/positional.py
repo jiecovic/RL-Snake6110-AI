@@ -1,4 +1,4 @@
-# src/snake_rl/models/vits/vit_utils.py
+# src/snake_rl/models/utils/positional.py
 from __future__ import annotations
 
 import torch
@@ -9,16 +9,12 @@ POS_MODES: set[str] = {"abs_2d", "abs_1d", "head_center"}
 
 class GridPositionalEncoding(nn.Module):
     """
-    Positional encoding for tokens that come from a 2D grid of size (H,W).
+    Positional encoding for tokens from a 2D grid (H,W).
 
     Modes:
-      - "abs_2d"     : learned row+col embeddings (ViT-style)
+      - "abs_2d"     : learned row+col embeddings
       - "abs_1d"     : learned 1D index embedding over flattened tokens
-      - "head_center" : learned offsets from grid center (anchor at center)
-
-    Input/Output:
-      x: [B, T=H*W, D]
-      returns x + pe
+      - "head_center": learned offsets from grid center
     """
 
     def __init__(self, *, h: int, w: int, d_model: int, pos_mode: str = "abs_2d") -> None:
@@ -50,17 +46,15 @@ class GridPositionalEncoding(nn.Module):
             self.rel_row = nn.Embedding(self.h, self.d_model)
             self.rel_col = nn.Embedding(self.w, self.d_model)
 
-        # Cache base offset grids (move with .to(device)).
         cy = self.h // 2
         cx = self.w // 2
-        dy = (torch.arange(self.h) - cy).view(self.h, 1).expand(self.h, self.w)  # [H,W]
-        dx = (torch.arange(self.w) - cx).view(1, self.w).expand(self.h, self.w)  # [H,W]
+        dy = (torch.arange(self.h) - cy).view(self.h, 1).expand(self.h, self.w)
+        dx = (torch.arange(self.w) - cx).view(1, self.w).expand(self.h, self.w)
         self._dy_base: torch.Tensor
         self._dx_base: torch.Tensor
-        self.register_buffer("_dy_base", dy.reshape(self.seq_len), persistent=False)  # [T]
-        self.register_buffer("_dx_base", dx.reshape(self.seq_len), persistent=False)  # [T]
+        self.register_buffer("_dy_base", dy.reshape(self.seq_len), persistent=False)
+        self.register_buffer("_dx_base", dx.reshape(self.seq_len), persistent=False)
 
-        # Init (consistent with your ViT extractors)
         if self.pos_row is not None:
             nn.init.normal_(self.pos_row.weight, mean=0.0, std=0.02)
         if self.pos_col is not None:
@@ -91,13 +85,13 @@ class GridPositionalEncoding(nn.Module):
 
     def _add_head_center(self, x: torch.Tensor) -> torch.Tensor:
         assert self.rel_row is not None and self.rel_col is not None
-        dy = torch.reshape(self._dy_base, (1, -1))  # [1,T]
-        dx = torch.reshape(self._dx_base, (1, -1))  # [1,T]
+        dy = torch.reshape(self._dy_base, (1, -1))
+        dx = torch.reshape(self._dx_base, (1, -1))
         cy = self.h // 2
         cx = self.w // 2
         iy = (dy + cy).clamp(0, self.h - 1).to(dtype=torch.long)
         ix = (dx + cx).clamp(0, self.w - 1).to(dtype=torch.long)
-        pe = self.rel_row(iy) + self.rel_col(ix)  # [1,T,D]
+        pe = self.rel_row(iy) + self.rel_col(ix)
         return x + pe
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -113,23 +107,13 @@ class GridPositionalEncoding(nn.Module):
 
 
 def masked_mean(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-    """
-    Mean over tokens excluding masked positions.
-    x:    [B,T,D]
-    mask: [B,T] bool (True => exclude)
-    """
     keep = ~mask
-    denom = keep.sum(dim=1).clamp(min=1).to(dtype=x.dtype)  # [B]
-    keep_f = keep.to(dtype=x.dtype).unsqueeze(-1)  # [B,T,1]
+    denom = keep.sum(dim=1).clamp(min=1).to(dtype=x.dtype)
+    keep_f = keep.to(dtype=x.dtype).unsqueeze(-1)
     return (x * keep_f).sum(dim=1) / denom.unsqueeze(-1)
 
 
 def masked_max(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-    """
-    Max over tokens excluding masked positions.
-    x:    [B,T,D]
-    mask: [B,T] bool (True => exclude)
-    """
     if x.ndim != 3 or mask.ndim != 2:
         raise ValueError(
             f"expected x [B,T,D] and mask [B,T], got x={tuple(x.shape)} mask={tuple(mask.shape)}"
@@ -137,15 +121,11 @@ def masked_max(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     if x.shape[0] != mask.shape[0] or x.shape[1] != mask.shape[1]:
         raise ValueError(f"shape mismatch: x={tuple(x.shape)} mask={tuple(mask.shape)}")
 
-    keep = ~mask  # True => keep
-
-    # Excluded positions become very negative so they never win the max.
+    keep = ~mask
     neg = torch.finfo(x.dtype).min
     x_masked = x.masked_fill(~keep.unsqueeze(-1), neg)
-    out = x_masked.max(dim=1).values  # [B,D]
-
-    # If a row has no kept tokens, return zeros instead of -inf.
-    any_keep = keep.any(dim=1)  # [B]
+    out = x_masked.max(dim=1).values
+    any_keep = keep.any(dim=1)
     if not bool(any_keep.all()):
         out = torch.where(any_keep.unsqueeze(-1), out, torch.zeros_like(out))
     return out
@@ -159,13 +139,6 @@ def pool_tokens(
     token_mask: torch.Tensor | None = None,
     mask_pool: bool = True,
 ) -> torch.Tensor:
-    """
-    Pool transformer outputs into [B,D] (or concatenations).
-
-    tokens:    [B, T, D] (T includes CLS if has_cls=True)
-    pooling:   "cls" | "mean" | "max" | "cls_mean" | "meanmax"
-    token_mask: [B, T] bool where True means "ignore" (optional)
-    """
     pooling = str(pooling)
     if pooling not in {"cls", "mean", "max", "cls_mean", "meanmax"}:
         raise ValueError(
@@ -208,7 +181,6 @@ def pool_tokens(
         mx = masked_max(tok, m) if m is not None else tok.max(dim=1).values
         return torch.cat([mean, mx], dim=-1)
 
-    # cls_mean (existing)
     cls = tokens[:, 0, :]
     tok = tokens[:, 1:, :]
     m = token_mask[:, 1:] if (token_mask is not None and mask_pool) else None

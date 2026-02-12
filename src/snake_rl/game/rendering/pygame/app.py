@@ -43,6 +43,10 @@ class AppConfig:
     # Agent view (optional)
     agent_view_spec: ObservationSpec | None = None
     agent_view_vocab: TileVocab | None = None
+    # HUD
+    hud_mode: str = "all"  # "all" | "selected"
+    hud_features: dict[str, Any] | None = None
+    hud_info: dict[str, str] | None = None
     layout: LayoutConfig = field(default_factory=LayoutConfig)
 
 
@@ -93,6 +97,9 @@ def run_pygame_app(
             pixel_size=cfg.pixel_size,
             agent_view_spec=cfg.agent_view_spec,
             agent_view_vocab=cfg.agent_view_vocab,
+            hud_mode=str(cfg.hud_mode),
+            hud_features=cfg.hud_features,
+            hud_info=cfg.hud_info,
         )
 
         paused = False
@@ -119,6 +126,7 @@ def run_pygame_app(
 
         speed_down = False
         speed_up = False
+        step_once = False
 
         while True:
             for event in pygame.event.get():
@@ -136,6 +144,8 @@ def run_pygame_app(
                         game.reset()
                         paused = False
                         queued_turn = None
+                    elif event.key == pygame.K_n:
+                        step_once = True
                     elif event.key == pygame.K_LEFTBRACKET:
                         speed_down = True
                     elif event.key == pygame.K_RIGHTBRACKET:
@@ -158,6 +168,28 @@ def run_pygame_app(
 
             if paused:
                 accumulator = 0.0
+                if step_once:
+                    if step_fn is not None:
+                        step_fn()
+                    else:
+                        if game.running:
+                            if cfg.enable_human_input:
+                                rel = queued_turn if queued_turn is not None else 0
+                                queued_turn = None
+                            else:
+                                rel = 0
+
+                            results = game.move(int(rel))
+                            if cfg.reset_on_done and (results & _END_MASK):
+                                game.reset()
+                                queued_turn = None
+                        else:
+                            if cfg.reset_on_done:
+                                game.reset()
+                                queued_turn = None
+                    sim_steps += 1
+                    total_steps += 1
+                    step_once = False
             else:
                 if speed_down or speed_up:
                     delta = 5 if (pygame.key.get_mods() & pygame.KMOD_SHIFT) else 1

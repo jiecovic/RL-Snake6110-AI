@@ -8,7 +8,6 @@ import numpy as np
 from gymnasium import spaces
 
 from snake_rl import _core as core
-from snake_rl.envs.obs_utils import world_pixel_frame, world_tile_frame
 from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.vocab import TileVocab, load_tile_vocab
@@ -47,26 +46,6 @@ class ActionSpec:
         return game.move_cardinal(int(action))
 
 
-def _compute_fill(
-    *,
-    snake_len: int,
-    initial_len: int,
-    max_playable: int,
-    fill_bins: int | None,
-) -> np.ndarray:
-    denom = max(1, int(max_playable) - int(initial_len))
-    x = (int(snake_len) - int(initial_len)) / float(denom)
-    x = float(np.clip(x, 0.0, 1.0))
-
-    if fill_bins is None:
-        return np.array([x], dtype=np.float32)
-
-    bins = int(fill_bins)
-    b = int(np.floor(x * bins))
-    b = min(b, bins - 1)
-    return np.array(b, dtype=np.int64)
-
-
 @dataclass(frozen=True)
 class ObservationSpec:
     kind: str
@@ -78,11 +57,9 @@ class ObservationSpec:
         k = str(self.kind).strip().lower()
         if k in {"pixel", "pixels"}:
             return "pixel"
-        if k in {"categorical", "cat", "tile_id", "tile", "tiles", "symbolic"}:
+        if k in {"categorical", "cat"}:
             return "categorical"
-        raise ValueError(
-            f"Unknown obs.kind={self.kind!r}. Expected pixel|categorical (aliases: tile_id)."
-        )
+        raise ValueError(f"Unknown obs.kind={self.kind!r}. Expected pixel|categorical.")
 
     def _view(self) -> str:
         v = str(self.view).strip().lower()
@@ -102,26 +79,49 @@ class ObservationSpec:
         v = self.features.get("direction", False)
         return bool(v)
 
-    def _feature_fill(self) -> tuple[bool, int | None]:
-        fill = self.features.get("fill", None)
-        if isinstance(fill, dict):
-            enabled = bool(fill.get("enabled", True))
-            bins = fill.get("bins", None)
-            return enabled, None if bins is None else int(bins)
-        if isinstance(fill, bool):
-            return bool(fill), None
-        if "fill_bins" in self.params:
-            bins = self.params.get("fill_bins")
-            return True, None if bins is None else int(bins)
-        return False, None
+    def _feature_enabled(self, key: str) -> bool:
+        v = self.features.get(key, False)
+        if isinstance(v, dict):
+            return bool(v.get("enabled", True))
+        return bool(v)
+
+    def _feature_snake_progress(self) -> bool:
+        if self._feature_enabled("snake_progress"):
+            return True
+        # legacy alias
+        return self._feature_enabled("fill")
+
+    def _feature_time_since_food(self) -> bool:
+        return self._feature_enabled("time_since_last_food")
+
+    def _feature_closest_food(self) -> tuple[bool, str]:
+        v = self.features.get("closest_food", False)
+        if isinstance(v, dict):
+            enabled = bool(v.get("enabled", True))
+            metric = str(v.get("metric", "manhattan")).strip().lower()
+            return enabled, metric
+        if isinstance(v, bool):
+            return bool(v), "manhattan"
+        return False, "manhattan"
+
+    def _feature_collision(self, key: str) -> bool:
+        return self._feature_enabled(key)
 
     def frame_stack_key(self) -> str | None:
         if not self.uses_dict():
             return None
-        return "pixel" if self._kind() == "pixel" else "tiles"
+        return "pixel" if self._kind() == "pixel" else "categorical"
 
     def uses_dict(self) -> bool:
-        return self._feature_direction() or self._feature_fill()[0]
+        return bool(
+            self._feature_direction()
+            or self._feature_snake_progress()
+            or self._feature_time_since_food()
+            or self._feature_closest_food()[0]
+            or self._feature_collision("collision_ahead")
+            or self._feature_collision("collision_left")
+            or self._feature_collision("collision_right")
+        )
 
     def tile_vocab_name(self) -> str | None:
         name = self.params.get("tile_vocab")
@@ -170,10 +170,12 @@ class ObservationSpec:
         height: int,
         tile_size: int,
         tile_vocab: TileVocab | None = None,
+        frame_stack_n: int = 1,
     ) -> spaces.Space:
         kind = self._kind()
         view = self._view()
-        base_key = "pixel" if kind == "pixel" else "tiles"
+        base_key = "pixel" if kind == "pixel" else "categorical"
+        n_stack = max(1, int(frame_stack_n))
 
         if kind == "pixel":
             if view == "world":
@@ -182,13 +184,22 @@ class ObservationSpec:
                 if self._remove_border():
                     ph -= 2 * int(tile_size)
                     pw -= 2 * int(tile_size)
-                base_space = spaces.Box(low=0, high=255, shape=(1, ph, pw), dtype=np.uint8)
+                base_space = spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(n_stack, ph, pw),
+                    dtype=np.uint8,
+                )
+                frame_base_channels = int(core.pixel_frame_channels(False))
             else:
                 ry, rx = self._view_radius()
                 vh = (2 * ry + 1) * int(tile_size)
                 vw = (2 * rx + 1) * int(tile_size)
-                c = 2 if self._add_oob_mask() else 1
+                frame_base_channels = int(core.pixel_frame_channels(bool(self._add_oob_mask())))
+                c = n_stack * frame_base_channels
                 base_space = spaces.Box(low=0, high=255, shape=(c, vh, vw), dtype=np.uint8)
+            base_space._frame_stack_n = int(n_stack)  # type: ignore[attr-defined]
+            base_space._frame_base_channels = int(frame_base_channels)  # type: ignore[attr-defined]
         else:
             if tile_vocab is not None:
                 base_num = int(tile_vocab.num_classes)
@@ -206,7 +217,7 @@ class ObservationSpec:
                 base_space = spaces.Box(
                     low=0,
                     high=base_num - 1,
-                    shape=(1, gh, gw),
+                    shape=(n_stack, gh, gw),
                     dtype=np.uint8,
                 )
             else:
@@ -216,20 +227,33 @@ class ObservationSpec:
                 base_space = spaces.Box(
                     low=0,
                     high=base_num - 1,
-                    shape=(1, vy, vx),
+                    shape=(n_stack, vy, vx),
                     dtype=np.uint8,
                 )
+            base_space._frame_stack_n = int(n_stack)  # type: ignore[attr-defined]
+            base_space._frame_base_channels = int(core.categorical_frame_channels())  # type: ignore[attr-defined]
 
         extras: dict[str, spaces.Space] = {}
         if self._feature_direction():
             extras["direction"] = spaces.Discrete(4)
-        fill_enabled, fill_bins = self._feature_fill()
-        if fill_enabled:
-            extras["fill"] = (
-                spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
-                if fill_bins is None
-                else spaces.Discrete(int(fill_bins))
+        if self._feature_snake_progress():
+            extras["snake_progress"] = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+        if self._feature_time_since_food():
+            extras["time_since_last_food"] = spaces.Box(
+                low=0.0, high=1.0, shape=(1,), dtype=np.float32
             )
+        if self._feature_closest_food()[0]:
+            extras["closest_food_dx"] = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+            extras["closest_food_dy"] = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+            extras["closest_food_dist"] = spaces.Box(
+                low=0.0, high=1.0, shape=(1,), dtype=np.float32
+            )
+        if self._feature_collision("collision_ahead"):
+            extras["collision_ahead"] = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+        if self._feature_collision("collision_left"):
+            extras["collision_left"] = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+        if self._feature_collision("collision_right"):
+            extras["collision_right"] = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
 
         if extras:
             return spaces.Dict({base_key: base_space, **extras})
@@ -242,71 +266,100 @@ class ObservationSpec:
         tile_vocab: TileVocab | None = None,
         initial_snake_length: int,
         max_playable_tiles: int,
+        max_steps: int,
+        frame_stack_n: int = 1,
     ):
         kind = self._kind()
         view = self._view()
+        _ = int(initial_snake_length)
+        _ = int(max_playable_tiles)
+        _ = int(frame_stack_n)
 
         if kind == "pixel":
             if view == "world":
-                frame = world_pixel_frame(
-                    pixel_grid=game.pixel_buffer.astype(np.uint8, copy=False),
-                    tile_size=int(game.tile_size),
-                    remove_border=self._remove_border(),
-                )
-                base = frame[None, :, :].astype(np.uint8, copy=False)
+                frames = np.asarray(game.pixel_buffer_stacked(), dtype=np.uint8)
+                if self._remove_border():
+                    ts = int(game.tile_size)
+                    frames = frames[:, ts:-ts, ts:-ts]
+                base = frames
             else:
                 if self._add_oob_mask():
-                    frame, valid = game.head_pixel_view(
+                    frame, valid = game.head_pixel_view_stacked(
                         view_radius=self._view_radius(),
                         rotate_to_head=self._rotate_to_head(),
                         oob_fill_value=self._pixel_oob_value(),
                         return_valid=True,
                     )
-                    mask = np.full(frame.shape, np.uint8(self._mask_oob_value()), dtype=np.uint8)
-                    mask[valid] = np.uint8(self._mask_valid_value())
-                    base = np.stack([frame.astype(np.uint8, copy=False), mask], axis=0)
+                    frame_arr = np.asarray(frame, dtype=np.uint8)
+                    valid_arr = np.asarray(valid, dtype=bool)
+                    mask = np.full(
+                        frame_arr.shape,
+                        np.uint8(self._mask_oob_value()),
+                        dtype=np.uint8,
+                    )
+                    mask[valid_arr] = np.uint8(self._mask_valid_value())
+                    base = np.stack([frame_arr, mask], axis=1)
+                    base = base.reshape(base.shape[0] * base.shape[1], base.shape[2], base.shape[3])
                 else:
-                    frame = game.head_pixel_view(
+                    frame = game.head_pixel_view_stacked(
                         view_radius=self._view_radius(),
                         rotate_to_head=self._rotate_to_head(),
                         oob_fill_value=self._pixel_oob_value(),
                         return_valid=False,
                     )
-                    base = frame[None, :, :].astype(np.uint8, copy=False)
+                    base = np.asarray(frame, dtype=np.uint8)
 
             base_key = "pixel"
         else:
-            grid = game.tile_grid.astype(np.uint8, copy=False)
+            grid = np.asarray(game.tile_grid_stacked(), dtype=np.uint8)
             if view == "world":
-                raw = world_tile_frame(tile_grid=grid, remove_border=self._remove_border())
-                frame = raw if tile_vocab is None else tile_vocab.lut[raw]
-                base = frame[None, :, :].astype(np.uint8, copy=False)
+                if self._remove_border():
+                    grid = grid[:, 1:-1, 1:-1]
+                frame = grid if tile_vocab is None else tile_vocab.lut[grid]
+                base = frame.astype(np.uint8, copy=False)
             else:
-                raw = game.head_tile_view(
+                raw = game.head_tile_view_stacked(
                     view_radius=self._view_radius(),
                     rotate_to_head=self._rotate_to_head(),
                     empty_id=None,
-                    return_valid=False,
                 )
                 frame = raw if tile_vocab is None else tile_vocab.lut[raw]
-                base = frame[None, :, :].astype(np.uint8, copy=False)
+                base = np.asarray(frame, dtype=np.uint8)
 
-            base_key = "tiles"
+            base_key = "categorical"
 
         extras: dict[str, Any] = {}
         if self._feature_direction():
-            d = game.direction
-            assert d is not None, "SnakeEngine.direction is None (did you call game.reset()?)"
-            extras["direction"] = np.array(int(d), dtype=np.int64)
+            extras["direction"] = np.int64(game.direction_id)
 
-        fill_enabled, fill_bins = self._feature_fill()
-        if fill_enabled:
-            extras["fill"] = _compute_fill(
-                snake_len=int(game.snake_len),
-                initial_len=int(initial_snake_length),
-                max_playable=int(max_playable_tiles),
-                fill_bins=fill_bins,
+        if self._feature_snake_progress():
+            extras["snake_progress"] = np.array(float(game.snake_progress), dtype=np.float32)
+
+        if self._feature_time_since_food():
+            extras["time_since_last_food"] = np.array(
+                float(game.time_since_food_norm(int(max_steps))),
+                dtype=np.float32,
             )
+
+        closest_enabled, metric = self._feature_closest_food()
+        if closest_enabled:
+            dx_f, dy_f, dist_f = game.get_closest_food_norm(metric)
+            extras["closest_food_dx"] = np.array(float(dx_f), dtype=np.float32)
+            extras["closest_food_dy"] = np.array(float(dy_f), dtype=np.float32)
+            extras["closest_food_dist"] = np.array(float(dist_f), dtype=np.float32)
+
+        if (
+            self._feature_collision("collision_ahead")
+            or self._feature_collision("collision_left")
+            or self._feature_collision("collision_right")
+        ):
+            c_ahead, c_left, c_right = game.collision_flags()
+            if self._feature_collision("collision_ahead"):
+                extras["collision_ahead"] = np.array(1.0 if c_ahead else 0.0, dtype=np.float32)
+            if self._feature_collision("collision_left"):
+                extras["collision_left"] = np.array(1.0 if c_left else 0.0, dtype=np.float32)
+            if self._feature_collision("collision_right"):
+                extras["collision_right"] = np.array(1.0 if c_right else 0.0, dtype=np.float32)
 
         if extras:
             return {base_key: base, **extras}

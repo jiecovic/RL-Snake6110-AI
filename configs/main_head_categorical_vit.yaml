@@ -3,7 +3,7 @@ defaults:
   - board: small
   - reward: default
   - env: head_categorical
-  - feature_extractor: tile_vit
+  - feature_extractor: snake_categorical_vit
   - train: ppo
   - logging: default
   - _self_

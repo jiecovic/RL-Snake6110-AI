@@ -21,17 +21,20 @@ class SnakeEnv(BaseSnakeEnv):
         obs: ObservationSpec,
         action: ActionSpec | None = None,
         reward: RewardConfig | dict[str, Any] | None = None,
+        frame_stack_n: int = 1,
     ):
         super().__init__(game, action=action, reward=reward)
 
         self.obs_spec = obs
         self._tile_vocab = self.obs_spec.load_tile_vocab()
+        self.frame_stack_n = max(1, int(frame_stack_n))
 
         self.observation_space = self.obs_spec.make_space(
             width=int(self.game.width),
             height=int(self.game.height),
             tile_size=int(self.game.tile_size),
             tile_vocab=self._tile_vocab,
+            frame_stack_n=int(self.frame_stack_n),
         )
 
     def get_obs(self):
@@ -40,6 +43,8 @@ class SnakeEnv(BaseSnakeEnv):
             tile_vocab=self._tile_vocab,
             initial_snake_length=self.initial_snake_length,
             max_playable_tiles=self.max_snake_length,
+            max_steps=self.max_steps,
+            frame_stack_n=int(self.frame_stack_n),
         )
 
 

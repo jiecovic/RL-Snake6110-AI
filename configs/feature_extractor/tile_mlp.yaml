@@ -1,9 +1,0 @@
-feature_extractor:
-  type: tile_mlp
-  features_dim: 512
-  params:
-    d_emb: 16
-    mlp_hidden: []
-    dropout: 0.0
-    pos_mode: abs_2d
-    pre_ln: true

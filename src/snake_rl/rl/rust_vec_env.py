@@ -31,6 +31,7 @@ class RustVecEnv(VecEnv):
         reward: RewardConfig,
         num_envs: int,
         seeds: Iterable[int] | None = None,
+        frame_stack_n: int = 1,
     ) -> None:
         self.obs_spec = obs
         self.action_spec = action if action is not None else ActionSpec()
@@ -39,6 +40,7 @@ class RustVecEnv(VecEnv):
         self.board = board
         self.reward = reward
         self.num_envs = int(num_envs)
+        self.frame_stack_n = max(1, int(frame_stack_n))
 
         self.tile_size = int(core.tileset_tile_size())
         self._tile_vocab = self.obs_spec.load_tile_vocab()
@@ -53,6 +55,7 @@ class RustVecEnv(VecEnv):
             board=self.board,
             food_count=int(food_count),
             seeds=seed_list,
+            frame_stack_n=int(self.frame_stack_n),
         )
 
         self._max_playable = int(self._vec_game.max_playable_tiles())
@@ -76,6 +79,7 @@ class RustVecEnv(VecEnv):
             height=int(self.board.height),
             tile_size=int(self.tile_size),
             tile_vocab=self._tile_vocab,
+            frame_stack_n=int(self.frame_stack_n),
         )
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
@@ -221,11 +225,11 @@ class RustVecEnv(VecEnv):
         ts = int(self.tile_size)
 
         if spec.kind_norm() == "pixel":
-            pixels = np.asarray(self._vec_game.pixel_grids(), dtype=np.uint8)
+            pixels = np.asarray(self._vec_game.pixel_grids_stacked(), dtype=np.uint8)
             if spec.view_norm() == "world":
                 if spec._remove_border():
-                    pixels = pixels[:, ts:-ts, ts:-ts]
-                base = pixels[:, None, :, :].astype(np.uint8, copy=False)
+                    pixels = pixels[:, :, ts:-ts, ts:-ts]
+                base = pixels.astype(np.uint8, copy=False)
             else:
                 view_radius = spec._view_radius()
                 rotate_to_head = spec._rotate_to_head()
@@ -235,14 +239,14 @@ class RustVecEnv(VecEnv):
                 mask_oob_value = spec._mask_oob_value()
 
                 if add_oob_mask:
-                    frame_arr, valid = self._vec_game.head_pixel_views(
+                    frame_arr, valid = self._vec_game.head_pixel_views_stacked(
                         (int(view_radius[0]), int(view_radius[1])),
                         rotate_to_head=rotate_to_head,
                         oob_fill_value=int(pixel_oob_value),
                         return_valid=True,
                     )
                 else:
-                    frame_arr = self._vec_game.head_pixel_views(
+                    frame_arr = self._vec_game.head_pixel_views_stacked(
                         (int(view_radius[0]), int(view_radius[1])),
                         rotate_to_head=rotate_to_head,
                         oob_fill_value=int(pixel_oob_value),
@@ -252,54 +256,81 @@ class RustVecEnv(VecEnv):
 
                 frame_arr = np.asarray(frame_arr, dtype=np.uint8)
                 if not add_oob_mask:
-                    base = frame_arr[:, None, :, :]
+                    base = frame_arr
                 else:
                     mask_arr = np.asarray(valid, dtype=bool)
                     mask = np.full(frame_arr.shape, np.uint8(mask_oob_value), dtype=np.uint8)
                     mask[mask_arr] = np.uint8(mask_valid_value)
-                    base = np.stack([frame_arr, mask], axis=1).astype(np.uint8, copy=False)
+                    base = np.concatenate([frame_arr, mask], axis=1).astype(np.uint8, copy=False)
 
             base_key = "pixel"
         else:
-            grids = np.asarray(self._vec_game.tile_grids(), dtype=np.uint8)
+            grids = np.asarray(self._vec_game.tile_grids_stacked(), dtype=np.uint8)
             vocab = self._tile_vocab
 
             if spec.view_norm() == "world":
                 if spec._remove_border():
-                    grids = grids[:, 1:-1, 1:-1]
+                    grids = grids[:, :, 1:-1, 1:-1]
                 if vocab is not None:
                     grids = vocab.lut[grids]
-                base = grids[:, None, :, :].astype(np.uint8, copy=False)
+                base = grids.astype(np.uint8, copy=False)
             else:
                 view_radius = spec._view_radius()
                 rotate_to_head = spec._rotate_to_head()
-                frame_arr = self._vec_game.head_tile_views(
+                frame_arr = self._vec_game.head_tile_views_stacked(
                     (int(view_radius[0]), int(view_radius[1])),
                     rotate_to_head=rotate_to_head,
                     empty_id=None,
-                    return_valid=False,
                 )
 
                 frame_arr = np.asarray(frame_arr, dtype=np.uint8)
                 if vocab is not None:
                     frame_arr = vocab.lut[frame_arr]
 
-                base = frame_arr[:, None, :, :].astype(np.uint8, copy=False)
+                base = frame_arr.astype(np.uint8, copy=False)
 
-            base_key = "tiles"
+            base_key = "categorical"
 
         extras: dict[str, Any] = {}
         if spec._feature_direction():
-            extras["direction"] = np.asarray(self._vec_game.directions(), dtype=np.int64)
+            extras["direction"] = np.asarray(self._vec_game.direction_ids(), dtype=np.int64)
 
-        fill_enabled, fill_bins = spec._feature_fill()
-        if fill_enabled:
-            extras["fill"] = _compute_fill(
-                snake_len=np.asarray(self._vec_game.snake_lens(), dtype=np.int32),
-                initial_len=self.initial_snake_length,
-                max_playable=self.max_snake_length,
-                fill_bins=fill_bins,
+        if spec._feature_snake_progress():
+            extras["snake_progress"] = np.asarray(
+                self._vec_game.snake_progresses(),
+                dtype=np.float32,
             )
+
+        if spec._feature_time_since_food():
+            extras["time_since_last_food"] = np.asarray(
+                self._vec_game.time_since_foods_norm(int(self.max_steps)),
+                dtype=np.float32,
+            )
+
+        closest_enabled, metric = spec._feature_closest_food()
+        if closest_enabled:
+            metric_code = {"manhattan": 0, "euclidean": 1, "euclidean_sq": 2}.get(metric, 0)
+            arr = np.asarray(self._vec_game.closest_foods_norm(int(metric_code)), dtype=np.float32)
+            if arr.ndim != 2 or arr.shape[1] != 3:
+                raise ValueError("closest_foods_norm must return shape (n_envs,3)")
+            extras["closest_food_dx"] = arr[:, 0:1]
+            extras["closest_food_dy"] = arr[:, 1:2]
+            extras["closest_food_dist"] = arr[:, 2:3]
+
+        if (
+            spec._feature_collision("collision_ahead")
+            or spec._feature_collision("collision_left")
+            or spec._feature_collision("collision_right")
+        ):
+            c_ahead = np.asarray(self._vec_game.collision_aheads(), dtype=np.float32)
+            c_left = np.asarray(self._vec_game.collision_lefts(), dtype=np.float32)
+            c_right = np.asarray(self._vec_game.collision_rights(), dtype=np.float32)
+            if spec._feature_collision("collision_ahead"):
+                extras["collision_ahead"] = c_ahead.reshape((-1, 1))
+            if spec._feature_collision("collision_left"):
+                extras["collision_left"] = c_left.reshape((-1, 1))
+            if spec._feature_collision("collision_right"):
+                extras["collision_right"] = c_right.reshape((-1, 1))
 
         if extras:
             return {base_key: base, **extras}
@@ -347,16 +378,3 @@ def _normalize_indices(indices: VecEnvIndices | None, n: int) -> list[int]:
     if isinstance(indices, int):
         return [indices]
     return [int(i) for i in indices]
-
-
-def _compute_fill(*, snake_len, initial_len, max_playable: int, fill_bins: int | None):
-    denom = np.maximum(1, (int(max_playable) - initial_len))
-    x = (snake_len - initial_len) / denom.astype(np.float32)
-    x = np.clip(x, 0.0, 1.0)
-
-    if fill_bins is None:
-        return x.reshape((-1, 1)).astype(np.float32)
-
-    b = np.floor(x * int(fill_bins)).astype(np.int64)
-    b = np.minimum(b, int(fill_bins) - 1)
-    return b

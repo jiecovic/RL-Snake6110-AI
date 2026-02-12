@@ -10,6 +10,7 @@ use super::geometry::{
 };
 use super::tiles::{body_tile, head_tile, tail_tile};
 use super::tileset::{tileset_tile_size, tileset_tiles};
+use super::obs_stack::{FrameStacker, HeadStacker, HeadViewKey};
 
 #[derive(Debug)]
 pub enum EngineError {
@@ -36,6 +37,8 @@ pub struct SnakeEngine {
     width: usize,
     height: usize,
     tile_size: usize,
+    frame_stack_n: usize,
+    step_counter: u64,
 
     static_grid: Vec<u8>,
     wall_mask: Vec<bool>,
@@ -58,10 +61,18 @@ pub struct SnakeEngine {
 
     score: i32,
     running: bool,
+    steps_since_food: usize,
+    initial_snake_len: usize,
 
     tile_grid: Vec<u8>,
     pixel_grid: Vec<u8>,
     tile_cache: Vec<Vec<u8>>,
+
+    world_tile_stack: Option<FrameStacker>,
+    world_pixel_stack: Option<FrameStacker>,
+    head_tile_stack: Option<HeadStacker>,
+    head_pixel_stack: Option<HeadStacker>,
+    head_pixel_valid_stack: Option<HeadStacker>,
 }
 
 impl SnakeEngine {
@@ -70,6 +81,7 @@ impl SnakeEngine {
         height: usize,
         food_count: usize,
         seed: Option<u64>,
+        frame_stack_n: usize,
     ) -> Result<Self, EngineError> {
         if width == 0 || height == 0 {
             return Err(EngineError::InvalidGridLen);
@@ -106,10 +118,14 @@ impl SnakeEngine {
             None => ChaCha8Rng::seed_from_u64(rand::thread_rng().next_u64()),
         };
 
+        let n_stack = frame_stack_n.max(1);
+
         Ok(Self {
             width,
             height,
             tile_size,
+            frame_stack_n: n_stack,
+            step_counter: 0,
             static_grid,
             wall_mask,
             wall_count,
@@ -126,9 +142,16 @@ impl SnakeEngine {
             direction: None,
             score: 0,
             running: true,
+            steps_since_food: 0,
+            initial_snake_len: 0,
             tile_grid: vec![0u8; width * height],
             pixel_grid: vec![0u8; width * height * tile_size * tile_size],
             tile_cache,
+            world_tile_stack: if n_stack > 1 { Some(FrameStacker::new(n_stack)) } else { None },
+            world_pixel_stack: if n_stack > 1 { Some(FrameStacker::new(n_stack)) } else { None },
+            head_tile_stack: if n_stack > 1 { Some(HeadStacker::new(n_stack)) } else { None },
+            head_pixel_stack: if n_stack > 1 { Some(HeadStacker::new(n_stack)) } else { None },
+            head_pixel_valid_stack: if n_stack > 1 { Some(HeadStacker::new(n_stack)) } else { None },
         })
     }
 
@@ -139,6 +162,7 @@ impl SnakeEngine {
 
         self.score = 0;
         self.running = true;
+        self.steps_since_food = 0;
         self.snake.clear();
         self.food.clear();
         self.snake_mask.fill(false);
@@ -146,8 +170,11 @@ impl SnakeEngine {
         self.direction = None;
 
         self.spawn_snake()?;
+        self.initial_snake_len = self.snake.len();
         self.spawn_food();
         self.rebuild_grids();
+        self.step_counter = 0;
+        self.update_world_stacks(true);
         Ok(())
     }
 
@@ -235,6 +262,34 @@ impl SnakeEngine {
         }
 
         Ok((out, valid, vy, vx))
+    }
+
+    pub fn head_tile_view_stacked(
+        &mut self,
+        view_radius_y: i32,
+        view_radius_x: i32,
+        rotate_to_head: bool,
+        empty_id: u8,
+    ) -> Result<(Vec<u8>, usize, usize, usize), EngineError> {
+        let (view, _valid, h, w) =
+            self.head_tile_view(view_radius_y, view_radius_x, rotate_to_head, empty_id)?;
+
+        let n = self.frame_stack_n;
+        if n <= 1 {
+            return Ok((view, 1, h, w));
+        }
+
+        let key = HeadViewKey {
+            ry: view_radius_y,
+            rx: view_radius_x,
+            rotate: rotate_to_head,
+            param: empty_id,
+        };
+        if let Some(stacker) = self.head_tile_stack.as_mut() {
+            stacker.update(self.step_counter, key, &view);
+            return Ok((stacker.stacked().to_vec(), n, h, w));
+        }
+        Ok((view, 1, h, w))
     }
 
     pub fn head_pixel_view(
@@ -333,12 +388,71 @@ impl SnakeEngine {
         Ok((out, valid, view_h, view_w))
     }
 
+    pub fn head_pixel_view_stacked(
+        &mut self,
+        view_radius_y: i32,
+        view_radius_x: i32,
+        rotate_to_head: bool,
+        oob_fill_value: u8,
+    ) -> Result<(Vec<u8>, Vec<u8>, usize, usize, usize), EngineError> {
+        let (view, valid, h, w) =
+            self.head_pixel_view(view_radius_y, view_radius_x, rotate_to_head, oob_fill_value)?;
+
+        let n = self.frame_stack_n;
+        let valid_u8: Vec<u8> = valid.iter().map(|v| if *v { 1 } else { 0 }).collect();
+        if n <= 1 {
+            return Ok((view, valid_u8, 1, h, w));
+        }
+
+        let key = HeadViewKey {
+            ry: view_radius_y,
+            rx: view_radius_x,
+            rotate: rotate_to_head,
+            param: oob_fill_value,
+        };
+        if let Some(stacker) = self.head_pixel_stack.as_mut() {
+            stacker.update(self.step_counter, key, &view);
+            let stacked = stacker.stacked().to_vec();
+
+            if let Some(vs) = self.head_pixel_valid_stack.as_mut() {
+                vs.update(self.step_counter, key, &valid_u8);
+                let valid_stacked = vs.stacked().to_vec();
+                return Ok((stacked, valid_stacked, n, h, w));
+            }
+        }
+        Ok((view, valid_u8, 1, h, w))
+    }
+
     pub fn tile_grid(&self) -> &[u8] {
         &self.tile_grid
     }
 
+    pub fn tile_grid_stacked(&self) -> (Vec<u8>, usize, usize, usize) {
+        let n = self.frame_stack_n;
+        if n <= 1 {
+            return (self.tile_grid.clone(), 1, self.height, self.width);
+        }
+        if let Some(stacker) = self.world_tile_stack.as_ref() {
+            return (stacker.stacked().to_vec(), n, self.height, self.width);
+        }
+        (self.tile_grid.clone(), 1, self.height, self.width)
+    }
+
     pub fn pixel_grid(&self) -> &[u8] {
         &self.pixel_grid
+    }
+
+    pub fn pixel_grid_stacked(&self) -> (Vec<u8>, usize, usize, usize) {
+        let n = self.frame_stack_n;
+        let h = self.height * self.tile_size;
+        let w = self.width * self.tile_size;
+        if n <= 1 {
+            return (self.pixel_grid.clone(), 1, h, w);
+        }
+        if let Some(stacker) = self.world_pixel_stack.as_ref() {
+            return (stacker.stacked().to_vec(), n, h, w);
+        }
+        (self.pixel_grid.clone(), 1, h, w)
     }
 
     pub fn width(&self) -> usize {
@@ -353,6 +467,10 @@ impl SnakeEngine {
         self.tile_size
     }
 
+    pub fn frame_stack_n(&self) -> usize {
+        self.frame_stack_n
+    }
+
     pub fn score(&self) -> i32 {
         self.score
     }
@@ -361,12 +479,52 @@ impl SnakeEngine {
         self.running
     }
 
+    pub fn episode_steps(&self) -> u64 {
+        self.step_counter
+    }
+
     pub fn direction(&self) -> Option<i8> {
         self.direction
     }
 
+    pub fn direction_id(&self) -> u8 {
+        match self.direction {
+            Some(d) => ((d % 4 + 4) % 4) as u8,
+            None => 0,
+        }
+    }
+
     pub fn snake_len(&self) -> usize {
         self.snake.len()
+    }
+
+    pub fn snake_progress(&self) -> f32 {
+        let max_playable = self.max_playable_tiles();
+        if max_playable <= self.initial_snake_len {
+            return 0.0;
+        }
+        let denom = (max_playable - self.initial_snake_len) as f32;
+        let num = (self.snake.len().saturating_sub(self.initial_snake_len)) as f32;
+        let mut v = num / denom;
+        if v < 0.0 {
+            v = 0.0;
+        }
+        if v > 1.0 {
+            v = 1.0;
+        }
+        v
+    }
+
+    pub fn time_since_food_norm(&self, max_steps: usize) -> f32 {
+        let denom = max_steps.max(1) as f32;
+        let v = (self.steps_since_food.min(max_steps)) as f32 / denom;
+        if v < 0.0 {
+            0.0
+        } else if v > 1.0 {
+            1.0
+        } else {
+            v
+        }
     }
 
     pub fn head_pos(&self) -> (i32, i32) {
@@ -386,6 +544,95 @@ impl SnakeEngine {
             .collect()
     }
 
+    pub fn closest_food(&self) -> Option<(i32, i32, i32)> {
+        if self.food.is_empty() {
+            return None;
+        }
+        let (hx, hy) = self.head_pos();
+        let mut best: Option<(i32, i32, i32)> = None;
+        for &i in self.food.iter() {
+            let fx = (i % self.width) as i32;
+            let fy = (i / self.width) as i32;
+            let dx = fx - hx;
+            let dy = fy - hy;
+            let dist = dx.abs() + dy.abs();
+            match best {
+                None => best = Some((dx, dy, dist)),
+                Some((_bx, _by, bd)) if dist < bd => best = Some((dx, dy, dist)),
+                _ => {}
+            }
+        }
+        best
+    }
+
+    pub fn closest_food_norm(&self, metric: u8) -> (f32, f32, f32) {
+        let (dx, dy, _dist) = match self.closest_food() {
+            Some(v) => v,
+            None => (0, 0, 0),
+        };
+
+        let w = (self.width.saturating_sub(1)).max(1) as f32;
+        let h = (self.height.saturating_sub(1)).max(1) as f32;
+        let dx_f = (dx as f32) / w;
+        let dy_f = (dy as f32) / h;
+
+        let dist_f = match metric {
+            1 => {
+                let denom = (w * w + h * h).sqrt();
+                if denom <= 0.0 {
+                    0.0
+                } else {
+                    let d2 = (dx * dx + dy * dy) as f32;
+                    d2.sqrt() / denom
+                }
+            }
+            2 => {
+                let denom = w * w + h * h;
+                if denom <= 0.0 {
+                    0.0
+                } else {
+                    let d2 = (dx * dx + dy * dy) as f32;
+                    d2 / denom
+                }
+            }
+            _ => {
+                let denom = w + h;
+                if denom <= 0.0 {
+                    0.0
+                } else {
+                    let d1 = (dx.abs() + dy.abs()) as f32;
+                    d1 / denom
+                }
+            }
+        };
+
+        let dist_clamped = if dist_f < 0.0 {
+            0.0
+        } else if dist_f > 1.0 {
+            1.0
+        } else {
+            dist_f
+        };
+
+        (dx_f, dy_f, dist_clamped)
+    }
+
+    pub fn steps_since_food(&self) -> usize {
+        self.steps_since_food
+    }
+
+    pub fn collision_flags(&self) -> (bool, bool, bool) {
+        let dir = match self.direction {
+            Some(d) => d,
+            None => return (false, false, false),
+        };
+        (
+            self.would_collide(dir),
+            self.would_collide(dir_turn_left(dir)),
+            self.would_collide(dir_turn_right(dir)),
+        )
+    }
+
     pub fn max_playable_tiles(&self) -> usize {
         self.width * self.height - self.wall_count
     }
@@ -403,6 +650,29 @@ impl SnakeEngine {
 }
 
 impl SnakeEngine {
+    fn would_collide(&self, dir: i8) -> bool {
+        if self.snake.is_empty() {
+            return false;
+        }
+        let (dx, dy) = dir_vec(dir);
+        let head_idx = self.snake[0];
+        let head_x = (head_idx % self.width) as i32;
+        let head_y = (head_idx / self.width) as i32;
+        let nx = head_x + dx;
+        let ny = head_y + dy;
+        if nx < 0 || ny < 0 || nx >= self.width as i32 || ny >= self.height as i32 {
+            return true;
+        }
+        let nidx = idx(nx, ny, self.width);
+        if self.wall_mask[nidx] {
+            return true;
+        }
+        if self.snake_mask[nidx] {
+            return true;
+        }
+        false
+    }
+
     fn spawn_snake(&mut self) -> Result<(), EngineError> {
         let length = if self.spawn_len < 2 {
             2
@@ -585,6 +855,13 @@ impl SnakeEngine {
         }
 
         self.rebuild_grids();
+        self.step_counter = self.step_counter.wrapping_add(1);
+        if result & MOVE_FOOD != 0 {
+            self.steps_since_food = 0;
+        } else {
+            self.steps_since_food = self.steps_since_food.saturating_add(1);
+        }
+        self.update_world_stacks(false);
         Ok(result)
     }
 
@@ -642,6 +919,27 @@ impl SnakeEngine {
                     self.pixel_grid[row_start..row_start + ts]
                         .copy_from_slice(&tile[tile_row_start..tile_row_start + ts]);
                 }
+            }
+        }
+    }
+
+    fn update_world_stacks(&mut self, reset: bool) {
+        let n = self.frame_stack_n;
+        if n <= 1 {
+            return;
+        }
+        if let Some(stack) = self.world_tile_stack.as_mut() {
+            if reset {
+                stack.reset_with(&self.tile_grid);
+            } else {
+                stack.push(&self.tile_grid);
+            }
+        }
+        if let Some(stack) = self.world_pixel_stack.as_mut() {
+            if reset {
+                stack.reset_with(&self.pixel_grid);
+            } else {
+                stack.push(&self.pixel_grid);
             }
         }
     }

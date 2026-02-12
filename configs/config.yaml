@@ -3,7 +3,7 @@ defaults:
   - board: classic
   - reward: default
   - env: head_pixel
-  - feature_extractor: px_strided_cnn_l1k4
+  - feature_extractor: snake_pixel_cnn
   - train: ppo
   - logging: default
   - _self_

@@ -3,38 +3,12 @@ from __future__ import annotations
 
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
-# pixel-based CNNs
-from snake_rl.models.cnns.px_nature_cnn import PxNatureCNN
-from snake_rl.models.cnns.px_snake_world import PxSnakeWorld
-from snake_rl.models.cnns.px_strided_cnn_l1k4 import PxStridedCNN_L1K4
-from snake_rl.models.cnns.px_strided_cnn_l2_s2s2_k4 import PxStridedCNN_L2_S2S2_K4
-from snake_rl.models.cnns.px_strided_cnn_l3k4 import PxStridedCNN_L3K4
-from snake_rl.models.cnns.px_strided_cnn_l3k8 import PxStridedCNN_L3K8
-
-# categorical models
-from snake_rl.models.mlps.tile_mlp_extractor import TileMLPExtractor
-
-# hybrid CNN â†’ ViT
-from snake_rl.models.vits.px_cnn_vit_extractor import PxCnnViTExtractor
-from snake_rl.models.vits.tile_vit_extractor import TileViTExtractor
+from snake_rl.models.sb3.extractors import SnakeExtractor
 
 FEATURE_EXTRACTOR_REGISTRY: dict[str, type[BaseFeaturesExtractor]] = {
-    # pixel-based CNNs
-    "px_strided_cnn_l1k4": PxStridedCNN_L1K4,
-    "px_strided_cnn_l2_s2s2_k4": PxStridedCNN_L2_S2S2_K4,
-    "px_strided_cnn_l3k4": PxStridedCNN_L3K4,
-    "px_strided_cnn_l3k8": PxStridedCNN_L3K8,
-    "px_nature_cnn": PxNatureCNN,
-    "px_snake_world": PxSnakeWorld,
-    "px_snake_global": PxSnakeWorld,
-    # hybrid CNN â†’ ViT
-    "px_cnn_vit": PxCnnViTExtractor,
-    # categorical models
-    "tile_vit": TileViTExtractor,
-    "tile_mlp": TileMLPExtractor,
+    "snake_unified": SnakeExtractor,
 }
 
 
 def available_feature_extractors() -> list[str]:
-    """Return sorted list of available feature extractor keys."""
     return sorted(FEATURE_EXTRACTOR_REGISTRY.keys())

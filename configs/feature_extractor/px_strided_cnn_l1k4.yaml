@@ -1,4 +1,0 @@
-feature_extractor:
-  type: px_strided_cnn_l1k4
-  features_dim: 512
-  params: {}

@@ -3,7 +3,7 @@ defaults:
   - board: small
   - reward: default
   - env: world_categorical
-  - feature_extractor: tile_mlp
+  - feature_extractor: snake_categorical_mlp
   - train: ppo
   - logging: default
   - _self_

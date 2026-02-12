@@ -87,7 +87,7 @@ class ObservationConfig:
       View/mode specific parameters (e.g. view_radius, rotate_to_head, remove_border).
 
     features:
-      Optional extra features such as direction or fill.
+      Optional global features such as direction, snake_progress, and food metrics.
     """
 
     kind: str
@@ -118,9 +118,9 @@ class FeaturesExtractorConfig:
     The PPO policy head (action/value networks) is kept fixed.
 
     type:
-      Feature extractor key (see models/registry.py), e.g.:
-        - px_*    : pixel-based CNNs
-        - tile_*  : categorical models (MLP, ViT, ...)
+      Feature extractor key (see models/registry.py).
+      Use the unified extractor:
+        - snake_unified: configurable stem + mixer + pooling
 
     features_dim:
       Output feature dimension exposed to the policy MLP.

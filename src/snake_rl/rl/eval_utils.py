@@ -21,7 +21,7 @@ from snake_rl.config.access import (
 )
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
-from snake_rl.rl.env_factory import apply_frame_stack, make_single_env
+from snake_rl.rl.env_factory import make_single_env
 from snake_rl.rl.rust_vec_env import RustVecEnv
 from snake_rl.utils.obs import sanitize_observation
 
@@ -67,6 +67,8 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
     obs_spec.view_norm()
     action_spec = ActionSpec(type=str(get_env_action(cfg)))
 
+    n_stack = get_frame_stack_n(cfg)
+
     if engine == "rust":
         reward = _get_reward_from_cfg(cfg)
         board_cfg = get_board_params(cfg)
@@ -82,18 +84,12 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
             reward=reward,
             num_envs=len(seeds),
             seeds=seeds,
+            frame_stack_n=int(n_stack),
         )
     else:
-        env_fns = [make_single_env(cfg=cfg, seed=int(s)) for s in seeds]
+        env_fns = [make_single_env(cfg=cfg, seed=int(s), frame_stack_n=int(n_stack)) for s in seeds]
         env_fns = cast(list[Callable[[], Env]], env_fns)
         vec = DummyVecEnv(env_fns) if len(env_fns) == 1 else SubprocVecEnv(env_fns)
-
-    n_stack = get_frame_stack_n(cfg)
-    vec = apply_frame_stack(
-        vec_env=vec,
-        n_stack=n_stack,
-        pixel_key=str(obs_spec.frame_stack_key() or pixel_key),
-    )
     return vec
 
 

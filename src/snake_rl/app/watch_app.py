@@ -21,7 +21,6 @@ from snake_rl.envs.snake_env import SnakeEnv
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snake_engine import SnakeEngine
-from snake_rl.rl.env_factory import apply_frame_stack
 from snake_rl.utils.checkpoints import pick_checkpoint
 from snake_rl.utils.logging import setup_logger
 from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
@@ -30,11 +29,12 @@ from snake_rl.utils.obs import sanitize_observation
 from snake_rl.utils.paths import relpath, repo_root, resolve_run_dir
 
 
-def _make_engine_from_board_params(board: dict[str, int]) -> SnakeEngine:
+def _make_engine_from_board_params(board: dict[str, int], frame_stack_n: int) -> SnakeEngine:
     core_board = core.Board(width=int(board["width"]), height=int(board["height"]))
     return SnakeEngine(
         board=core_board,
         food_count=int(board["food_count"]),
+        frame_stack_n=int(frame_stack_n),
     )
 
 
@@ -192,8 +192,9 @@ def main() -> None:
     logger.info(format_sb3_param_summary(model))
     logger.info(format_sb3_param_report(model))
 
+    n_stack = int(get_frame_stack_n(cfg))
     board = get_board_params(cfg)
-    game = _make_engine_from_board_params(board)
+    game = _make_engine_from_board_params(board, frame_stack_n=int(n_stack))
 
     obs_cfg = dict(get_env_obs(cfg))
     obs_spec = ObservationSpec(
@@ -206,7 +207,12 @@ def main() -> None:
     obs_spec.view_norm()
     action_spec = ActionSpec(type=str(get_env_action(cfg)))
 
-    base_env = SnakeEnv(game, obs=obs_spec, action=action_spec)
+    base_env = SnakeEnv(
+        game,
+        obs=obs_spec,
+        action=action_spec,
+        frame_stack_n=int(n_stack),
+    )
 
     # IMPORTANT:
     # Seeding happens at the ENV level, not the game.
@@ -215,13 +221,6 @@ def main() -> None:
 
     vec_env = DummyVecEnv([lambda: base_env])
     vec_env = VecMonitor(vec_env)
-
-    n_stack = int(get_frame_stack_n(cfg))
-    vec_env = apply_frame_stack(
-        vec_env=vec_env,
-        n_stack=n_stack,
-        pixel_key=str(obs_spec.frame_stack_key() or "pixel"),
-    )
 
     controller = WatchController(
         vec_env=vec_env,
@@ -249,6 +248,16 @@ def main() -> None:
                 enable_human_input=False,
                 agent_view_spec=obs_spec,
                 agent_view_vocab=obs_spec.load_tile_vocab(),
+                hud_mode="selected",
+                hud_features=obs_spec.features,
+                hud_info={
+                    "mode": "watch",
+                    "run": run_dir.name,
+                    "which": str(args.which),
+                    "seed": str(args.seed),
+                    "obs": f"{obs_spec.kind_norm()}/{obs_spec.view_norm()}",
+                    "action": str(action_spec.type),
+                },
             ),
             step_fn=_controller_step,
         )

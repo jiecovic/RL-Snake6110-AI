@@ -48,8 +48,6 @@ def obs_last_frame_and_kind(
     # Explicit override if the caller already knows the kind.
     if kind_hint is not None:
         kind = str(kind_hint).strip().lower()
-        if kind in {"tile_id", "tile"}:
-            kind = "categorical"
         if kind not in {"pixel", "mask01", "categorical"}:
             raise ValueError(
                 f"kind_hint must be one of pixel|mask01|categorical, got {kind_hint!r}"
@@ -140,18 +138,6 @@ def categorical_frame_to_pixels(
             out[y0 : y0 + td, x0 : x0 + td] = tile
 
     return out
-
-
-def tile_id_frame_to_pixels(
-    tile_ids: np.ndarray,  # (H,W) uint8 of Rust tile ids
-    *,
-    tiles: np.ndarray | None = None,
-    tile_size: int | None = None,
-) -> np.ndarray:
-    """
-    Back-compat alias for categorical_frame_to_pixels.
-    """
-    return categorical_frame_to_pixels(tile_ids, tiles=tiles, tile_size=tile_size)
 
 
 def obs_frame_to_pixels(

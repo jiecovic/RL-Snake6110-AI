@@ -27,12 +27,19 @@ class Rect:
 @dataclass(slots=True)
 class LayoutConfig:
     margin: int = 14
-    panel_gap: int = 14
+    panel_gap: int = 8
     panel_padding: int = 10
     panel_label_height: int = 20
-    hud_height: int = 140
-    hud_padding_x: int = 14
+    hud_height: int = 260
+    hud_min_width: int = 1040
+    hud_padding_x: int = 10
     hud_padding_y: int = 10
+    hud_col_gap: int = 0
+    hud_col_w_status: int = 180
+    hud_col_w_perf: int = 200
+    hud_col_w_info: int = 220
+    hud_col_min: int = 160
+    hud_col_last_min: int = 220
     font_name: str = "Consolas"
     font_size: int = 18
     label_font_size: int = 16
@@ -84,6 +91,8 @@ def create_pygame_context(
     margin = int(cfg.margin)
 
     world_panel_w = world_w + 2 * panel_pad
+    if int(cfg.hud_min_width) > 0:
+        world_panel_w = max(world_panel_w, int(cfg.hud_min_width))
     world_panel_h = world_h + 2 * panel_pad + label_h
 
     agent_panel_w = 0
