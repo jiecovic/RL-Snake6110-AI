@@ -49,12 +49,12 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--episodes", type=int, default=20)
 
-    # None => default from config_snapshot.yaml (run.num_envs), clamped to <= episodes
+    # None => default from config_snapshot.yaml (env.num_envs), clamped to <= episodes
     p.add_argument(
         "--num-envs",
         type=int,
         default=None,
-        help="Parallel eval envs. Default: run.num_envs from config_snapshot.yaml.",
+        help="Parallel eval envs. Default: env.num_envs from config_snapshot.yaml.",
     )
 
     p.add_argument("--deterministic", action="store_true")
@@ -137,7 +137,7 @@ def main() -> None:
     logger.info(f"[eval] config={cfg_path}")
     logger.info(f"[eval] episodes={int(args.episodes)} deterministic={bool(args.deterministic)}")
 
-    # Default num_envs: from snapshot config (run.num_envs), but never exceed episodes
+    # Default num_envs: from snapshot config (env.num_envs), but never exceed episodes
     if args.num_envs is None:
         try:
             cfg_num_envs = int(get_run_num_envs(cfg))

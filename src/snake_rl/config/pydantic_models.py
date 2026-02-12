@@ -8,6 +8,7 @@ from snake_rl.config.schema import (
     ActionConfig,
     AlgoConfig,
     BoardConfig,
+    CheckpointConfig,
     EnvConfig,
     EvalConfig,
     FeaturesExtractorConfig,
@@ -29,10 +30,36 @@ class _BaseConfigModel(BaseModel):
 class RunConfigModel(_BaseConfigModel):
     name: str
     seed: int
-    num_envs: int
+    num_envs: int = 12
+    vec: str = "dummy"
+    checkpoint: "CheckpointConfigModel" = Field(default_factory=lambda: CheckpointConfigModel())
     total_timesteps: int
-    checkpoint_freq: int
     resume_checkpoint: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_legacy_checkpoint_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        payload = dict(data)
+        checkpoint = dict(payload.get("checkpoint") or {})
+        if "checkpoint_freq" in payload and "freq" not in checkpoint:
+            checkpoint["freq"] = payload.pop("checkpoint_freq")
+        if "eval" in payload and "eval" not in checkpoint:
+            checkpoint["eval"] = payload.pop("eval")
+        if checkpoint:
+            payload["checkpoint"] = checkpoint
+        return payload
+
+    @field_validator("vec")
+    @classmethod
+    def _normalize_vec(cls, v: str) -> str:
+        s = str(v).strip().lower()
+        if s == "auto":
+            return "dummy"
+        if s not in {"dummy", "subproc", "rust"}:
+            raise ValueError("run.vec must be one of: dummy, subproc, rust")
+        return s
 
 
 class BoardConfigModel(_BaseConfigModel):
@@ -84,10 +111,20 @@ class FrameStackConfigModel(_BaseConfigModel):
 
 
 class EnvConfigModel(_BaseConfigModel):
-    engine: str = "python"
     action: ActionConfigModel = Field(default_factory=ActionConfigModel)
     obs: ObservationConfigModel
     frame_stack: FrameStackConfigModel = Field(default_factory=FrameStackConfigModel)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_engine(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data.pop("engine", None)
+        data.pop("num_envs", None)
+        data.pop("vec", None)
+        return data
 
 
 class FeaturesExtractorConfigModel(_BaseConfigModel):
@@ -136,6 +173,11 @@ class EvalConfigModel(_BaseConfigModel):
         return data
 
 
+class CheckpointConfigModel(_BaseConfigModel):
+    freq: int = 10_000
+    eval: EvalConfigModel = Field(default_factory=EvalConfigModel)
+
+
 class MetricsGroupConfigModel(_BaseConfigModel):
     keys: list[str] = Field(default_factory=list)
     termination: bool = True
@@ -148,7 +190,6 @@ class MetricsConfigModel(_BaseConfigModel):
 
 class TrainLoopConfigModel(_BaseConfigModel):
     algo: AlgoConfigModel = Field(default_factory=AlgoConfigModel)
-    eval: EvalConfigModel = Field(default_factory=EvalConfigModel)
 
 
 class TrainConfigModel(_BaseConfigModel):
@@ -160,14 +201,84 @@ class TrainConfigModel(_BaseConfigModel):
     train: TrainLoopConfigModel = Field(default_factory=TrainLoopConfigModel)
     metrics: MetricsConfigModel = Field(default_factory=MetricsConfigModel)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_algo_group(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        payload = dict(data)
+        if "algo" in payload and "train" not in payload:
+            train = {"algo": payload.pop("algo")}
+            payload["train"] = train
+        elif "train" in payload and "algo" in payload:
+            payload.pop("algo", None)
+        return payload
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_legacy_env_vec(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        payload = dict(data)
+        run = dict(payload.get("run") or {})
+        env = dict(payload.get("env") or {})
+        if "num_envs" not in run and "num_envs" in env:
+            run["num_envs"] = env.pop("num_envs")
+        if "vec" not in run and "vec" in env:
+            run["vec"] = env.pop("vec")
+        if env:
+            payload["env"] = env
+        if run:
+            payload["run"] = run
+        return payload
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_eval_to_run(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        payload = dict(data)
+        run = dict(payload.get("run") or {})
+        train = dict(payload.get("train") or {})
+        checkpoint = dict(run.get("checkpoint") or {})
+
+        if "eval" in payload and "eval" not in run:
+            checkpoint["eval"] = payload.pop("eval")
+
+        if "eval" in train and "eval" not in run:
+            checkpoint["eval"] = train.pop("eval")
+            payload["train"] = train
+
+        if "checkpoint_freq" in payload and "checkpoint" not in run:
+            checkpoint["freq"] = payload.pop("checkpoint_freq")
+
+        if "checkpoint_freq" in run and "freq" not in checkpoint:
+            checkpoint["freq"] = run.pop("checkpoint_freq")
+
+        if checkpoint:
+            run["checkpoint"] = checkpoint
+
+        if run:
+            payload["run"] = run
+        return payload
+
     def to_dataclass(self) -> TrainConfig:
         return TrainConfig(
             run=RunConfig(
                 name=self.run.name,
                 seed=int(self.run.seed),
                 num_envs=int(self.run.num_envs),
+                vec=str(self.run.vec),
+                checkpoint=CheckpointConfig(
+                    freq=int(self.run.checkpoint.freq),
+                    eval=EvalConfig(
+                        enabled=bool(self.run.checkpoint.eval.enabled),
+                        episodes=int(self.run.checkpoint.eval.episodes),
+                        deterministic=bool(self.run.checkpoint.eval.deterministic),
+                        seed_offset=int(self.run.checkpoint.eval.seed_offset),
+                    ),
+                ),
                 total_timesteps=int(self.run.total_timesteps),
-                checkpoint_freq=int(self.run.checkpoint_freq),
                 resume_checkpoint=self.run.resume_checkpoint,
             ),
             board=BoardConfig(
@@ -185,7 +296,6 @@ class TrainConfigModel(_BaseConfigModel):
                 timeout_penalty=float(self.reward.timeout_penalty),
             ),
             env=EnvConfig(
-                engine=str(self.env.engine),
                 action=ActionConfig(
                     type=str(self.env.action.type),
                 ),
@@ -209,12 +319,6 @@ class TrainConfigModel(_BaseConfigModel):
                     type=str(self.train.algo.type),
                     params=dict(self.train.algo.params),
                 ),
-                eval=EvalConfig(
-                    enabled=bool(self.train.eval.enabled),
-                    episodes=int(self.train.eval.episodes),
-                    deterministic=bool(self.train.eval.deterministic),
-                    seed_offset=int(self.train.eval.seed_offset),
-                ),
             ),
             metrics=MetricsConfig(
                 eval=MetricsGroupConfig(
@@ -232,6 +336,7 @@ class TrainConfigModel(_BaseConfigModel):
 __all__ = [
     "AlgoConfigModel",
     "ActionConfigModel",
+    "CheckpointConfigModel",
     "EnvConfigModel",
     "EvalConfigModel",
     "MetricsConfigModel",

@@ -100,12 +100,14 @@ class SnakeExtractor(BaseFeaturesExtractor):
 
         self.pos_enc: GridPositionalEncoding | None = None
         if self.grid is not None:
-            self.pos_enc = GridPositionalEncoding(
-                h=int(self.grid[0]),
-                w=int(self.grid[1]),
-                d_model=self.d_model,
-                pos_mode=str(pos_mode),
-            )
+            pos_mode = str(pos_mode)
+            if pos_mode and pos_mode != "none":
+                self.pos_enc = GridPositionalEncoding(
+                    h=int(self.grid[0]),
+                    w=int(self.grid[1]),
+                    d_model=self.d_model,
+                    pos_mode=pos_mode,
+                )
 
         self.use_cls_token = bool(use_cls_token)
         self.cls_token: torch.Tensor | None = None

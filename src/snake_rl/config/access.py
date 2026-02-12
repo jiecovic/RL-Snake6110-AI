@@ -48,13 +48,20 @@ def get_run_seed(cfg: Any) -> int:
 
 
 def get_run_num_envs(cfg: Any) -> int:
-    return require_int(cfg, "run.num_envs")
-
-
-def get_env_engine(cfg: Any) -> str:
-    v = cfg_get(cfg, "env.engine", None)
+    v = cfg_get(cfg, "run.num_envs", None)
     if v is None:
-        return "python"
+        v = cfg_get(cfg, "env.num_envs", None)
+    if v is None:
+        raise KeyError("Config missing run.num_envs")
+    return int(v)
+
+
+def get_run_vec(cfg: Any) -> str:
+    v = cfg_get(cfg, "run.vec", None)
+    if v is None:
+        v = cfg_get(cfg, "env.vec", None)
+    if v is None:
+        return "dummy"
     return str(v)
 
 

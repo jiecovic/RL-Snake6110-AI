@@ -6,16 +6,6 @@ from typing import Any
 
 
 @dataclass(frozen=True)
-class RunConfig:
-    name: str
-    seed: int
-    num_envs: int
-    total_timesteps: int
-    checkpoint_freq: int
-    resume_checkpoint: str | None = None
-
-
-@dataclass(frozen=True)
 class BoardConfig:
     height: int
     width: int
@@ -99,7 +89,6 @@ class ObservationConfig:
 @dataclass(frozen=True)
 class EnvConfig:
     obs: ObservationConfig
-    engine: str = "python"
     action: ActionConfig = field(default_factory=ActionConfig)
     frame_stack: FrameStackConfig = field(default_factory=FrameStackConfig)
 
@@ -148,6 +137,23 @@ class EvalConfig:
     seed_offset: int = 10_000
 
 
+@dataclass(frozen=True)
+class CheckpointConfig:
+    freq: int = 10_000
+    eval: EvalConfig = field(default_factory=lambda: EvalConfig())
+
+
+@dataclass(frozen=True)
+class RunConfig:
+    name: str
+    seed: int
+    num_envs: int
+    vec: str
+    total_timesteps: int
+    checkpoint: CheckpointConfig = field(default_factory=lambda: CheckpointConfig())
+    resume_checkpoint: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Metrics logging configuration
 # ---------------------------------------------------------------------------
@@ -184,7 +190,6 @@ class AlgoConfig:
 @dataclass(frozen=True)
 class TrainLoopConfig:
     algo: AlgoConfig = field(default_factory=AlgoConfig)
-    eval: EvalConfig = field(default_factory=EvalConfig)
 
 
 # ---------------------------------------------------------------------------

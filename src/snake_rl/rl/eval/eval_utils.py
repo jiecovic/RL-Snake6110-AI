@@ -8,16 +8,16 @@ from typing import Any, cast
 
 import numpy as np
 from gymnasium import Env
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
 from snake_rl import _core as core
 from snake_rl.config.access import (
     get_board_params,
     get_env_action,
-    get_env_engine,
     get_env_obs,
     get_frame_stack_n,
+    get_run_vec,
 )
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
@@ -32,7 +32,7 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
     if len(seeds) <= 0:
         raise ValueError("seeds must be non-empty")
 
-    engine = str(get_env_engine(cfg)).lower()
+    vec_kind = str(get_run_vec(cfg)).lower()
     obs_cfg = dict(get_env_obs(cfg))
     obs_spec = ObservationSpec(
         kind=str(obs_cfg.get("kind")),
@@ -46,7 +46,7 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
 
     n_stack = get_frame_stack_n(cfg)
 
-    if engine == "rust":
+    if vec_kind == "rust":
         reward = _get_reward_from_cfg(cfg)
         board_cfg = get_board_params(cfg)
         board = core.Board(
@@ -66,7 +66,10 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
     else:
         env_fns = [make_single_env(cfg=cfg, seed=int(s), frame_stack_n=int(n_stack)) for s in seeds]
         env_fns = cast(list[Callable[[], Env]], env_fns)
-        vec = DummyVecEnv(env_fns) if len(env_fns) == 1 else SubprocVecEnv(env_fns)
+        if vec_kind in {"dummy", "subproc"}:
+            vec = DummyVecEnv(env_fns)
+        else:
+            raise ValueError("run.vec must be one of: dummy, subproc, rust")
     return vec
 
 
@@ -239,7 +242,8 @@ def evaluate_model(
         Metrics.EP_WIN_RATE: float(wins / float(episodes)),
         Metrics.ENV_OBS: dict(get_env_obs(cfg)),
         Metrics.ENV_ACTION: str(get_env_action(cfg)),
-        Metrics.ENV_ENGINE: str(get_env_engine(cfg)),
+        Metrics.ENV_ENGINE: "rust",
+        Metrics.ENV_VEC: str(get_run_vec(cfg)),
     }
 
     with suppress(Exception):

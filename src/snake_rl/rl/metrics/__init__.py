@@ -32,6 +32,7 @@ class Metrics:
     ENV_OBS = "env_obs"
     ENV_ACTION = "env_action"
     ENV_ENGINE = "env_engine"
+    ENV_VEC = "env_vec"
 
 
 def eval_metric_keys() -> tuple[str, ...]:

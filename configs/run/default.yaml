@@ -1,6 +1,13 @@
-name: snake_run             # Run name (used for run folder naming).
-seed: 42                    # RNG seed for training.
-num_envs: 12                # Number of parallel environments.
-total_timesteps: 1_000_000  # Total training timesteps.
-checkpoint_freq: 10_000     # Checkpoint frequency (in timesteps).
-resume_checkpoint: null     # Optional checkpoint path to resume from (null = no resume).
+name: snake_run               # Run name (used for run folder naming).
+seed: 42                      # RNG seed for training.
+num_envs: 12                  # Number of parallel environments.
+vec: rust                     # Vectorization: dummy|subproc|rust (subproc currently aliases dummy).
+total_timesteps: 100_000_000  # Total training timesteps.
+checkpoint:                   # Checkpointing + periodic eval (runner settings, not SB3 params).
+  freq: 100_000                # Save checkpoint + eval every N steps.
+  eval:                       # Periodic evaluation configuration.
+    enabled: true             # Enable eval during training.
+    episodes: 1000            # Number of episodes per eval.
+    deterministic: true       # Use deterministic policy for eval.
+    seed_offset: 10000        # Seed offset added to training seed for eval.
+resume_checkpoint: null       # Optional checkpoint path to resume from (null = no resume).

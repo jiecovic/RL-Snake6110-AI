@@ -1,6 +1,6 @@
 max_steps_factor: 1.3    # Max steps = max playable tiles * factor.
 win_reward: 5.0          # Reward added on win.
-food_reward: 2.5         # Reward added per food eaten.
+food_reward: 3.0         # Reward added per food eaten.
 food_speed_bonus: 1.0    # Bonus for eating quickly (scaled by time since last food).
 fatal_penalty: 5.0       # Penalty on fatal termination (wall/self/boundary).
 step_penalty_scale: 1.0  # Per-step penalty scale (normalized by max steps).

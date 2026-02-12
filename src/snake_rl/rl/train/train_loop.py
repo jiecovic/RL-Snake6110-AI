@@ -55,15 +55,34 @@ def train(
             resume_path=resume_path,
         )
 
-        logger.info(f"[train] run_id={paths.run_id}")
-        logger.info(f"[train] run_dir={paths.run_dir}")
-        logger.info(f"[train] tb_dir={paths.tb_dir}")
-        logger.info(f"[train] checkpoints={paths.checkpoint_dir}")
-        logger.info(f"[train] obs_space={vec_env.observation_space}")
-        logger.info(f"[train] action_space={vec_env.action_space}")
+        logger.info("[train] run:")
+        logger.info(f"  id={paths.run_id}")
+        logger.info(f"  dir={paths.run_dir}")
+        logger.info(f"  tb={paths.tb_dir}")
+        logger.info(f"  checkpoints={paths.checkpoint_dir}")
+        logger.info(f"  seed={cfg.run.seed} vec={cfg.run.vec} num_envs={cfg.run.num_envs}")
+        logger.info(
+            f"  total_timesteps={cfg.run.total_timesteps:,} "
+            f"checkpoint_freq={cfg.run.checkpoint.freq:,}"
+        )
+        logger.info(
+            f"  eval: enabled={cfg.run.checkpoint.eval.enabled} "
+            f"episodes={cfg.run.checkpoint.eval.episodes} "
+            f"deterministic={cfg.run.checkpoint.eval.deterministic} "
+            f"seed_offset={cfg.run.checkpoint.eval.seed_offset}"
+        )
+        logger.info("[train] env:")
+        logger.info(f"  obs_space={vec_env.observation_space}")
+        logger.info(f"  action_space={vec_env.action_space}")
+        logger.info(
+            f"  obs_spec={cfg.env.obs.kind}/{cfg.env.obs.view} "
+            f"frame_stack={cfg.env.frame_stack.n_frames}"
+        )
+        logger.info(f"  action_spec={cfg.env.action.type}")
+        logger.info(f"  board={cfg.board.width}x{cfg.board.height} food={cfg.board.food_count}")
         logger.info(f"[train] torch={torch.__version__} cuda={torch.cuda.is_available()}")
 
-        log_ppo_params(model=model, cfg=cfg, paths=paths, logger=logger)
+        log_ppo_params(model=model, cfg=cfg, paths=paths, logger=logger, label="train")
 
         callbacks = make_callbacks(cfg=cfg, checkpoint_dir=paths.checkpoint_dir)
 
@@ -77,13 +96,13 @@ def train(
         final_path = paths.checkpoint_dir / "final.zip"
         atomic_save_zip(model=model, dst=final_path)
 
-        if bool(cfg.train.eval.enabled):
-            seed_base = int(cfg.run.seed) + int(cfg.train.eval.seed_offset)
+        if bool(cfg.run.checkpoint.eval.enabled):
+            seed_base = int(cfg.run.seed) + int(cfg.run.checkpoint.eval.seed_offset)
             metrics = evaluate_model(
                 model=model,
                 cfg=cfg,
-                episodes=int(cfg.train.eval.episodes),
-                deterministic=bool(cfg.train.eval.deterministic),
+                episodes=int(cfg.run.checkpoint.eval.episodes),
+                deterministic=bool(cfg.run.checkpoint.eval.deterministic),
                 seed_base=seed_base,
                 num_envs=1,
             )

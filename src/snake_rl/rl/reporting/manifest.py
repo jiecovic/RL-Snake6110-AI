@@ -25,8 +25,17 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "name": cfg.run.name,
             "seed": int(cfg.run.seed),
             "num_envs": int(cfg.run.num_envs),
+            "vec": str(cfg.run.vec),
             "total_timesteps": int(cfg.run.total_timesteps),
-            "checkpoint_freq": int(cfg.run.checkpoint_freq),
+            "checkpoint": {
+                "freq": int(cfg.run.checkpoint.freq),
+                "eval": {
+                    "enabled": bool(cfg.run.checkpoint.eval.enabled),
+                    "episodes": int(cfg.run.checkpoint.eval.episodes),
+                    "deterministic": bool(cfg.run.checkpoint.eval.deterministic),
+                    "seed_offset": int(cfg.run.checkpoint.eval.seed_offset),
+                },
+            },
         },
         "board": {
             "height": int(cfg.board.height),
@@ -43,7 +52,6 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "timeout_penalty": float(cfg.reward.timeout_penalty),
         },
         "env": {
-            "engine": str(cfg.env.engine),
             "action": {"type": str(cfg.env.action.type)},
             "obs": {
                 "kind": str(cfg.env.obs.kind),
@@ -64,12 +72,6 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "algo": {
                 "type": str(cfg.train.algo.type),
                 "params": dict(cfg.train.algo.params),
-            },
-            "eval": {
-                "enabled": bool(cfg.train.eval.enabled),
-                "episodes": int(cfg.train.eval.episodes),
-                "deterministic": bool(cfg.train.eval.deterministic),
-                "seed_offset": int(cfg.train.eval.seed_offset),
             },
         },
         "metrics": {

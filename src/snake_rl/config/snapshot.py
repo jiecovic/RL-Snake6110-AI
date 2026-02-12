@@ -12,11 +12,11 @@ from snake_rl.config.access import (
 from snake_rl.config.access import (
     get_board_params,
     get_env_action,
-    get_env_engine,
     get_env_obs,
     get_frame_stack_n,
     get_run_num_envs,
     get_run_seed,
+    get_run_vec,
     optional_int,
     require_int,
 )
@@ -65,7 +65,7 @@ __all__ = [
     "get_run_seed",
     "get_run_num_envs",
     "get_env_action",
-    "get_env_engine",
+    "get_run_vec",
     "get_env_obs",
     "get_board_params",
     "get_frame_stack_n",

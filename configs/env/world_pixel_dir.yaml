@@ -1,5 +1,4 @@
 ---
-engine: python           # Environment + observation config (board and reward are chosen separately). / Engine implementation ("python" or "rust").
 action:                  # Action spec (relative or cardinal).
   type: relative         # Action type: relative|cardinal.
 obs:                     # Observation spec.

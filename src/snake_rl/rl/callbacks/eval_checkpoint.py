@@ -1,6 +1,7 @@
 # src/snake_rl/rl/callbacks/eval_checkpoint.py
 from __future__ import annotations
 
+import logging
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,14 +9,8 @@ from typing import Any
 
 from stable_baselines3.common.callbacks import BaseCallback
 
-try:
-    # When SB3 progress_bar=True, Rich owns the terminal. Using tqdm.rich prevents
-    # raw cursor-control artifacts (e.g. "[A") caused by competing renderers.
-    from tqdm.rich import tqdm  # type: ignore
-except Exception:  # pragma: no cover
-    from tqdm.auto import tqdm
-
 from snake_rl.rl.eval.eval_utils import evaluate_model
+from snake_rl.rl.eval.table import EvalTablePrinter
 from snake_rl.rl.metrics import (
     Metrics,
     eval_metric_keys,
@@ -71,6 +66,17 @@ class EvalCheckpointCallback(BaseCallback):
             "win": None,
         }
         self._last_ckpt_at: int = 0
+        self._next_ckpt_at: int = (
+            int(self.checkpoint_freq_steps) if self.checkpoint_freq_steps > 0 else 0
+        )
+        self._table = EvalTablePrinter()
+        self._log = logging.getLogger("snake_rl.train")
+
+    def _table_print(self, line: str) -> None:
+        if self._log.handlers:
+            self._log.info(line)
+        else:
+            print(line, flush=True)
 
     def _rel(self, p: Path) -> str:
         try:
@@ -95,13 +101,20 @@ class EvalCheckpointCallback(BaseCallback):
                         self._best_values[key] = float(v)
                     except Exception:
                         self._best_values[key] = None
+        if self.checkpoint_freq_steps > 0:
+            current = int(self.num_timesteps)
+            if current <= 0:
+                self._next_ckpt_at = int(self.checkpoint_freq_steps)
+            else:
+                freq = int(self.checkpoint_freq_steps)
+                self._next_ckpt_at = ((current // freq) + 1) * freq
 
     def _should_checkpoint_now(self) -> bool:
         if self.checkpoint_freq_steps <= 0:
             return False
         if self.num_timesteps == self._last_ckpt_at:
             return False
-        return (self.num_timesteps % self.checkpoint_freq_steps) == 0
+        return self.num_timesteps >= self._next_ckpt_at
 
     def _update_state_latest(self, state: dict) -> dict:
         state["latest"] = {
@@ -182,17 +195,6 @@ class EvalCheckpointCallback(BaseCallback):
         state = self._update_state_best(state, metric=key, value=float(value), path=path)
         write_json(self.state_path, state)
 
-        if self.verbose > 0:
-            label = {
-                "reward": "mean_reward",
-                "score": "mean_score",
-                "win": "win_rate",
-            }.get(key, key)
-            print(
-                f"[ckpt] best_{key} @ {self.num_timesteps}: {self._rel(path)} "
-                f"({label}={float(value):.6g})",
-                flush=True,
-            )
         return True
 
     def _on_step(self) -> bool:
@@ -200,6 +202,8 @@ class EvalCheckpointCallback(BaseCallback):
             return True
 
         self._last_ckpt_at = int(self.num_timesteps)
+        while self._next_ckpt_at <= self.num_timesteps:
+            self._next_ckpt_at += int(self.checkpoint_freq_steps)
 
         atomic_save_zip(model=self.model, dst=self.latest_path)
 
@@ -207,14 +211,9 @@ class EvalCheckpointCallback(BaseCallback):
         state = self._update_state_latest(state)
         write_json(self.state_path, state)
 
-        if self.verbose > 0:
-            print(
-                f"[ckpt] latest @ {self.num_timesteps}: {self._rel(self.latest_path)}",
-                flush=True,
-            )
-
-        train_cfg = getattr(self.cfg, "train", None)
-        eval_cfg = getattr(train_cfg, "eval", None) if train_cfg is not None else None
+        run_cfg = getattr(self.cfg, "run", None)
+        checkpoint_cfg = getattr(run_cfg, "checkpoint", None) if run_cfg is not None else None
+        eval_cfg = getattr(checkpoint_cfg, "eval", None) if checkpoint_cfg is not None else None
         if eval_cfg is None or not bool(getattr(eval_cfg, "enabled", False)):
             return True
 
@@ -222,42 +221,15 @@ class EvalCheckpointCallback(BaseCallback):
         episodes = int(getattr(eval_cfg, "episodes", 10))
         deterministic = bool(getattr(eval_cfg, "deterministic", True))
 
-        if self.verbose > 0:
-            print(
-                f"[eval] start @ {self.num_timesteps}: "
-                f"episodes={episodes} deterministic={deterministic}",
-                flush=True,
-            )
+        # Table output will show eval rows; avoid separate start/done lines.
 
-        pbar: Any | None = None
-        if self.verbose > 0:
-            pbar = tqdm(
-                total=episodes,
-                desc=f"eval@{self.num_timesteps}",
-                leave=False,
-                dynamic_ncols=True,
-                position=1,
-            )
-
-        def _on_episode(_i: int, _n: int, reward: float | None) -> None:
-            if reward is None:
-                return
-            if pbar is not None:
-                pbar.update(1)
-                pbar.set_postfix_str(f"return={float(reward):.6g}", refresh=True)
-
-        try:
-            metrics = evaluate_model(
-                model=self.model,
-                cfg=self.cfg,
-                episodes=episodes,
-                deterministic=deterministic,
-                seed_base=seed_base,
-                on_episode=_on_episode,
-            )
-        finally:
-            if pbar is not None:
-                pbar.close()
+        metrics = evaluate_model(
+            model=self.model,
+            cfg=self.cfg,
+            episodes=episodes,
+            deterministic=deterministic,
+            seed_base=seed_base,
+        )
 
         metrics["phase"] = "periodic"
         metrics["timesteps"] = int(self.num_timesteps)
@@ -266,29 +238,26 @@ class EvalCheckpointCallback(BaseCallback):
         append_jsonl(self.history_path, metrics)
         self._log_eval_to_tb(metrics)
 
-        if self.verbose > 0:
-            extra = ""
-            if Metrics.EP_SCORE_MEAN in metrics:
-                extra = f" mean_score={metrics[Metrics.EP_SCORE_MEAN]:.6g}"
-            if Metrics.EP_WIN_RATE in metrics:
-                wins = int(metrics.get(Metrics.EP_WINS, 0))
-                extra += f" win_rate={metrics[Metrics.EP_WIN_RATE]:.3f} ({wins}/{episodes})"
-            print(
-                f"[eval] done  @ {self.num_timesteps}: "
-                f"mean_reward={metrics[Metrics.EP_RETURN_MEAN]:.6g} "
-                f"std_reward={metrics[Metrics.EP_RETURN_STD]:.6g} "
-                f"mean_len={metrics[Metrics.EP_LENGTH_MEAN]:.3f}{extra}",
-                flush=True,
-            )
-
         updated = False
+        flags = {"reward": False, "score": False, "win": False}
         for key in ("reward", "score", "win"):
             if self._maybe_update_best(metrics, key=key):
                 updated = True
+                flags[key] = True
 
         if not updated:
             state = read_json(self.state_path) or {}
             state = self._update_state_latest(state)
             write_json(self.state_path, state)
+
+        if self.verbose > 0:
+            self._table.emit(
+                metrics=metrics,
+                timesteps=int(self.num_timesteps),
+                episodes=int(episodes),
+                deterministic=bool(deterministic),
+                best_flags=flags,
+                printer=self._table_print,
+            )
 
         return True

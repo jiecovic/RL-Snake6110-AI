@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
+from stable_baselines3.common.vec_env import VecMonitor
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
 from snake_rl import _core as core
@@ -13,9 +13,10 @@ from snake_rl.config.access import (
     cfg_get,
     get_board_params,
     get_env_action,
-    get_env_engine,
     get_env_obs,
     get_frame_stack_n,
+    get_run_num_envs,
+    get_run_vec,
     require_int,
 )
 from snake_rl.config.schema import RewardConfig
@@ -112,18 +113,18 @@ def make_vec_env(*, cfg: Any):
       - Subsequent episode resets continue the Rust RNG stream (no reseeding).
     """
     base_seed = require_int(cfg, "run.seed")
-    num_envs = require_int(cfg, "run.num_envs")
+    num_envs = get_run_num_envs(cfg)
 
     # Derive independent child seeds from a single master seed
     ss = np.random.SeedSequence(base_seed)
     child_seeds = [int(s.generate_state(1, dtype=np.uint32)[0]) for s in ss.spawn(num_envs)]
 
-    engine = str(get_env_engine(cfg)).lower()
+    vec_kind = str(get_run_vec(cfg)).lower()
     obs_spec = _obs_spec_from_cfg(cfg)
     action_spec = _action_spec_from_cfg(cfg)
     n_stack = get_frame_stack_n(cfg)
 
-    if engine == "rust":
+    if vec_kind == "rust":
         reward_cfg = _get_reward_from_cfg(cfg)
         board_cfg = get_board_params(cfg)
         board = core.Board(
@@ -148,13 +149,12 @@ def make_vec_env(*, cfg: Any):
         for i in range(num_envs)
     ]
 
-    # Use DummyVecEnv for single-env runs to avoid subprocess overhead
-    if num_envs <= 1:
+    if vec_kind in {"dummy", "subproc"}:
         from stable_baselines3.common.vec_env import DummyVecEnv
 
         vec_env: VecEnv = DummyVecEnv(env_fns)
     else:
-        vec_env = SubprocVecEnv(env_fns)
+        raise ValueError("run.vec must be one of: dummy, subproc, rust")
 
     vec_env = VecMonitor(vec_env)
 
