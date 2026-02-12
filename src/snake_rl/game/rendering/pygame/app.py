@@ -17,7 +17,6 @@ from snake_rl.game.snake_engine import SnakeEngine
 
 if TYPE_CHECKING:
     from snake_rl.envs.specs import ObservationSpec
-    from snake_rl.vocab import TileVocab
 
 try:
     import pygame as _pygame
@@ -42,7 +41,8 @@ class AppConfig:
     turn_keys: tuple[int, int] | None = None  # left, right
     # Agent view (optional)
     agent_view_spec: ObservationSpec | None = None
-    agent_view_vocab: TileVocab | None = None
+    agent_view_vocab_name: str | None = None
+    agent_view_vocab_num_classes: int | None = None
     # HUD
     hud_mode: str = "all"  # "all" | "selected"
     hud_features: dict[str, Any] | None = None
@@ -96,7 +96,8 @@ def run_pygame_app(
         renderer = PygameRenderer(
             pixel_size=cfg.pixel_size,
             agent_view_spec=cfg.agent_view_spec,
-            agent_view_vocab=cfg.agent_view_vocab,
+            agent_view_vocab_name=cfg.agent_view_vocab_name,
+            agent_view_vocab_num_classes=cfg.agent_view_vocab_num_classes,
             hud_mode=str(cfg.hud_mode),
             hud_features=cfg.hud_features,
             hud_info=cfg.hud_info,

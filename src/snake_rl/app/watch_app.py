@@ -21,12 +21,12 @@ from snake_rl.envs.snake_env import SnakeEnv
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snake_engine import SnakeEngine
-from snake_rl.utils.checkpoints import pick_checkpoint
 from snake_rl.utils.logging import setup_logger
 from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
 from snake_rl.utils.models import load_ppo
 from snake_rl.utils.obs import sanitize_observation
-from snake_rl.utils.paths import relpath, repo_root, resolve_run_dir
+from snake_rl.utils.runs.checkpoints import pick_checkpoint
+from snake_rl.utils.runs.paths import relpath, repo_root, resolve_run_dir
 
 
 def _make_engine_from_board_params(board: dict[str, int], frame_stack_n: int) -> SnakeEngine:
@@ -247,7 +247,8 @@ def main() -> None:
                 caption=f"Snake (watch: {run_dir.name} / {args.which})",
                 enable_human_input=False,
                 agent_view_spec=obs_spec,
-                agent_view_vocab=obs_spec.load_tile_vocab(),
+                agent_view_vocab_name=obs_spec.tile_vocab_name(),
+                agent_view_vocab_num_classes=obs_spec.tile_vocab_num_classes(),
                 hud_mode="selected",
                 hud_features=obs_spec.features,
                 hud_info={

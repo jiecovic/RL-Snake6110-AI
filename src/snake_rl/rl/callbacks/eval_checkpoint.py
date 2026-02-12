@@ -15,8 +15,8 @@ try:
 except Exception:  # pragma: no cover
     from tqdm.auto import tqdm
 
-from snake_rl.rl.eval_utils import evaluate_model
-from snake_rl.utils.checkpoints import append_jsonl, atomic_save_zip, read_json, write_json
+from snake_rl.rl.eval.eval_utils import evaluate_model
+from snake_rl.utils.runs.checkpoints import append_jsonl, atomic_save_zip, read_json, write_json
 
 
 def _utc_now_iso() -> str:

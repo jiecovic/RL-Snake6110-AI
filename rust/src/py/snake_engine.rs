@@ -1,10 +1,12 @@
 // rust/src/py/snake_engine.rs
 
 use numpy::{ndarray, IntoPyArray, PyArray2, PyArray3};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::ToPyObject;
 
 use crate::engine::constants::TILE_OOB;
+use crate::engine::vocab_lut;
 use crate::engine::SnakeEngine as EngineSnakeEngine;
 use crate::py::board::PyBoard;
 use crate::py::map_engine_err;
@@ -12,6 +14,13 @@ use crate::py::map_engine_err;
 #[pyclass(name = "SnakeEngine")]
 pub(crate) struct PySnakeEngine {
     inner: EngineSnakeEngine,
+}
+
+fn apply_lut(data: &mut [u8], lut: &[u8]) {
+    for v in data.iter_mut() {
+        let idx = *v as usize;
+        *v = lut[idx];
+    }
 }
 
 #[pymethods]
@@ -141,10 +150,44 @@ impl PySnakeEngine {
         Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
     }
 
+    #[pyo3(signature = (view_radius, rotate_to_head = true, empty_id = None, vocab = ""))]
+    fn head_tile_view_stacked_vocab<'py>(
+        &mut self,
+        py: Python<'py>,
+        view_radius: (i32, i32),
+        rotate_to_head: bool,
+        empty_id: Option<u8>,
+        vocab: &str,
+    ) -> PyResult<PyObject> {
+        let lut = vocab_lut(vocab).map_err(PyValueError::new_err)?;
+        let empty = empty_id.unwrap_or(TILE_OOB);
+        let (view, n, h, w) = self
+            .inner
+            .head_tile_view_stacked(view_radius.0, view_radius.1, rotate_to_head, empty)
+            .map_err(map_engine_err)?;
+        let mut data = view;
+        apply_lut(&mut data, &lut);
+        let arr = ndarray::Array3::from_shape_vec((n, h, w), data).unwrap();
+        Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
+    }
+
     fn tile_grid_stacked<'py>(&self, py: Python<'py>) -> Py<PyArray3<u8>> {
         let (view, n, h, w) = self.inner.tile_grid_stacked();
         let arr = ndarray::Array3::from_shape_vec((n, h, w), view).unwrap();
         arr.into_pyarray_bound(py).unbind()
+    }
+
+    fn tile_grid_stacked_vocab<'py>(
+        &self,
+        py: Python<'py>,
+        vocab: &str,
+    ) -> PyResult<Py<PyArray3<u8>>> {
+        let lut = vocab_lut(vocab).map_err(PyValueError::new_err)?;
+        let (view, n, h, w) = self.inner.tile_grid_stacked();
+        let mut data = view;
+        apply_lut(&mut data, &lut);
+        let arr = ndarray::Array3::from_shape_vec((n, h, w), data).unwrap();
+        Ok(arr.into_pyarray_bound(py).unbind())
     }
 
     fn pixel_grid_stacked<'py>(&self, py: Python<'py>) -> Py<PyArray3<u8>> {

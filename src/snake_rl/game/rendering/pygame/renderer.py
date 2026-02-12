@@ -19,7 +19,6 @@ from snake_rl.game.rendering.pygame.theme import BG, HUD_BG, PANEL_BORDER
 from snake_rl.game.rendering.pygame.window import PygameRenderContext
 from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.utils.obs_render import categorical_frame_to_pixels
-from snake_rl.vocab import TileVocab
 
 
 class PygameRenderer:
@@ -28,14 +27,24 @@ class PygameRenderer:
         *,
         pixel_size: int = 10,
         agent_view_spec: ObservationSpec | None = None,
-        agent_view_vocab: TileVocab | None = None,
+        agent_view_vocab_name: str | None = None,
+        agent_view_vocab_num_classes: int | None = None,
         hud_mode: str = "all",
         hud_features: dict[str, Any] | None = None,
         hud_info: dict[str, str] | None = None,
     ):
         self.pixel_size = int(pixel_size)
         self.agent_view_spec = agent_view_spec
-        self.agent_view_vocab = agent_view_vocab
+        if agent_view_spec is not None and agent_view_vocab_name is None:
+            agent_view_vocab_name = agent_view_spec.tile_vocab_name()
+        if (
+            agent_view_spec is not None
+            and agent_view_vocab_num_classes is None
+            and agent_view_vocab_name is not None
+        ):
+            agent_view_vocab_num_classes = agent_view_spec.tile_vocab_num_classes()
+        self.agent_view_vocab_name = agent_view_vocab_name
+        self.agent_view_vocab_num_classes = agent_view_vocab_num_classes
         self.hud_mode = str(hud_mode)
         self.hud_features = dict(hud_features or {})
         self.hud_info = dict(hud_info or {})
@@ -141,7 +150,7 @@ class PygameRenderer:
             return ""
         kind = self.agent_view_spec.kind_norm()
         view = self.agent_view_spec.view_norm()
-        vocab = self.agent_view_vocab.name if self.agent_view_vocab is not None else None
+        vocab = self.agent_view_vocab_name
         if vocab:
             return f"{kind}/{view} - {vocab}"
         return f"{kind}/{view}"
@@ -152,7 +161,6 @@ class PygameRenderer:
         spec = self.agent_view_spec
         obs = spec.observe(
             game=game,
-            tile_vocab=self.agent_view_vocab,
             initial_snake_length=int(game.snake_len),
             max_playable_tiles=int(game.max_playable_tiles),
             max_steps=int(game.max_playable_tiles),
@@ -186,15 +194,17 @@ class PygameRenderer:
             return gray255_to_surface(raw, pixel_size=self.pixel_size)
 
         # categorical
-        if self.agent_view_vocab is None:
+        if self.agent_view_vocab_name is None:
             pixels = categorical_frame_to_pixels(
                 raw,
                 tile_size=int(game.tile_size),
             )
         else:
+            if self.agent_view_vocab_num_classes is None:
+                raise RuntimeError("agent_view_vocab_num_classes is required for vocab rendering")
             pixels = categorical_to_gray_pixels(
                 raw,
-                num_classes=int(self.agent_view_vocab.num_classes),
+                num_classes=int(self.agent_view_vocab_num_classes),
                 tile_size=int(game.tile_size),
             )
         return gray255_to_surface(pixels, pixel_size=self.pixel_size)

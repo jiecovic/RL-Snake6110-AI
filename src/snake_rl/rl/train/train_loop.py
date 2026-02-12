@@ -1,4 +1,4 @@
-# src/snake_rl/rl/train_loop.py
+# src/snake_rl/rl/train/train_loop.py
 from __future__ import annotations
 
 import json
@@ -10,14 +10,14 @@ import torch
 from stable_baselines3.common.utils import set_random_seed
 
 from snake_rl.config.schema import TrainConfig
-from snake_rl.rl.callbacks_factory import make_callbacks
-from snake_rl.rl.env_factory import make_vec_env
-from snake_rl.rl.eval_utils import evaluate_model
-from snake_rl.rl.model_factory import make_or_load_model
+from snake_rl.rl.callbacks.factory import make_callbacks
+from snake_rl.rl.envs.factory import make_vec_env
+from snake_rl.rl.eval.eval_utils import evaluate_model
+from snake_rl.rl.models.model_factory import make_or_load_model
 from snake_rl.rl.reporting import log_ppo_params, save_manifest
-from snake_rl.utils.checkpoints import append_jsonl, atomic_save_zip
 from snake_rl.utils.logging import setup_logger
-from snake_rl.utils.run_paths import RunPaths
+from snake_rl.utils.runs.checkpoints import append_jsonl, atomic_save_zip
+from snake_rl.utils.runs.run_paths import RunPaths
 
 
 def train(

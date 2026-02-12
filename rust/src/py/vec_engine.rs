@@ -6,6 +6,7 @@ use pyo3::prelude::*;
 use pyo3::ToPyObject;
 
 use crate::engine::constants::TILE_OOB;
+use crate::engine::vocab_lut;
 use crate::engine::SnakeEngine as EngineSnakeEngine;
 use crate::py::board::PyBoard;
 use crate::py::map_engine_err;
@@ -13,6 +14,13 @@ use crate::py::map_engine_err;
 #[pyclass(name = "VecSnakeEngine")]
 pub(crate) struct PyVecSnakeEngine {
     games: Vec<EngineSnakeEngine>,
+}
+
+fn apply_lut(data: &mut [u8], lut: &[u8]) {
+    for v in data.iter_mut() {
+        let idx = *v as usize;
+        *v = lut[idx];
+    }
 }
 
 #[pymethods]
@@ -290,6 +298,46 @@ impl PyVecSnakeEngine {
         Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
     }
 
+    #[pyo3(signature = (view_radius, rotate_to_head = true, empty_id = None, vocab = ""))]
+    fn head_tile_views_stacked_vocab<'py>(
+        &mut self,
+        py: Python<'py>,
+        view_radius: (i32, i32),
+        rotate_to_head: bool,
+        empty_id: Option<u8>,
+        vocab: &str,
+    ) -> PyResult<PyObject> {
+        let n_envs = self.games.len();
+        if n_envs == 0 {
+            let arr = ndarray::Array4::<u8>::zeros((0, 0, 0, 0));
+            return Ok(arr.into_pyarray_bound(py).unbind().to_object(py));
+        }
+
+        let lut = vocab_lut(vocab).map_err(PyValueError::new_err)?;
+        let empty = empty_id.unwrap_or(TILE_OOB);
+        let (view0, n_stack, h, w) = self.games[0]
+            .head_tile_view_stacked(view_radius.0, view_radius.1, rotate_to_head, empty)
+            .map_err(map_engine_err)?;
+        let mut data = Vec::with_capacity(n_envs * n_stack * h * w);
+        data.extend_from_slice(&view0);
+
+        for g in self.games.iter_mut().skip(1) {
+            let (view, ns, hh, ww) = g
+                .head_tile_view_stacked(view_radius.0, view_radius.1, rotate_to_head, empty)
+                .map_err(map_engine_err)?;
+            if ns != n_stack || hh != h || ww != w {
+                return Err(PyValueError::new_err(
+                    "head_tile_views_stacked_vocab: inconsistent shapes",
+                ));
+            }
+            data.extend_from_slice(&view);
+        }
+        apply_lut(&mut data, &lut);
+
+        let arr = ndarray::Array4::from_shape_vec((n_envs, n_stack, h, w), data).unwrap();
+        Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
+    }
+
     fn tile_grids<'py>(&self, py: Python<'py>) -> Py<PyArray3<u8>> {
         let n = self.games.len();
         if n == 0 {
@@ -324,6 +372,28 @@ impl PyVecSnakeEngine {
         }
         let arr = ndarray::Array4::from_shape_vec((n, n_stack, h, w), data).unwrap();
         arr.into_pyarray_bound(py).unbind()
+    }
+
+    fn tile_grids_stacked_vocab<'py>(&self, py: Python<'py>, vocab: &str) -> PyResult<Py<PyArray4<u8>>> {
+        let n = self.games.len();
+        if n == 0 {
+            let arr = ndarray::Array4::<u8>::zeros((0, 0, 0, 0));
+            return Ok(arr.into_pyarray_bound(py).unbind());
+        }
+        let lut = vocab_lut(vocab).map_err(PyValueError::new_err)?;
+        let (view0, n_stack, h, w) = self.games[0].tile_grid_stacked();
+        let mut data = Vec::with_capacity(n * n_stack * h * w);
+        data.extend_from_slice(&view0);
+        for g in self.games.iter().skip(1) {
+            let (view, ns, hh, ww) = g.tile_grid_stacked();
+            if ns != n_stack || hh != h || ww != w {
+                panic!("tile_grids_stacked_vocab: inconsistent shapes");
+            }
+            data.extend_from_slice(&view);
+        }
+        apply_lut(&mut data, &lut);
+        let arr = ndarray::Array4::from_shape_vec((n, n_stack, h, w), data).unwrap();
+        Ok(arr.into_pyarray_bound(py).unbind())
     }
 
     fn pixel_grids<'py>(&self, py: Python<'py>) -> Py<PyArray3<u8>> {

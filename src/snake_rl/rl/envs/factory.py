@@ -1,4 +1,4 @@
-# src/snake_rl/rl/env_factory.py
+# src/snake_rl/rl/envs/factory.py
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -22,7 +22,7 @@ from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.snake_env import SnakeEnv
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.snake_engine import SnakeEngine
-from snake_rl.rl.rust_vec_env import RustVecEnv
+from snake_rl.rl.envs.rust_vec_env import RustVecEnv
 
 
 def _get_reward_from_cfg(cfg: Any) -> RewardConfig:

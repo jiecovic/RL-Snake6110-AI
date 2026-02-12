@@ -1,10 +1,10 @@
-# src/snake_rl/rl/eval_utils.py
+# src/snake_rl/rl/eval/eval_utils.py
 from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, TypedDict, cast
+from typing import Any, cast
 
 import numpy as np
 from gymnasium import Env
@@ -21,34 +21,10 @@ from snake_rl.config.access import (
 )
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
-from snake_rl.rl.env_factory import make_single_env
-from snake_rl.rl.rust_vec_env import RustVecEnv
+from snake_rl.rl.envs.factory import make_single_env
+from snake_rl.rl.envs.rust_vec_env import RustVecEnv
+from snake_rl.rl.eval.metrics import is_win_from_info
 from snake_rl.utils.obs import sanitize_observation
-
-
-class EpisodeEndInfo(TypedDict, total=False):
-    termination_cause: str
-    final_score: float
-
-
-def _is_win_from_info(info: dict[str, Any]) -> bool:
-    for k in ("won", "win", "cleared", "episode_won", "episode_win", "success", "is_success"):
-        v = info.get(k)
-        if isinstance(v, (bool, np.bool_)):
-            return bool(v)
-
-    tc = info.get("termination_cause")
-    if isinstance(tc, str):
-        s = tc.strip().lower()
-        if s in {"win", "won", "cleared", "clear", "success", "goal"}:
-            return True
-
-    for k in ("won", "win", "cleared", "success"):
-        v = info.get(k)
-        if isinstance(v, (int, np.integer)) and int(v) in (0, 1):
-            return bool(int(v))
-
-    return False
 
 
 def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -> VecEnv:
@@ -206,7 +182,7 @@ def evaluate_model(
                 rewards_by_ep[ep_idx] = float(s.reward)
                 lengths_by_ep[ep_idx] = int(s.length)
 
-                if _is_win_from_info(info_i):
+                if is_win_from_info(info_i):
                     wins_by_ep[ep_idx] = 1
 
                 tc = info_i.get("termination_cause")

@@ -152,6 +152,27 @@ class SnakeEngine:
             empty_id=None if empty_id is None else int(empty_id),
         )
 
+    def head_tile_view_stacked_vocab(
+        self,
+        *,
+        view_radius: int | tuple[int, int],
+        rotate_to_head: bool = True,
+        empty_id: int | None = None,
+        vocab: str,
+    ):
+        ry, rx = parse_view_radius(view_radius)
+        fn = getattr(self._core, "head_tile_view_stacked_vocab", None)
+        if fn is None:
+            raise RuntimeError(
+                "Rust core does not expose head_tile_view_stacked_vocab (rebuild the extension)."
+            )
+        return fn(
+            (int(ry), int(rx)),
+            rotate_to_head=bool(rotate_to_head),
+            empty_id=None if empty_id is None else int(empty_id),
+            vocab=str(vocab),
+        )
+
     # ---- properties used by envs/renderers ----
 
     @property
@@ -177,6 +198,14 @@ class SnakeEngine:
                 "Rust core does not expose tile_grid_stacked (rebuild the extension)."
             )
         return np.asarray(fn(), dtype=np.uint8)
+
+    def tile_grid_stacked_vocab(self, vocab: str) -> np.ndarray:
+        fn = getattr(self._core, "tile_grid_stacked_vocab", None)
+        if fn is None:
+            raise RuntimeError(
+                "Rust core does not expose tile_grid_stacked_vocab (rebuild the extension)."
+            )
+        return np.asarray(fn(str(vocab)), dtype=np.uint8)
 
     @property
     def pixel_buffer(self) -> np.ndarray:

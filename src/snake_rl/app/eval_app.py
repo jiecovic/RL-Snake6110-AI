@@ -10,12 +10,12 @@ from stable_baselines3 import PPO
 
 from snake_rl.config.access import get_run_num_envs, get_run_seed
 from snake_rl.config.loader import load_train_config_from_path
-from snake_rl.rl.eval_utils import evaluate_model
+from snake_rl.rl.eval.eval_utils import evaluate_model
 from snake_rl.rl.reporting import log_ppo_params
-from snake_rl.utils.checkpoints import pick_checkpoint
 from snake_rl.utils.logging import setup_logger
 from snake_rl.utils.models import load_ppo
-from snake_rl.utils.paths import repo_root, resolve_run_dir
+from snake_rl.utils.runs.checkpoints import pick_checkpoint
+from snake_rl.utils.runs.paths import repo_root, resolve_run_dir
 
 try:
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn

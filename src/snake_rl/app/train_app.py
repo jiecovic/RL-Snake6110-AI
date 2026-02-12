@@ -7,10 +7,10 @@ import hydra
 from omegaconf import DictConfig
 
 from snake_rl.config.loader import dataclass_from_raw, load_from_hydra_cfg
-from snake_rl.rl.train_loop import train
-from snake_rl.utils.paths import repo_root, runs_root
-from snake_rl.utils.resume import resolve_resume_arg
-from snake_rl.utils.run_paths import make_run_paths
+from snake_rl.rl.train.train_loop import train
+from snake_rl.utils.runs.paths import repo_root, runs_root
+from snake_rl.utils.runs.resume import resolve_resume_arg
+from snake_rl.utils.runs.run_paths import make_run_paths
 
 CONFIG_DIR = Path(repo_root()) / "configs"
 

@@ -225,6 +225,10 @@ pub fn tileset_tile_names() -> Vec<String> {
     TILE_NAMES.iter().map(|n| n.to_string()).collect()
 }
 
+pub fn tileset_tile_names_raw() -> &'static [&'static str] {
+    &TILE_NAMES
+}
+
 pub fn tileset_tiles() -> Vec<Vec<u8>> {
     TILESET.iter().map(|t| t.to_vec()).collect()
 }

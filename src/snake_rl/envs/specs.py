@@ -1,8 +1,9 @@
 # src/snake_rl/envs/specs.py
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from gymnasium import spaces
@@ -10,7 +11,6 @@ from gymnasium import spaces
 from snake_rl import _core as core
 from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.snake_engine import SnakeEngine
-from snake_rl.vocab import TileVocab, load_tile_vocab
 
 
 @dataclass(frozen=True)
@@ -130,11 +130,15 @@ class ObservationSpec:
         s = str(name).strip()
         return s if s else None
 
-    def load_tile_vocab(self) -> TileVocab | None:
+    def tile_vocab_num_classes(self) -> int | None:
         name = self.tile_vocab_name()
         if name is None:
             return None
-        return load_tile_vocab(name)
+        fn = getattr(core, "tile_vocab_num_classes", None)
+        if not callable(fn):
+            raise RuntimeError("Rust core does not expose tile_vocab_num_classes()")
+        num_fn = cast(Callable[[str], int], fn)
+        return int(num_fn(str(name)))
 
     def _remove_border(self) -> bool:
         return bool(self.params.get("remove_border", True))
@@ -169,7 +173,6 @@ class ObservationSpec:
         width: int,
         height: int,
         tile_size: int,
-        tile_vocab: TileVocab | None = None,
         frame_stack_n: int = 1,
     ) -> spaces.Space:
         kind = self._kind()
@@ -201,10 +204,8 @@ class ObservationSpec:
             base_space._frame_stack_n = int(n_stack)  # type: ignore[attr-defined]
             base_space._frame_base_channels = int(frame_base_channels)  # type: ignore[attr-defined]
         else:
-            if tile_vocab is not None:
-                base_num = int(tile_vocab.num_classes)
-            else:
-                base_num = int(core.tileset_tile_count())
+            vocab_num = self.tile_vocab_num_classes()
+            base_num = int(core.tileset_tile_count()) if vocab_num is None else int(vocab_num)
 
             if view == "world":
                 gh = int(height)
@@ -263,7 +264,6 @@ class ObservationSpec:
         self,
         *,
         game: SnakeEngine,
-        tile_vocab: TileVocab | None = None,
         initial_snake_length: int,
         max_playable_tiles: int,
         max_steps: int,
@@ -311,20 +311,30 @@ class ObservationSpec:
 
             base_key = "pixel"
         else:
-            grid = np.asarray(game.tile_grid_stacked(), dtype=np.uint8)
+            vocab_name = self.tile_vocab_name()
+            if vocab_name is None:
+                grid = np.asarray(game.tile_grid_stacked(), dtype=np.uint8)
+            else:
+                grid = np.asarray(game.tile_grid_stacked_vocab(vocab_name), dtype=np.uint8)
             if view == "world":
                 if self._remove_border():
                     grid = grid[:, 1:-1, 1:-1]
-                frame = grid if tile_vocab is None else tile_vocab.lut[grid]
-                base = frame.astype(np.uint8, copy=False)
+                base = grid.astype(np.uint8, copy=False)
             else:
-                raw = game.head_tile_view_stacked(
-                    view_radius=self._view_radius(),
-                    rotate_to_head=self._rotate_to_head(),
-                    empty_id=None,
-                )
-                frame = raw if tile_vocab is None else tile_vocab.lut[raw]
-                base = np.asarray(frame, dtype=np.uint8)
+                if vocab_name is None:
+                    raw = game.head_tile_view_stacked(
+                        view_radius=self._view_radius(),
+                        rotate_to_head=self._rotate_to_head(),
+                        empty_id=None,
+                    )
+                else:
+                    raw = game.head_tile_view_stacked_vocab(
+                        view_radius=self._view_radius(),
+                        rotate_to_head=self._rotate_to_head(),
+                        empty_id=None,
+                        vocab=str(vocab_name),
+                    )
+                base = np.asarray(raw, dtype=np.uint8)
 
             base_key = "categorical"
 

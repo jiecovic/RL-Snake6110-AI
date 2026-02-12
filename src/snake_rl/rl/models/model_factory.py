@@ -1,4 +1,4 @@
-# src/snake_rl/rl/model_factory.py
+# src/snake_rl/rl/models/model_factory.py
 from __future__ import annotations
 
 import inspect
@@ -12,7 +12,7 @@ from stable_baselines3.common.policies import MultiInputActorCriticPolicy
 from stable_baselines3.common.preprocessing import is_image_space
 
 from snake_rl.config.schema import TrainConfig
-from snake_rl.rl.policy_factory import build_policy_kwargs
+from snake_rl.rl.models.policy_factory import build_policy_kwargs
 
 
 def _ensure_str_keys(d: dict[Any, Any]) -> dict[str, Any]:
