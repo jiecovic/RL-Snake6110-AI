@@ -96,10 +96,12 @@ def create_pygame_context(
         agent_panel_w = agent_view_w + 2 * panel_pad
         agent_panel_h = agent_view_h + 2 * panel_pad + label_h
 
-    row_h = max(world_panel_h, agent_panel_h)
+    hud_h = int(cfg.hud_height)
+    hud_gap = gap if hud_h > 0 else 0
+    world_column_h = world_panel_h + hud_gap + hud_h
 
     win_w = margin * 2 + world_panel_w + (gap + agent_panel_w if agent_panel_w else 0)
-    win_h = margin * 2 + row_h + gap + int(cfg.hud_height)
+    win_h = margin * 2 + max(world_column_h, agent_panel_h)
 
     screen = pygame.display.set_mode((int(win_w), int(win_h)))
     clock = pygame.time.Clock()
@@ -128,9 +130,9 @@ def create_pygame_context(
 
     hud_panel = Rect(
         x=margin,
-        y=margin + row_h + gap,
-        w=win_w - 2 * margin,
-        h=int(cfg.hud_height),
+        y=margin + world_panel_h + hud_gap,
+        w=world_panel_w,
+        h=hud_h,
     )
 
     return PygameRenderContext(

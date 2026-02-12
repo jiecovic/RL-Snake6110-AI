@@ -232,13 +232,8 @@ def _compute_agent_view_grid(
     view = spec.view_norm()
     tile_size = int(game.tile_size)
 
-    if view == "world":
-        h = int(game.height)
-        w = int(game.width)
-        if spec._remove_border():
-            h = max(0, h - 2)
-            w = max(0, w - 2)
-        return (w * tile_size, h * tile_size)
+    if view != "head":
+        return None
 
     ry, rx = spec._view_radius()
     view_h = (2 * int(ry) + 1) * tile_size
