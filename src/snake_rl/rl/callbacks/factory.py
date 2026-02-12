@@ -18,6 +18,6 @@ def make_callbacks(*, cfg, checkpoint_dir: str | Path):
                 checkpoint_freq_steps=int(cfg.run.checkpoint_freq),
                 verbose=1,
             ),
-            TerminationCauseLogger(),
+            TerminationCauseLogger(cfg=cfg),
         ]
     )

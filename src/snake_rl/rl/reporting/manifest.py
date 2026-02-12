@@ -73,6 +73,16 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
                 "seed_offset": int(cfg.train.eval.seed_offset),
             },
         },
+        "metrics": {
+            "eval": {
+                "keys": list(cfg.metrics.eval.keys),
+                "termination": bool(cfg.metrics.eval.termination),
+            },
+            "train": {
+                "keys": list(cfg.metrics.train.keys),
+                "termination": bool(cfg.metrics.train.termination),
+            },
+        },
     }
 
     if cfg.run.resume_checkpoint is not None:

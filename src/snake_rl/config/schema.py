@@ -150,6 +150,23 @@ class EvalConfig:
 
 
 # ---------------------------------------------------------------------------
+# Metrics logging configuration
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MetricsGroupConfig:
+    keys: list[str] = field(default_factory=list)
+    termination: bool = True
+
+
+@dataclass(frozen=True)
+class MetricsConfig:
+    eval: MetricsGroupConfig = field(default_factory=MetricsGroupConfig)
+    train: MetricsGroupConfig = field(default_factory=MetricsGroupConfig)
+
+
+# ---------------------------------------------------------------------------
 # Training algorithm configuration
 # ---------------------------------------------------------------------------
 
@@ -184,3 +201,4 @@ class TrainConfig:
     feature_extractor: FeaturesExtractorConfig
     reward: RewardConfig = field(default_factory=RewardConfig)
     train: TrainLoopConfig = field(default_factory=TrainLoopConfig)
+    metrics: MetricsConfig = field(default_factory=MetricsConfig)

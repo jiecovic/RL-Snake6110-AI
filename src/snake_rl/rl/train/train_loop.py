@@ -13,6 +13,7 @@ from snake_rl.config.schema import TrainConfig
 from snake_rl.rl.callbacks.factory import make_callbacks
 from snake_rl.rl.envs.factory import make_vec_env
 from snake_rl.rl.eval.eval_utils import evaluate_model
+from snake_rl.rl.metrics import Metrics
 from snake_rl.rl.models.model_factory import make_or_load_model
 from snake_rl.rl.reporting import log_ppo_params, save_manifest
 from snake_rl.utils.logging import setup_logger
@@ -96,9 +97,9 @@ def train(
             append_jsonl(paths.checkpoint_dir / "eval_history.jsonl", metrics)
 
             logger.info(
-                f"[eval-final] mean_reward={metrics['mean_reward']:.6g} "
-                f"std_reward={metrics['std_reward']:.6g} "
-                f"mean_len={metrics['mean_length']:.3f}"
+                f"[eval-final] mean_reward={metrics[Metrics.EP_RETURN_MEAN]:.6g} "
+                f"std_reward={metrics[Metrics.EP_RETURN_STD]:.6g} "
+                f"mean_len={metrics[Metrics.EP_LENGTH_MEAN]:.3f}"
             )
 
         logger.info(f"[train] Done. Final model saved to: {final_path}")

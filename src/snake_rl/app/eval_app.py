@@ -11,6 +11,7 @@ from stable_baselines3 import PPO
 from snake_rl.config.access import get_run_num_envs, get_run_seed
 from snake_rl.config.loader import load_train_config_from_path
 from snake_rl.rl.eval.eval_utils import evaluate_model
+from snake_rl.rl.metrics import Metrics, format_eval_summary
 from snake_rl.rl.reporting import log_ppo_params
 from snake_rl.utils.logging import setup_logger
 from snake_rl.utils.models import load_ppo
@@ -92,31 +93,18 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _print_human_summary(logger, metrics: dict) -> None:
-    mean_r = float(metrics.get("mean_reward", float("nan")))
-    std_r = float(metrics.get("std_reward", float("nan")))
-    mean_l = float(metrics.get("mean_length", float("nan")))
-    win_rate = float(metrics.get("win_rate", 0.0))
-    wins = int(metrics.get("wins", 0))
-    episodes = int(metrics.get("episodes", 0))
-    num_envs = int(metrics.get("num_envs", 1))
-    deterministic = bool(metrics.get("deterministic", False))
-
-    logger.info(
-        f"[eval] mean_reward={mean_r:.6g} std_reward={std_r:.6g} "
-        f"mean_len={mean_l:.3f} win_rate={win_rate:.3f} ({wins}/{episodes}) "
-        f"num_envs={num_envs} deterministic={deterministic}"
-    )
+    logger.info(format_eval_summary(metrics))
 
     tc = metrics.get("termination_counts")
     if isinstance(tc, dict) and tc:
         items = ", ".join([f"{k}={int(v)}" for k, v in sorted(tc.items())])
         logger.info(f"[eval] termination_counts: {items}")
 
-    if "final_score_mean" in metrics:
+    if Metrics.EP_SCORE_MEAN in metrics:
         logger.info(
-            f"[eval] final_score: mean={float(metrics['final_score_mean']):.3f} "
-            f"min={float(metrics.get('final_score_min', 0.0)):.3f} "
-            f"max={float(metrics.get('final_score_max', 0.0)):.3f}"
+            f"[eval] score: mean={float(metrics[Metrics.EP_SCORE_MEAN]):.3f} "
+            f"min={float(metrics.get(Metrics.EP_SCORE_MIN, 0.0)):.3f} "
+            f"max={float(metrics.get(Metrics.EP_SCORE_MAX, 0.0)):.3f}"
         )
 
 

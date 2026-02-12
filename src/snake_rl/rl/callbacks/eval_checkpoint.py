@@ -16,6 +16,13 @@ except Exception:  # pragma: no cover
     from tqdm.auto import tqdm
 
 from snake_rl.rl.eval.eval_utils import evaluate_model
+from snake_rl.rl.metrics import (
+    Metrics,
+    eval_metric_keys,
+    is_termination_metric,
+    resolve_log_keys,
+    resolve_log_termination,
+)
 from snake_rl.utils.runs.checkpoints import append_jsonl, atomic_save_zip, read_json, write_json
 
 
@@ -33,8 +40,8 @@ class EvalCheckpointCallback(BaseCallback):
       - writes checkpoints/state.json with latest/best metadata
 
     best_metric:
-      - "mean_reward" (default): mean episode return
-      - "mean_score": derived from evaluate_model()'s final_score_mean
+      - "mean_reward" (default): eval episode return mean
+      - "mean_score": eval episode score mean
     """
 
     def __init__(
@@ -107,40 +114,40 @@ class EvalCheckpointCallback(BaseCallback):
         return state
 
     def _log_eval_to_tb(self, metrics: dict[str, Any]) -> None:
-        self.logger.record("eval/mean_reward", float(metrics["mean_reward"]))
-        self.logger.record("eval/std_reward", float(metrics["std_reward"]))
-        self.logger.record("eval/mean_length", float(metrics["mean_length"]))
-        self.logger.record("eval/std_length", float(metrics["std_length"]))
+        log_keys = resolve_log_keys(
+            self.cfg,
+            group="eval",
+            default_keys=eval_metric_keys(),
+        )
+        ordered = [k for k in eval_metric_keys() if k in log_keys]
+        extras = sorted(k for k in log_keys if k not in eval_metric_keys())
+        for key in (*ordered, *extras):
+            if key not in log_keys or key not in metrics:
+                continue
+            with suppress(Exception):
+                if key == Metrics.EP_WINS:
+                    self.logger.record(f"eval/{key}", int(metrics[key]))
+                else:
+                    self.logger.record(f"eval/{key}", float(metrics[key]))
 
-        if "win_rate" in metrics:
-            self.logger.record("eval/win_rate", float(metrics["win_rate"]))
-        if "wins" in metrics:
-            self.logger.record("eval/wins", int(metrics["wins"]))
-
-        if "final_score_mean" in metrics:
-            self.logger.record("eval/final_score_mean", float(metrics["final_score_mean"]))
-        if "final_score_min" in metrics:
-            self.logger.record("eval/final_score_min", float(metrics["final_score_min"]))
-        if "final_score_max" in metrics:
-            self.logger.record("eval/final_score_max", float(metrics["final_score_max"]))
-
-        term = metrics.get("termination_counts")
-        if isinstance(term, dict):
-            for k, v in term.items():
+        if resolve_log_termination(self.cfg, group="eval", default=True):
+            for key, value in metrics.items():
+                if not is_termination_metric(key):
+                    continue
                 with suppress(Exception):
-                    self.logger.record(f"eval/termination/{k}", int(v))
+                    self.logger.record(f"eval/{key}", float(value))
 
     def _pick_best_value(self, metrics: dict[str, Any], *, best_metric: str) -> float:
         if best_metric == "mean_reward":
-            return float(metrics["mean_reward"])
+            return float(metrics[Metrics.EP_RETURN_MEAN])
         if best_metric == "mean_score":
-            if "final_score_mean" not in metrics:
+            if Metrics.EP_SCORE_MEAN not in metrics:
                 raise KeyError(
                     "best_metric='mean_score' requires env to expose "
                     "info['final_score'] at episode end so eval can compute "
-                    "final_score_mean."
+                    "episode/score_mean."
                 )
-            return float(metrics["final_score_mean"])
+            return float(metrics[Metrics.EP_SCORE_MEAN])
         raise ValueError("best_metric must be one of: 'mean_reward', 'mean_score'")
 
     def _on_step(self) -> bool:
@@ -220,15 +227,16 @@ class EvalCheckpointCallback(BaseCallback):
 
         if self.verbose > 0:
             extra = ""
-            if "final_score_mean" in metrics:
-                extra = f" mean_score={metrics['final_score_mean']:.6g}"
-            if "win_rate" in metrics:
-                wins = int(metrics.get("wins", 0))
-                extra += f" win_rate={metrics['win_rate']:.3f} ({wins}/{episodes})"
+            if Metrics.EP_SCORE_MEAN in metrics:
+                extra = f" mean_score={metrics[Metrics.EP_SCORE_MEAN]:.6g}"
+            if Metrics.EP_WIN_RATE in metrics:
+                wins = int(metrics.get(Metrics.EP_WINS, 0))
+                extra += f" win_rate={metrics[Metrics.EP_WIN_RATE]:.3f} ({wins}/{episodes})"
             print(
                 f"[eval] done  @ {self.num_timesteps}: "
-                f"mean_reward={metrics['mean_reward']:.6g} std_reward={metrics['std_reward']:.6g} "
-                f"mean_len={metrics['mean_length']:.3f}{extra}",
+                f"mean_reward={metrics[Metrics.EP_RETURN_MEAN]:.6g} "
+                f"std_reward={metrics[Metrics.EP_RETURN_STD]:.6g} "
+                f"mean_len={metrics[Metrics.EP_LENGTH_MEAN]:.3f}{extra}",
                 flush=True,
             )
 

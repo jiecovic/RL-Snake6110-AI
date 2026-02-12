@@ -12,6 +12,8 @@ from snake_rl.config.schema import (
     EvalConfig,
     FeaturesExtractorConfig,
     FrameStackConfig,
+    MetricsConfig,
+    MetricsGroupConfig,
     ObservationConfig,
     RewardConfig,
     RunConfig,
@@ -135,6 +137,16 @@ class EvalConfigModel(_BaseConfigModel):
         return s
 
 
+class MetricsGroupConfigModel(_BaseConfigModel):
+    keys: list[str] = Field(default_factory=list)
+    termination: bool = True
+
+
+class MetricsConfigModel(_BaseConfigModel):
+    eval: MetricsGroupConfigModel = Field(default_factory=MetricsGroupConfigModel)
+    train: MetricsGroupConfigModel = Field(default_factory=MetricsGroupConfigModel)
+
+
 class TrainLoopConfigModel(_BaseConfigModel):
     algo: AlgoConfigModel = Field(default_factory=AlgoConfigModel)
     eval: EvalConfigModel = Field(default_factory=EvalConfigModel)
@@ -147,6 +159,7 @@ class TrainConfigModel(_BaseConfigModel):
     env: EnvConfigModel
     feature_extractor: FeaturesExtractorConfigModel
     train: TrainLoopConfigModel = Field(default_factory=TrainLoopConfigModel)
+    metrics: MetricsConfigModel = Field(default_factory=MetricsConfigModel)
 
     def to_dataclass(self) -> TrainConfig:
         return TrainConfig(
@@ -205,6 +218,16 @@ class TrainConfigModel(_BaseConfigModel):
                     seed_offset=int(self.train.eval.seed_offset),
                 ),
             ),
+            metrics=MetricsConfig(
+                eval=MetricsGroupConfig(
+                    keys=list(self.metrics.eval.keys),
+                    termination=bool(self.metrics.eval.termination),
+                ),
+                train=MetricsGroupConfig(
+                    keys=list(self.metrics.train.keys),
+                    termination=bool(self.metrics.train.termination),
+                ),
+            ),
         )
 
 
@@ -213,6 +236,8 @@ __all__ = [
     "ActionConfigModel",
     "EnvConfigModel",
     "EvalConfigModel",
+    "MetricsConfigModel",
+    "MetricsGroupConfigModel",
     "FeaturesExtractorConfigModel",
     "FrameStackConfigModel",
     "BoardConfigModel",

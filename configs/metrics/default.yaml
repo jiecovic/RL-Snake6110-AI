@@ -1,0 +1,22 @@
+eval:
+  keys:
+    - episode/return_mean
+    - episode/return_std
+    - episode/length_mean
+    - episode/length_std
+    - episode/score_mean
+    - episode/score_min
+    - episode/score_max
+    - episode/wins
+    - episode/win_rate
+    - step/return_rate
+    - step/score_rate
+  termination: true
+train:
+  keys:
+    - episode/score_mean
+    - episode/score_min
+    - episode/score_max
+    - episode/wins
+    - episode/win_rate
+  termination: true

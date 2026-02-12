@@ -24,6 +24,7 @@ from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.rl.envs.factory import make_single_env
 from snake_rl.rl.envs.rust_vec_env import RustVecEnv
 from snake_rl.rl.eval.metrics import is_win_from_info
+from snake_rl.rl.metrics import Metrics
 from snake_rl.utils.obs import sanitize_observation
 
 
@@ -143,9 +144,9 @@ def evaluate_model(
         rewards_by_ep = np.zeros((episodes,), dtype=np.float64)
         lengths_by_ep = np.zeros((episodes,), dtype=np.int64)
         wins_by_ep = np.zeros((episodes,), dtype=np.int64)
+        scores_by_ep = np.full((episodes,), np.nan, dtype=np.float64)
 
         termination_counts: dict[str, int] = {}
-        final_scores: list[float] = []
 
         finished = 0
 
@@ -192,7 +193,7 @@ def evaluate_model(
 
                 if "final_score" in info_i:
                     with suppress(Exception):
-                        final_scores.append(float(info_i["final_score"]))
+                        scores_by_ep[ep_idx] = float(info_i["final_score"])
 
                 finished += 1
                 if on_episode is not None:
@@ -225,20 +226,20 @@ def evaluate_model(
 
     wins = int(wins_by_ep.sum())
     out: dict[str, Any] = {
-        "episodes": int(episodes),
-        "deterministic": bool(deterministic),
-        "seed_base": int(seed_base),
-        "num_envs": int(n_envs),
-        "n_frames": int(get_frame_stack_n(cfg)),
-        "mean_reward": float(r.mean()),
-        "std_reward": float(r.std(ddof=0)),
-        "mean_length": float(lengths.mean()),
-        "std_length": float(lengths.std(ddof=0)),
-        "wins": wins,
-        "win_rate": float(wins / float(episodes)),
-        "env_obs": dict(get_env_obs(cfg)),
-        "env_action": str(get_env_action(cfg)),
-        "env_engine": str(get_env_engine(cfg)),
+        Metrics.EPISODES: int(episodes),
+        Metrics.DETERMINISTIC: bool(deterministic),
+        Metrics.SEED_BASE: int(seed_base),
+        Metrics.NUM_ENVS: int(n_envs),
+        Metrics.N_FRAMES: int(get_frame_stack_n(cfg)),
+        Metrics.EP_RETURN_MEAN: float(r.mean()),
+        Metrics.EP_RETURN_STD: float(r.std(ddof=0)),
+        Metrics.EP_LENGTH_MEAN: float(lengths.mean()),
+        Metrics.EP_LENGTH_STD: float(lengths.std(ddof=0)),
+        Metrics.EP_WINS: wins,
+        Metrics.EP_WIN_RATE: float(wins / float(episodes)),
+        Metrics.ENV_OBS: dict(get_env_obs(cfg)),
+        Metrics.ENV_ACTION: str(get_env_action(cfg)),
+        Metrics.ENV_ENGINE: str(get_env_engine(cfg)),
     }
 
     with suppress(Exception):
@@ -246,11 +247,21 @@ def evaluate_model(
 
     if termination_counts:
         out["termination_counts"] = dict(sorted(termination_counts.items(), key=lambda kv: kv[0]))
+        for cause, count in sorted(termination_counts.items()):
+            out[f"{Metrics.TERM_PREFIX}{cause}_count"] = int(count)
+            out[f"{Metrics.TERM_PREFIX}{cause}_rate"] = float(count / float(episodes))
 
-    if final_scores:
-        fs = np.asarray(final_scores, dtype=np.float64)
-        out["final_score_mean"] = float(fs.mean())
-        out["final_score_min"] = float(fs.min())
-        out["final_score_max"] = float(fs.max())
+    scores_mask = ~np.isnan(scores_by_ep)
+    if np.any(scores_mask):
+        s = scores_by_ep[scores_mask]
+        out[Metrics.EP_SCORE_MEAN] = float(s.mean())
+        out[Metrics.EP_SCORE_MIN] = float(s.min())
+        out[Metrics.EP_SCORE_MAX] = float(s.max())
+        score_rates = s / lengths[scores_mask]
+        out[Metrics.STEP_SCORE_RATE] = float(score_rates.mean())
+
+    if np.all(lengths > 0):
+        return_rates = r / lengths
+        out[Metrics.STEP_RETURN_RATE] = float(return_rates.mean())
 
     return out

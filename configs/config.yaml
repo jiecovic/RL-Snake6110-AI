@@ -5,6 +5,7 @@ defaults:
   - env: head_pixel
   - feature_extractor: snake_pixel_cnn
   - train: ppo
+  - metrics: default
   - logging: default
   - _self_
 
