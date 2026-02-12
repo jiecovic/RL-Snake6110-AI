@@ -11,7 +11,8 @@ from snake_rl.game.snake_engine import SnakeEngine
 
 def parse_args():
     p = argparse.ArgumentParser(description="Snake (human-controlled)")
-    p.add_argument("--fps", type=int, default=10)
+    p.add_argument("--fps", type=int, default=0, help="Render FPS cap (0 = uncapped).")
+    p.add_argument("--sim-hz", type=int, default=10, help="Simulation steps per second.")
     p.add_argument("--width", type=int, default=22)
     p.add_argument("--height", type=int, default=13)
     p.add_argument("--food", type=int, default=1)
@@ -28,6 +29,7 @@ def main() -> None:
         game=game,
         cfg=AppConfig(
             fps=args.fps,
+            sim_hz=args.sim_hz,
             pixel_size=args.pixel_size,
             caption="Snake (human)",
             enable_human_input=True,

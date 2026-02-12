@@ -175,7 +175,8 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="If >0, poll for newer checkpoint every N seconds.",
     )
-    p.add_argument("--fps", type=int, default=25)
+    p.add_argument("--fps", type=int, default=0, help="Render FPS cap (0 = uncapped).")
+    p.add_argument("--sim-hz", type=int, default=25, help="Simulation steps per second.")
     p.add_argument("--pixel-size", type=int, default=8)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="auto")
@@ -469,6 +470,7 @@ def main() -> None:
             game=game,
             cfg=AppConfig(
                 fps=int(args.fps),
+                sim_hz=int(args.sim_hz),
                 pixel_size=int(args.pixel_size),
                 caption=f"Snake (watch: {run_dir.name} / {args.which})",
                 enable_human_input=False,

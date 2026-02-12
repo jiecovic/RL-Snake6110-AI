@@ -22,6 +22,7 @@ class PygameRenderContext:
     hud_height: int
     hud_padding_x: int
     hud_padding_y: int
+    sim_fps: float = 0.0
 
 
 def create_pygame_context(

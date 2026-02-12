@@ -1,6 +1,7 @@
 # src/snake_rl/game/rendering/pygame/app.py
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -24,9 +25,11 @@ StepFn = Callable[[], None]
 @dataclass(slots=True)
 class AppConfig:
     fps: int
+    sim_hz: int | None = None
     pixel_size: int = 10
     caption: str = "Snake"
     reset_on_done: bool = True
+    max_steps_per_frame: int = 5
     # Human input (optional)
     enable_human_input: bool = False
     turn_keys: tuple[int, int] | None = None  # left, right
@@ -56,6 +59,11 @@ def run_pygame_app(
         by exactly one step inside step_fn(); this function does NOT call game.move().
       - internal stepping (human): uses relative action ints from buffered input
         and calls game.move().
+
+    Timing:
+      - Render is capped at cfg.fps (<= 0 means uncapped).
+      - Simulation is stepped at cfg.sim_hz (defaults to fps).
+      - Steps are decoupled from rendering via a fixed-timestep accumulator.
     """
     if pygame is None:  # pragma: no cover
         raise RuntimeError("pygame is not installed")
@@ -76,6 +84,15 @@ def run_pygame_app(
             left_key, right_key = (pygame.K_a, pygame.K_d)
         else:
             left_key, right_key = cfg.turn_keys
+
+        sim_hz = int(cfg.sim_hz) if cfg.sim_hz is not None else int(cfg.fps)
+        sim_hz = max(1, sim_hz)
+        step_dt = 1.0 / float(sim_hz)
+
+        last_time = time.perf_counter()
+        accumulator = 0.0
+        sim_tick_t0 = last_time
+        sim_steps = 0
 
         while True:
             for event in pygame.event.get():
@@ -98,30 +115,58 @@ def run_pygame_app(
                         elif event.key == right_key:
                             queued_turn = 2
 
-            if not paused:
-                if step_fn is not None:
-                    # RL-consistent mode: caller owns stepping (env.step()).
-                    step_fn()
-                else:
-                    # Human mode: pygame loop steps the game directly.
-                    if game.running:
-                        if cfg.enable_human_input:
-                            rel = queued_turn if queued_turn is not None else 0
-                            queued_turn = None  # consume once per step
-                        else:
-                            rel = 0
+            now = time.perf_counter()
+            dt = now - last_time
+            last_time = now
 
-                        results = game.move(int(rel))
-                        if cfg.reset_on_done and (results & _END_MASK):
-                            game.reset()
-                            queued_turn = None
+            if paused:
+                accumulator = 0.0
+            else:
+                accumulator += dt
+
+                steps = 0
+                while accumulator >= step_dt and steps < int(cfg.max_steps_per_frame):
+                    if step_fn is not None:
+                        # RL-consistent mode: caller owns stepping (env.step()).
+                        step_fn()
                     else:
-                        if cfg.reset_on_done:
-                            game.reset()
-                            queued_turn = None
+                        # Human mode: pygame loop steps the game directly.
+                        if game.running:
+                            if cfg.enable_human_input:
+                                rel = queued_turn if queued_turn is not None else 0
+                                queued_turn = None  # consume once per step
+                            else:
+                                rel = 0
+
+                            results = game.move(int(rel))
+                            if cfg.reset_on_done and (results & _END_MASK):
+                                game.reset()
+                                queued_turn = None
+                        else:
+                            if cfg.reset_on_done:
+                                game.reset()
+                                queued_turn = None
+
+                    accumulator -= step_dt
+                    steps += 1
+                    sim_steps += 1
+
+                # Prevent spiral of death when rendering stalls.
+                if steps >= int(cfg.max_steps_per_frame):
+                    accumulator = 0.0
+
+            now = time.perf_counter()
+            elapsed = now - sim_tick_t0
+            if elapsed >= 1.0:
+                ctx.sim_fps = float(sim_steps) / elapsed
+                sim_steps = 0
+                sim_tick_t0 = now
 
             renderer.draw(game=game, ctx=ctx)
             pygame.display.flip()
-            ctx.clock.tick(cfg.fps)
+            if int(cfg.fps) > 0:
+                ctx.clock.tick(cfg.fps)
+            else:
+                ctx.clock.tick(0)
     finally:
         pygame.quit()
