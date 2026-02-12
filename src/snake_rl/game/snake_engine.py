@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 
 try:
-    from snake_rl import _core as rust_core
+    import snake_rl._core as rust_core
 except Exception:  # pragma: no cover
     rust_core = None  # type: ignore[assignment]
 

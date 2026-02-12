@@ -1,0 +1,19 @@
+{
+  "include": ["src"],
+  "exclude": [
+    "assets",
+    "configs",
+    "demo-videos",
+    "experiments",
+    "runs",
+    "old_*",
+    ".venv",
+    "venv",
+    "env"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false
+}

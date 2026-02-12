@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from typing import Any, TypedDict, cast
 
 import numpy as np
+import snake_rl._core as core
 from gymnasium import Env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-from snake_rl import _core as core
 from snake_rl.config.access import get_board_params, get_env_id, get_env_params, get_frame_stack_n
 from snake_rl.config.schema import RewardConfig
 from snake_rl.rl.env_factory import apply_frame_stack, make_single_env

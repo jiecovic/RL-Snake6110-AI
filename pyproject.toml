@@ -54,6 +54,7 @@ snake-watch = "snake_rl.cli.watch:main"
 # New tools for board and tileset printing
 snake-print-board = "snake_rl.tools.print_board:main"
 snake-print-tileset = "snake_rl.tools.print_tileset:main"
+snake-check = "snake_rl.tools.check:main"
 
 [tool.ruff]
 target-version = "py310"
@@ -73,21 +74,3 @@ select = ["E", "F", "I", "B", "UP", "C4", "SIM", "PIE"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 
-[tool.pyright]
-include = ["src"]
-exclude = [
-    "assets",
-    "configs",
-    "demo-videos",
-    "experiments",
-    "runs",
-    "old_*",
-    ".venv",
-    "venv",
-    "env",
-]
-venvPath = "."
-venv = ".venv"
-pythonVersion = "3.10"
-typeCheckingMode = "basic"
-reportMissingTypeStubs = false

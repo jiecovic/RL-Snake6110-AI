@@ -5,10 +5,10 @@ from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
+import snake_rl._core as core
 from gymnasium import spaces
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvIndices
 
-from snake_rl import _core as core
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.obs_utils import (
     pov_pixel_frame,

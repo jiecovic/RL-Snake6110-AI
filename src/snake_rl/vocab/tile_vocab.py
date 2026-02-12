@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from typing import Any, cast
 
 import numpy as np
-
-from snake_rl import _core as core
+import snake_rl._core as core
 
 
 @dataclass(frozen=True)
@@ -103,7 +104,7 @@ def _sha256_vocab(name: str, classes: list[tuple[str, list[str]]]) -> str:
 
 
 def _collect_vocab_defs() -> dict[str, tuple[tuple[str, tuple[str, ...]], ...]]:
-    ext = getattr(core, "tile_vocab_defs", None)
+    ext = cast(Callable[[], Iterable[Mapping[str, Any]]], getattr(core, "tile_vocab_defs", None))
     if not callable(ext):
         raise RuntimeError("Rust core does not expose tile_vocab_defs()")
 
