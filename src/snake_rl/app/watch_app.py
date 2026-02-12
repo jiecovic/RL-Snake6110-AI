@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 from stable_baselines3 import PPO
@@ -21,8 +22,9 @@ from snake_rl.envs.snake_env import SnakeEnv
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snake_engine import SnakeEngine
+from snake_rl.rl.reporting import log_ppo_params
 from snake_rl.utils.logging import setup_logger
-from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
+from snake_rl.utils.model_params import format_sb3_param_summary
 from snake_rl.utils.models import load_ppo
 from snake_rl.utils.obs import sanitize_observation
 from snake_rl.utils.runs.checkpoints import pick_checkpoint
@@ -49,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--which",
         type=str,
-        default="best",
+        default="latest",
         choices=["auto", "latest", "best", "best_reward", "best_score", "best_win", "final"],
     )
     p.add_argument(
@@ -219,11 +221,29 @@ def main() -> None:
         overrides=list(args.override),
     )
 
-    ckpt = pick_checkpoint(run_dir=run_dir, which=args.which)
+    ckpt = None
+    poll_s = float(args.reload) if args.reload and float(args.reload) > 0 else 1.0
+    warned_wait = False
+    while ckpt is None:
+        try:
+            ckpt = pick_checkpoint(run_dir=run_dir, which=args.which)
+        except FileNotFoundError:
+            if not warned_wait:
+                logger.info("waiting for first checkpoint...")
+                warned_wait = True
+            time.sleep(poll_s)
+            continue
+
     model = load_ppo(ckpt, device=str(args.device))
     logger.info(f"loaded checkpoint: {relpath(ckpt, base=repo)}")
     logger.info(format_sb3_param_summary(model))
-    logger.info(format_sb3_param_report(model))
+    log_ppo_params(
+        model=model,
+        cfg=cfg,
+        paths=SimpleNamespace(repo_root=repo),
+        logger=logger,
+        label="watch",
+    )
 
     n_stack = int(get_frame_stack_n(cfg))
     board = get_board_params(cfg)
