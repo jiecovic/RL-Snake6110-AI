@@ -9,6 +9,7 @@ from gymnasium import spaces
 
 from snake_rl import _core as core
 from snake_rl.config.schema import RewardConfig
+from snake_rl.envs.specs import ActionSpec
 from snake_rl.game.snake_engine import SnakeEngine
 
 
@@ -48,14 +49,20 @@ class BaseSnakeEnv(gym.Env, ABC):
         core.MOVE_TIMEOUT: "timeout",
     }
 
-    def __init__(self, game: SnakeEngine, *, reward: RewardConfig | dict[str, Any] | None = None):
+    def __init__(
+        self,
+        game: SnakeEngine,
+        *,
+        action: ActionSpec | None = None,
+        reward: RewardConfig | dict[str, Any] | None = None,
+    ):
         # Avoid cooperative super() because subclasses also mix in PixelObsEnvBase.
         gym.Env.__init__(self)
 
         self.game: SnakeEngine = game
 
-        # 0 = forward, 1 = left, 2 = right
-        self.action_space: spaces.Space = spaces.Discrete(3)
+        self.action_spec = action if action is not None else ActionSpec()
+        self.action_space: spaces.Space = self.action_spec.action_space()
 
         if reward is None:
             reward_cfg = RewardConfig()
@@ -103,9 +110,9 @@ class BaseSnakeEnv(gym.Env, ABC):
 
     def step(self, action: int):
         reward = 0.0
-        if action not in (0, 1, 2):
-            raise ValueError(f"action must be 0|1|2, got {action!r}")
-        results = self.game.move(int(action))
+        action_i = int(action)
+        self.action_spec.validate_action(action_i)
+        results = self.action_spec.step(self.game, action_i)
         obs = self.get_obs()
 
         self.current_step_since_last_food += 1

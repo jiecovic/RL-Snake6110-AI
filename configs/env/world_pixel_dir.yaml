@@ -1,0 +1,17 @@
+---
+# Environment + observation config (board and reward are chosen separately)
+env:
+  engine: python
+  action:
+    type: relative
+  obs:
+    kind: pixel
+    view: world
+    params:
+      remove_border: true
+    features:
+      direction: true
+  frame_stack:
+    n_frames: 1
+
+

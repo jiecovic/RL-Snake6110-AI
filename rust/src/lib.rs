@@ -74,6 +74,14 @@ impl PySnakeEngine {
         self.inner.step(rel_dir as i32).map_err(map_engine_err)
     }
 
+    fn step_relative(&mut self, rel_dir: u8) -> PyResult<u32> {
+        self.inner.step(rel_dir as i32).map_err(map_engine_err)
+    }
+
+    fn step_cardinal(&mut self, abs_dir: u8) -> PyResult<u32> {
+        self.inner.step_cardinal(abs_dir as i32).map_err(map_engine_err)
+    }
+
     fn tile_grid<'py>(&self, py: Python<'py>) -> Py<PyArray2<u8>> {
         let arr = ndarray::Array2::from_shape_vec(
             (self.inner.height(), self.inner.width()),
@@ -195,6 +203,18 @@ impl PyVecSnakeEngine {
         let mut out: Vec<u32> = Vec::with_capacity(self.games.len());
         for (i, g) in self.games.iter_mut().enumerate() {
             let m = g.step(actions[i] as i32).map_err(map_engine_err)?;
+            out.push(m);
+        }
+        Ok(out)
+    }
+
+    fn step_cardinal(&mut self, actions: Vec<u8>) -> PyResult<Vec<u32>> {
+        if actions.len() != self.games.len() {
+            return Err(PyValueError::new_err("actions length must match num envs"));
+        }
+        let mut out: Vec<u32> = Vec::with_capacity(self.games.len());
+        for (i, g) in self.games.iter_mut().enumerate() {
+            let m = g.step_cardinal(actions[i] as i32).map_err(map_engine_err)?;
             out.push(m);
         }
         Ok(out)

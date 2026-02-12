@@ -155,6 +155,34 @@ impl SnakeEngine {
         self.step_internal(rel_dir)
     }
 
+    pub fn step_cardinal(&mut self, abs_dir: i32) -> Result<u32, EngineError> {
+        if !self.running {
+            return Ok(MOVE_NOT_RUNNING);
+        }
+
+        let dir = match self.direction {
+            Some(d) => d,
+            None => return Err(EngineError::DirectionNone),
+        };
+
+        let desired = ((abs_dir % 4) + 4) % 4;
+        let desired = desired as i8;
+
+        // Map absolute direction to a relative action (0=forward,1=left,2=right).
+        // Opposite direction is treated as "forward" to avoid 180-degree reversals.
+        let rel = if desired == dir {
+            0
+        } else if desired == dir_turn_left(dir) {
+            1
+        } else if desired == dir_turn_right(dir) {
+            2
+        } else {
+            0
+        };
+
+        self.step_internal(rel)
+    }
+
     pub fn tile_grid(&self) -> &[u8] {
         &self.tile_grid
     }

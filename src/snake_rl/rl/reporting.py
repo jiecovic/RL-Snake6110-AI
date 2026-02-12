@@ -117,18 +117,18 @@ def log_ppo_params(*, model: PPO, cfg: Any, paths: Any, logger) -> None:
 
 def _resolve_tile_vocab_meta(cfg: TrainConfig) -> dict[str, Any] | None:
     """
-    If env.params.tile_vocab is set, resolve it to reproducible metadata.
+    If env.obs.params.tile_vocab is set, resolve it to reproducible metadata.
 
     Returns None if no tile_vocab was configured.
     """
-    params = dict(cfg.env.params)
+    params = dict(cfg.env.obs.params)
     name_v = params.get("tile_vocab")
     if name_v is None:
         return None
 
     name = str(name_v).strip()
     if not name:
-        raise ValueError("env.params.tile_vocab must be a non-empty string")
+        raise ValueError("env.obs.params.tile_vocab must be a non-empty string")
 
     vocab = load_tile_vocab(name)
     return {
@@ -150,11 +150,11 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
     """
     fe = cfg.feature_extractor
 
-    env_params = dict(cfg.env.params)
+    env_obs_params = dict(cfg.env.obs.params)
     vocab_meta = _resolve_tile_vocab_meta(cfg)
     if vocab_meta is not None:
         # Store resolved metadata next to the user-facing selection.
-        env_params["tile_vocab_meta"] = vocab_meta
+        env_obs_params["tile_vocab_meta"] = vocab_meta
 
     d: dict[str, Any] = {
         "run": {
@@ -179,13 +179,16 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "timeout_penalty": float(cfg.reward.timeout_penalty),
         },
         "env": {
-            "id": str(cfg.env.id),
-            "params": env_params,
-        },
-        "observation": {
-            "params": dict(cfg.observation.params),
+            "engine": str(cfg.env.engine),
+            "action": {"type": str(cfg.env.action.type)},
+            "obs": {
+                "kind": str(cfg.env.obs.kind),
+                "view": str(cfg.env.obs.view),
+                "params": env_obs_params,
+                "features": dict(cfg.env.obs.features),
+            },
             "frame_stack": {
-                "n_frames": int(cfg.observation.frame_stack.n_frames),
+                "n_frames": int(cfg.env.frame_stack.n_frames),
             },
         },
         "feature_extractor": {

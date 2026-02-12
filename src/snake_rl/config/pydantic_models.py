@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from snake_rl.config.schema import (
+    ActionConfig,
     AlgoConfig,
     BoardConfig,
     EnvConfig,
@@ -48,9 +49,15 @@ class RewardConfigModel(_BaseConfigModel):
     timeout_penalty: float = 0.0
 
 
-class EnvConfigModel(_BaseConfigModel):
-    id: str
+class ActionConfigModel(_BaseConfigModel):
+    type: str = "relative"
+
+
+class ObservationConfigModel(_BaseConfigModel):
+    kind: str
+    view: str
     params: dict[str, Any] = Field(default_factory=dict)
+    features: dict[str, Any] = Field(default_factory=dict)
 
 
 class FrameStackConfigModel(_BaseConfigModel):
@@ -60,12 +67,14 @@ class FrameStackConfigModel(_BaseConfigModel):
     @classmethod
     def _n_frames_at_least_one(cls, v: int) -> int:
         if int(v) <= 0:
-            raise ValueError("observation.frame_stack.n_frames must be >= 1")
+            raise ValueError("env.frame_stack.n_frames must be >= 1")
         return int(v)
 
 
-class ObservationConfigModel(_BaseConfigModel):
-    params: dict[str, Any] = Field(default_factory=dict)
+class EnvConfigModel(_BaseConfigModel):
+    engine: str = "python"
+    action: ActionConfigModel = Field(default_factory=ActionConfigModel)
+    obs: ObservationConfigModel
     frame_stack: FrameStackConfigModel = Field(default_factory=FrameStackConfigModel)
 
 
@@ -187,7 +196,6 @@ class TrainConfigModel(_BaseConfigModel):
     board: BoardConfigModel
     reward: RewardConfigModel = Field(default_factory=RewardConfigModel)
     env: EnvConfigModel
-    observation: ObservationConfigModel
     feature_extractor: FeaturesExtractorConfigModel
     train: TrainLoopConfigModel = Field(default_factory=TrainLoopConfigModel)
 
@@ -250,30 +258,89 @@ class TrainConfigModel(_BaseConfigModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _merge_obs_params_into_env(cls, data: Any) -> Any:
+    def _normalize_env_obs(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
 
-        obs = data.get("observation")
-        if not isinstance(obs, dict):
-            return data
-        obs_params = obs.get("params")
-        if not isinstance(obs_params, dict) or not obs_params:
-            return data
-
-        env = data.get("env")
-        env_d = dict(env) if isinstance(env, dict) else {}
-        env_params = env_d.get("params")
-        if env_params is None:
-            env_params = {}
-        if not isinstance(env_params, dict):
-            return data
-
-        merged = dict(obs_params)
-        merged.update(env_params)
-        env_d["params"] = merged
-
         out = dict(data)
+        env = out.get("env")
+        env_d = dict(env) if isinstance(env, dict) else {}
+
+        obs_top = out.get("observation")
+        obs_from_env = env_d.get("obs", env_d.get("observation"))
+        obs_d = dict(obs_from_env) if isinstance(obs_from_env, dict) else {}
+
+        obs_params = dict(obs_d.get("params", {})) if isinstance(obs_d.get("params"), dict) else {}
+        obs_features = (
+            dict(obs_d.get("features", {})) if isinstance(obs_d.get("features"), dict) else {}
+        )
+
+        # Legacy: env.params -> obs.params (with optional env.engine)
+        env_params = env_d.get("params")
+        env_params_d = dict(env_params) if isinstance(env_params, dict) else {}
+        if "engine" in env_params_d and "engine" not in env_d:
+            env_d["engine"] = env_params_d.pop("engine")
+
+        # Legacy: top-level observation.params -> obs.params
+        top_params: dict[str, Any] = {}
+        if isinstance(obs_top, dict):
+            params_top = obs_top.get("params")
+            if isinstance(params_top, dict):
+                top_params = dict(params_top)
+
+            frame_stack = obs_top.get("frame_stack")
+            if isinstance(frame_stack, dict) and "frame_stack" not in env_d:
+                env_d["frame_stack"] = dict(frame_stack)
+
+        merged_params: dict[str, Any] = {}
+        merged_params.update(top_params)
+        merged_params.update(env_params_d)
+        merged_params.update(obs_params)
+
+        # Legacy: env.id -> obs.kind/view (+ features)
+        env_id = env_d.get("id")
+        if isinstance(env_id, str) and (("kind" not in obs_d) or ("view" not in obs_d)):
+            key = env_id.strip().lower()
+            mapping = {
+                "world_pixel": ("pixel", "world", {}),
+                "world_pixel_dir": ("pixel", "world", {"direction": True}),
+                "head_pixel": ("pixel", "head", {}),
+                "head_pixel_fill": ("pixel", "head", {"fill": {"enabled": True}}),
+                "world_tile_id": ("tile_id", "world", {}),
+                "head_tile_id": ("tile_id", "head", {}),
+            }
+            if key in mapping:
+                kind, view, feats = mapping[key]
+                obs_d.setdefault("kind", kind)
+                obs_d.setdefault("view", view)
+                obs_features = {**feats, **obs_features}
+
+        # Legacy: fill_bins -> features.fill.bins
+        if "fill_bins" in merged_params:
+            fill_bins = merged_params.pop("fill_bins")
+            f = obs_features.get("fill")
+            if isinstance(f, dict):
+                f2 = dict(f)
+                f2.setdefault("enabled", True)
+                f2.setdefault("bins", fill_bins)
+                obs_features["fill"] = f2
+            elif f is True or f is None:
+                obs_features["fill"] = {"enabled": True, "bins": fill_bins}
+
+        if merged_params:
+            obs_d["params"] = merged_params
+        if obs_features:
+            obs_d["features"] = obs_features
+
+        if obs_d:
+            env_d["obs"] = obs_d
+
+        # Drop legacy keys
+        env_d.pop("id", None)
+        env_d.pop("params", None)
+        env_d.pop("observation", None)
+        out.pop("observation", None)
+
         out["env"] = env_d
         return out
 
@@ -302,13 +369,18 @@ class TrainConfigModel(_BaseConfigModel):
                 timeout_penalty=float(self.reward.timeout_penalty),
             ),
             env=EnvConfig(
-                id=str(self.env.id),
-                params=dict(self.env.params),
-            ),
-            observation=ObservationConfig(
-                params=dict(self.observation.params),
+                engine=str(self.env.engine),
+                action=ActionConfig(
+                    type=str(self.env.action.type),
+                ),
+                obs=ObservationConfig(
+                    kind=str(self.env.obs.kind),
+                    view=str(self.env.obs.view),
+                    params=dict(self.env.obs.params),
+                    features=dict(self.env.obs.features),
+                ),
                 frame_stack=FrameStackConfig(
-                    n_frames=int(self.observation.frame_stack.n_frames),
+                    n_frames=int(self.env.frame_stack.n_frames),
                 ),
             ),
             feature_extractor=FeaturesExtractorConfig(
@@ -334,6 +406,7 @@ class TrainConfigModel(_BaseConfigModel):
 
 __all__ = [
     "AlgoConfigModel",
+    "ActionConfigModel",
     "EnvConfigModel",
     "EvalConfigModel",
     "FeaturesExtractorConfigModel",

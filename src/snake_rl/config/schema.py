@@ -47,10 +47,16 @@ class RewardConfig:
 
 
 @dataclass(frozen=True)
-class EnvConfig:
-    id: str
-    # Parameters passed to the selected env constructor (e.g. view_radius for POV envs).
-    params: dict[str, Any] = field(default_factory=dict)
+class ActionConfig:
+    """
+    Action specification for the environment.
+
+    type:
+      - relative: forward/left/right (0/1/2)
+      - cardinal: up/right/down/left (0/1/2/3)
+    """
+
+    type: str = "relative"
 
 
 @dataclass(frozen=True)
@@ -66,9 +72,35 @@ class FrameStackConfig:
 
 @dataclass(frozen=True)
 class ObservationConfig:
-    # Back-compat: older configs used observation.params for env kwargs.
-    # Going forward, env kwargs belong in env.params.
+    """
+    Observation specification.
+
+    kind:
+      - pixel
+      - tile_id
+
+    view:
+      - world
+      - head
+
+    params:
+      View/mode specific parameters (e.g. view_radius, rotate_to_head, remove_border).
+
+    features:
+      Optional extra features such as direction or fill.
+    """
+
+    kind: str
+    view: str
     params: dict[str, Any] = field(default_factory=dict)
+    features: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EnvConfig:
+    obs: ObservationConfig
+    engine: str = "python"
+    action: ActionConfig = field(default_factory=ActionConfig)
     frame_stack: FrameStackConfig = field(default_factory=FrameStackConfig)
 
 
@@ -149,7 +181,6 @@ class TrainConfig:
     run: RunConfig
     board: BoardConfig
     env: EnvConfig
-    observation: ObservationConfig
     feature_extractor: FeaturesExtractorConfig
     reward: RewardConfig = field(default_factory=RewardConfig)
     train: TrainLoopConfig = field(default_factory=TrainLoopConfig)

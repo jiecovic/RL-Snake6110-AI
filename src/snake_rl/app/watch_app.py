@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import inspect
 import time
 from contextlib import suppress
 from datetime import datetime
@@ -17,12 +16,13 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 from snake_rl import _core as core
 from snake_rl.config.access import (
     get_board_params,
-    get_env_id,
-    get_env_params,
+    get_env_action,
+    get_env_obs,
     get_frame_stack_n,
 )
 from snake_rl.config.loader import load_train_config_from_path
-from snake_rl.envs.registry import get_env_cls
+from snake_rl.envs.snake_env import SnakeEnv
+from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.rl.env_factory import apply_frame_stack
@@ -53,34 +53,6 @@ def _make_engine_from_board_params(board: dict[str, int]) -> SnakeEngine:
         board=core_board,
         food_count=int(board["food_count"]),
     )
-
-
-def _filter_env_kwargs(*, env_cls: type, params: dict[str, Any]) -> dict[str, Any]:
-    """
-    Filter snapshot env params to only those accepted by env_cls.__init__.
-
-    This is important because snapshots may contain reproducibility metadata
-    (e.g. tile_vocab_meta) that should NOT be passed to env constructors.
-    """
-    if not params:
-        return {}
-
-    try:
-        sig = inspect.signature(env_cls.__init__)
-    except Exception:
-        # Best-effort fallback: drop known meta keys.
-        drop = {"tile_vocab_meta"}
-        return {k: v for k, v in params.items() if k not in drop}
-
-    accepted = set(sig.parameters.keys())
-    accepted.discard("self")
-
-    # If env supports **kwargs, keep everything.
-    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
-        return dict(params)
-
-    filtered = {k: v for k, v in params.items() if k in accepted}
-    return filtered
 
 
 def _infer_num_classes_from_obs_space(obs_space: spaces.Space) -> int | None:
@@ -122,6 +94,9 @@ def _extract_tile_grid_2d(obs: Any) -> np.ndarray | None:
     We always take env index 0 (watch uses DummyVecEnv with 1 env),
     and if C>1 (frame stack), we take the LAST channel as "latest frame".
     """
+    if isinstance(obs, dict) and "tiles" in obs:
+        obs = obs.get("tiles")
+
     if not isinstance(obs, np.ndarray):
         return None
 
@@ -137,13 +112,16 @@ def _extract_tile_grid_2d(obs: Any) -> np.ndarray | None:
     return None
 
 
-def _load_num_classes_from_env_params(env_params: dict[str, Any]) -> int | None:
+def _load_num_classes_from_obs_params(obs_cfg: dict[str, Any]) -> int | None:
     """
     If this run used a named tile_vocab, prefer using its num_classes (true K)
     instead of inferring from observation_space.high (which should match, but
     this is more explicit and gives us class_names too, later).
     """
-    name = env_params.get("tile_vocab")
+    params = obs_cfg.get("params", {})
+    if not isinstance(params, dict):
+        return None
+    name = params.get("tile_vocab")
     if name is None:
         return None
     if load_tile_vocab is None:
@@ -372,17 +350,18 @@ def main() -> None:
     board = get_board_params(cfg)
     game = _make_engine_from_board_params(board)
 
-    env_id = get_env_id(cfg)
-    env_cls = get_env_cls(env_id)
-    env_params = get_env_params(cfg)
-    env_kwargs = _filter_env_kwargs(env_cls=env_cls, params=env_params)
+    obs_cfg = dict(get_env_obs(cfg))
+    obs_spec = ObservationSpec(
+        kind=str(obs_cfg.get("kind")),
+        view=str(obs_cfg.get("view")),
+        params=dict(obs_cfg.get("params", {})),
+        features=dict(obs_cfg.get("features", {})),
+    )
+    obs_spec.kind_norm()
+    obs_spec.view_norm()
+    action_spec = ActionSpec(type=str(get_env_action(cfg)))
 
-    # (Optional) log dropped keys once (helps catch future metadata additions)
-    dropped = sorted(set(env_params.keys()) - set(env_kwargs.keys()))
-    if dropped:
-        logger.info(f"[watch] ignoring non-constructor env params: {dropped}")
-
-    base_env = env_cls(game, **env_kwargs)  # type: ignore[arg-type]
+    base_env = SnakeEnv(game, obs=obs_spec, action=action_spec)
 
     # IMPORTANT:
     # Seeding happens at the ENV level, not the game.
@@ -393,10 +372,14 @@ def main() -> None:
     vec_env = VecMonitor(vec_env)
 
     n_stack = int(get_frame_stack_n(cfg))
-    vec_env = apply_frame_stack(vec_env=vec_env, n_stack=n_stack, pixel_key="pixel")
+    vec_env = apply_frame_stack(
+        vec_env=vec_env,
+        n_stack=n_stack,
+        pixel_key=str(obs_spec.frame_stack_key() or "pixel"),
+    )
 
     # Precompute num_classes if possible (used by agent-view ids mode)
-    num_classes_from_vocab = _load_num_classes_from_env_params(env_params)
+    num_classes_from_vocab = _load_num_classes_from_obs_params(obs_cfg)
     num_classes_from_space = _infer_num_classes_from_obs_space(vec_env.observation_space)
     num_classes = num_classes_from_vocab or num_classes_from_space
 

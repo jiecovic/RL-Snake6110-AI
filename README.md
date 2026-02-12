@@ -8,7 +8,7 @@ training, evaluation, and visualization.
 ## Highlights
 - Rust-backed Snake engine (fast, deterministic RNG)
 - PPO agents with Stable-Baselines3 + Gymnasium
-- Multiple observation modes (pixels, POV, symbolic tile IDs)
+- Multiple observation modes (pixels, head/world views, symbolic tile IDs)
 - Reproducible runs via config snapshots
 - TensorBoard logging and live watch mode
 
@@ -50,7 +50,7 @@ snake-train --config-name main_head_pixel_ppo run.seed=123 run.num_envs=8 run.to
 
 Use the Rust vectorized engine for higher throughput:
 ```
-snake-train --config-name main_head_pixel_ppo env.params.engine=rust
+snake-train --config-name main_head_pixel_ppo env.engine=rust
 ```
 
 Evaluate a trained run:

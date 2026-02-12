@@ -119,6 +119,22 @@ class SnakeEngine:
         self._refresh_state()
         return mask
 
+    def move_relative(self, rel_dir: int = 0) -> int:
+        step = getattr(self._core, "step_relative", None)
+        if step is None:
+            step = self._core.step
+        mask = int(step(int(rel_dir)))
+        self._refresh_state()
+        return mask
+
+    def move_cardinal(self, abs_dir: int) -> int:
+        step = getattr(self._core, "step_cardinal", None)
+        if step is None:
+            raise RuntimeError("Rust core does not expose step_cardinal (rebuild the extension).")
+        mask = int(step(int(abs_dir)))
+        self._refresh_state()
+        return mask
+
     def _refresh_state(self) -> None:
         self._tile_grid = np.asarray(self._core.tile_grid(), dtype=np.uint8)
         self._pixel_buffer = np.asarray(self._core.pixel_grid(), dtype=np.uint8)

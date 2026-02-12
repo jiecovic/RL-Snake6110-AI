@@ -1,0 +1,15 @@
+---
+# Environment + observation config (board and reward are chosen separately)
+env:
+  engine: python
+  action:
+    type: relative
+  obs:
+    kind: tile_id
+    view: world
+    params:
+      remove_border: true
+  frame_stack:
+    n_frames: 1
+
+

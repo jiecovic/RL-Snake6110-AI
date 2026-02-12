@@ -18,12 +18,15 @@ from snake_rl import _core as core
 from snake_rl.config.access import (
     cfg_get,
     get_board_params,
-    get_env_params,
+    get_env_action,
+    get_env_engine,
+    get_env_obs,
     get_frame_stack_n,
     require_int,
 )
 from snake_rl.config.schema import RewardConfig
-from snake_rl.envs.registry import get_env_cls
+from snake_rl.envs.snake_env import SnakeEnv
+from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.rl.rust_vec_env import RustVecEnv
 
@@ -41,15 +44,15 @@ def _get_reward_from_cfg(cfg: Any) -> RewardConfig:
 
 class DictPixelVecFrameStack(VecEnvWrapper):
     """
-    VecEnv wrapper that frame-stacks only obs[pixel_key] for Dict observation spaces.
+    VecEnv wrapper that frame-stacks only obs[stack_key] for Dict observation spaces.
 
     Assumptions:
-      - underlying venv observation_space is spaces.Dict with key pixel_key
-      - obs[pixel_key] is a Box with shape (C,H,W)
+      - underlying venv observation_space is spaces.Dict with key stack_key
+      - obs[stack_key] is a Box with shape (C,H,W)
       - VecEnv returns numpy arrays (SB3 default)
 
     Output:
-      - obs[pixel_key] becomes (C*n_stack, H, W)
+      - obs[stack_key] becomes (C*n_stack, H, W)
       - other dict keys are left unchanged
     """
 
@@ -186,6 +189,26 @@ def apply_frame_stack(*, vec_env: VecEnv, n_stack: int, pixel_key: str = "pixel"
     return VecFrameStack(vec_env, n_stack=n, channels_order="first")
 
 
+def _obs_spec_from_cfg(cfg: Any) -> ObservationSpec:
+    obs_cfg = get_env_obs(cfg)
+    if not isinstance(obs_cfg, dict):
+        raise TypeError(f"env.obs must be a dict, got {type(obs_cfg).__name__}")
+    spec = ObservationSpec(
+        kind=str(obs_cfg.get("kind")),
+        view=str(obs_cfg.get("view")),
+        params=dict(obs_cfg.get("params", {})),
+        features=dict(obs_cfg.get("features", {})),
+    )
+    # Validate early for clearer errors.
+    spec.kind_norm()
+    spec.view_norm()
+    return spec
+
+
+def _action_spec_from_cfg(cfg: Any) -> ActionSpec:
+    return ActionSpec(type=str(get_env_action(cfg)))
+
+
 def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
     """
     Factory for a single Snake environment instance.
@@ -194,11 +217,8 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
       - Gymnasium env.reset(seed=...) passes a deterministic seed into the Rust core.
       - Subsequent resets without a seed continue the Rust RNG stream.
     """
-    env_id = cfg_get(cfg, "env.id", None)
-    if env_id is None:
-        raise KeyError("Config missing env.id")
-    env_id = str(env_id)
-    env_cls = get_env_cls(env_id)
+    obs_spec = _obs_spec_from_cfg(cfg)
+    action_spec = _action_spec_from_cfg(cfg)
 
     def _init():
         # Create engine WITHOUT a seed.
@@ -210,14 +230,9 @@ def make_single_env(*, cfg: Any, seed: int) -> Callable[[], Any]:
         )
         game = SnakeEngine(board=board, food_count=int(board_cfg["food_count"]))
 
-        env_params = get_env_params(cfg)
-        env_params.pop("engine", None)
         reward_cfg = _get_reward_from_cfg(cfg)
-        if "reward" in env_params:
-            raise ValueError("env.params must not contain 'reward'; use top-level reward config.")
-
         # Construct the Gymnasium environment
-        env = env_cls(game, reward=reward_cfg, **env_params)  # type: ignore[call-arg]
+        env = SnakeEnv(game, obs=obs_spec, action=action_spec, reward=reward_cfg)
 
         # Seed the environment ONCE at creation time.
         # This initializes env.np_random and, via BaseSnakeEnv.reset(),
@@ -246,10 +261,9 @@ def make_vec_env(*, cfg: Any):
     ss = np.random.SeedSequence(base_seed)
     child_seeds = [int(s.generate_state(1, dtype=np.uint32)[0]) for s in ss.spawn(num_envs)]
 
-    env_params = get_env_params(cfg)
-    engine = str(env_params.get("engine", "python")).lower()
-    env_params_clean = dict(env_params)
-    env_params_clean.pop("engine", None)
+    engine = str(get_env_engine(cfg)).lower()
+    obs_spec = _obs_spec_from_cfg(cfg)
+    action_spec = _action_spec_from_cfg(cfg)
 
     if engine == "rust":
         reward_cfg = _get_reward_from_cfg(cfg)
@@ -259,8 +273,8 @@ def make_vec_env(*, cfg: Any):
             height=int(board_cfg["height"]),
         )
         vec_env = RustVecEnv(
-            env_id=str(cfg_get(cfg, "env.id")),
-            env_params=env_params_clean,
+            obs=obs_spec,
+            action=action_spec,
             board=board,
             food_count=int(board_cfg["food_count"]),
             reward=reward_cfg,
@@ -273,7 +287,7 @@ def make_vec_env(*, cfg: Any):
         vec_env = apply_frame_stack(
             vec_env=vec_env,
             n_stack=n_stack,
-            pixel_key="pixel",
+            pixel_key=str(obs_spec.frame_stack_key() or "pixel"),
         )
         return vec_env
 
@@ -293,7 +307,7 @@ def make_vec_env(*, cfg: Any):
     vec_env = apply_frame_stack(
         vec_env=vec_env,
         n_stack=n_stack,
-        pixel_key="pixel",
+        pixel_key=str(obs_spec.frame_stack_key() or "pixel"),
     )
 
     return vec_env

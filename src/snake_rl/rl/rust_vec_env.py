@@ -14,9 +14,8 @@ from snake_rl.envs.obs_utils import (
     head_pixel_frame,
     head_tile_frame_with_valid,
 )
-from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.snake_engine import ensure_rust_core, tileset_tile_count, tileset_tile_size
-from snake_rl.vocab import load_tile_vocab
+from snake_rl.envs.specs import ActionSpec, ObservationSpec
+from snake_rl.game.snake_engine import ensure_rust_core, tileset_tile_size
 
 
 class RustVecEnv(VecEnv):
@@ -29,16 +28,16 @@ class RustVecEnv(VecEnv):
     def __init__(
         self,
         *,
-        env_id: str,
-        env_params: dict[str, Any],
+        obs: ObservationSpec,
+        action: ActionSpec | None = None,
         board: Any,
         food_count: int,
         reward: RewardConfig,
         num_envs: int,
         seeds: Iterable[int] | None = None,
     ) -> None:
-        self.env_id = str(env_id)
-        self.env_params = dict(env_params)
+        self.obs_spec = obs
+        self.action_spec = action if action is not None else ActionSpec()
         if not isinstance(board, core.Board):
             raise TypeError("board must be a snake_rl._core.Board instance")
         self.board = board
@@ -46,8 +45,7 @@ class RustVecEnv(VecEnv):
         self.num_envs = int(num_envs)
 
         self.tile_size = tileset_tile_size()
-        tile_vocab_name = self.env_params.get("tile_vocab")
-        self._tile_vocab = load_tile_vocab(tile_vocab_name) if tile_vocab_name is not None else None
+        self._tile_vocab = self.obs_spec.load_tile_vocab()
         ext = ensure_rust_core()
 
         seed_list = None
@@ -71,84 +69,18 @@ class RustVecEnv(VecEnv):
 
         self._actions: np.ndarray | None = None
 
-        self.action_space = spaces.Discrete(3)
+        self.action_space = self.action_spec.action_space()
         self.observation_space = self._make_observation_space()
 
         super().__init__(self.num_envs, self.observation_space, self.action_space)
 
     def _make_observation_space(self) -> spaces.Space:
-        env_id = self.env_id
-        p = self.env_params
-        ts = int(self.tile_size)
-        h = int(self.board.height)
-        w = int(self.board.width)
-
-        if env_id in {"world_pixel", "world_pixel_dir"}:
-            remove_border = bool(p.get("remove_border", True))
-            ph = h * ts
-            pw = w * ts
-            if remove_border:
-                ph -= 2 * ts
-                pw -= 2 * ts
-            pixel_space = spaces.Box(low=0, high=255, shape=(1, ph, pw), dtype=np.uint8)
-            if env_id == "world_pixel_dir":
-                return spaces.Dict({"pixel": pixel_space, "direction": spaces.Discrete(4)})
-            return pixel_space
-
-        if env_id in {"head_pixel", "head_pixel_fill"}:
-            view_radius = p.get("view_radius")
-            if view_radius is None:
-                raise ValueError("view_radius is required for head_pixel envs")
-            ry, rx = parse_view_radius(view_radius)
-            vh = (2 * ry + 1) * ts
-            vw = (2 * rx + 1) * ts
-            add_oob_mask = bool(p.get("add_oob_mask", False))
-            c = 2 if add_oob_mask else 1
-            pixel_space = spaces.Box(low=0, high=255, shape=(c, vh, vw), dtype=np.uint8)
-            if env_id == "head_pixel":
-                return pixel_space
-
-            fill_bins = p.get("fill_bins")
-            fill_space = (
-                spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
-                if fill_bins is None
-                else spaces.Discrete(int(fill_bins))
-            )
-            return spaces.Dict({"pixel": pixel_space, "fill": fill_space})
-
-        if env_id in {"world_tile_id", "head_tile_id"}:
-            if self._tile_vocab is not None:
-                base_num = int(self._tile_vocab.num_classes)
-            else:
-                base_num = int(tileset_tile_count())
-
-            if env_id == "world_tile_id":
-                remove_border = bool(p.get("remove_border", True))
-                gh = h - 2 if remove_border else h
-                gw = w - 2 if remove_border else w
-                return spaces.Box(
-                    low=0,
-                    high=base_num - 1,
-                    shape=(1, gh, gw),
-                    dtype=np.uint8,
-                )
-
-            view_radius = p.get("view_radius")
-            if view_radius is None:
-                raise ValueError("view_radius is required for head_tile_id envs")
-            ry, rx = parse_view_radius(view_radius)
-            vy = 2 * ry + 1
-            vx = 2 * rx + 1
-            mask_oob = bool(p.get("mask_oob", False))
-            num_classes = base_num + (1 if mask_oob else 0)
-            return spaces.Box(
-                low=0,
-                high=num_classes - 1,
-                shape=(1, vy, vx),
-                dtype=np.uint8,
-            )
-
-        raise ValueError(f"Unsupported env_id for RustVecEnv: {env_id}")
+        return self.obs_spec.make_space(
+            width=int(self.board.width),
+            height=int(self.board.height),
+            tile_size=int(self.tile_size),
+            tile_vocab=self._tile_vocab,
+        )
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         if seed is not None:
@@ -171,7 +103,10 @@ class RustVecEnv(VecEnv):
             raise RuntimeError("step_async must be called before step_wait")
 
         actions = [int(a) for a in self._actions.tolist()]
-        masks = np.asarray(self._vec_game.step(actions), dtype=np.uint32)
+        if self.action_spec.kind() == "relative":
+            masks = np.asarray(self._vec_game.step(actions), dtype=np.uint32)
+        else:
+            masks = np.asarray(self._vec_game.step_cardinal(actions), dtype=np.uint32)
 
         obs = self._build_obs()
 
@@ -286,144 +221,137 @@ class RustVecEnv(VecEnv):
     # ---- internal obs building ----
 
     def _build_obs(self):
-        env_id = self.env_id
-        p = self.env_params
+        spec = self.obs_spec
         ts = int(self.tile_size)
 
-        if env_id in {"world_pixel", "world_pixel_dir"}:
+        if spec.kind_norm() == "pixel":
             pixels = np.asarray(self._vec_game.pixel_grids(), dtype=np.uint8)
-            remove_border = bool(p.get("remove_border", True))
-            if remove_border:
-                pixels = pixels[:, ts:-ts, ts:-ts]
-            pixels = pixels[:, None, :, :].astype(np.uint8, copy=False)
-            if env_id == "world_pixel_dir":
-                dirs = np.asarray(self._vec_game.directions(), dtype=np.int64)
-                return {"pixel": pixels, "direction": dirs}
-            return pixels
-
-        if env_id in {"head_pixel", "head_pixel_fill"}:
-            pixels = np.asarray(self._vec_game.pixel_grids(), dtype=np.uint8)
-            view_radius = p.get("view_radius")
-            if view_radius is None:
-                raise ValueError("view_radius is required for head_pixel envs")
-            rotate_to_head = bool(p.get("rotate_to_head", True))
-            add_oob_mask = bool(p.get("add_oob_mask", False))
-            pixel_oob_value = int(p.get("pixel_oob_value", 255))
-            mask_valid_value = int(p.get("mask_valid_value", 255))
-            mask_oob_value = int(p.get("mask_oob_value", 0))
-
-            head_pos = np.asarray(self._vec_game.head_positions(), dtype=np.int32)
-            dirs = np.asarray(self._vec_game.directions(), dtype=np.int8)
-
-            frames: list[np.ndarray] = []
-            masks: list[np.ndarray] = []
-            for i in range(self.num_envs):
-                d = _dir_from_i8(int(dirs[i]))
-                if d is None:
-                    raise RuntimeError("direction is None in rust vec env")
-                head = (int(head_pos[i][0]), int(head_pos[i][1]))
-                if add_oob_mask:
-                    frame, valid = head_pixel_frame(
-                        pixel_grid=pixels[i],
-                        tile_size=ts,
-                        head=head,
-                        direction=d,
-                        view_radius=view_radius,
-                        rotate_to_head=rotate_to_head,
-                        oob_fill_value=pixel_oob_value,
-                        return_valid=True,
-                    )
-                    frames.append(frame)
-                    masks.append(valid)
-                else:
-                    frame = head_pixel_frame(
-                        pixel_grid=pixels[i],
-                        tile_size=ts,
-                        head=head,
-                        direction=d,
-                        view_radius=view_radius,
-                        rotate_to_head=rotate_to_head,
-                        oob_fill_value=pixel_oob_value,
-                        return_valid=False,
-                    )
-                    frames.append(frame)
-
-            frame_arr = np.stack(frames, axis=0).astype(np.uint8, copy=False)
-            if not add_oob_mask:
-                out = frame_arr[:, None, :, :]
+            if spec.view_norm() == "world":
+                if spec._remove_border():
+                    pixels = pixels[:, ts:-ts, ts:-ts]
+                base = pixels[:, None, :, :].astype(np.uint8, copy=False)
             else:
-                mask_arr = np.stack(masks, axis=0)
-                mask = np.full(frame_arr.shape, np.uint8(mask_oob_value), dtype=np.uint8)
-                mask[mask_arr] = np.uint8(mask_valid_value)
-                out = np.stack([frame_arr, mask], axis=1).astype(np.uint8, copy=False)
+                view_radius = spec._view_radius()
+                rotate_to_head = spec._rotate_to_head()
+                add_oob_mask = spec._add_oob_mask()
+                pixel_oob_value = spec._pixel_oob_value()
+                mask_valid_value = spec._mask_valid_value()
+                mask_oob_value = spec._mask_oob_value()
 
-            if env_id == "head_pixel":
-                return out
+                head_pos = np.asarray(self._vec_game.head_positions(), dtype=np.int32)
+                dirs = np.asarray(self._vec_game.directions(), dtype=np.int8)
 
-            # head_pixel_fill
-            fill_bins = p.get("fill_bins")
-            fill = _compute_fill(
+                frames: list[np.ndarray] = []
+                masks: list[np.ndarray] = []
+                for i in range(self.num_envs):
+                    d = _dir_from_i8(int(dirs[i]))
+                    if d is None:
+                        raise RuntimeError("direction is None in rust vec env")
+                    head = (int(head_pos[i][0]), int(head_pos[i][1]))
+                    if add_oob_mask:
+                        frame, valid = head_pixel_frame(
+                            pixel_grid=pixels[i],
+                            tile_size=ts,
+                            head=head,
+                            direction=d,
+                            view_radius=view_radius,
+                            rotate_to_head=rotate_to_head,
+                            oob_fill_value=pixel_oob_value,
+                            return_valid=True,
+                        )
+                        frames.append(frame)
+                        masks.append(valid)
+                    else:
+                        frame = head_pixel_frame(
+                            pixel_grid=pixels[i],
+                            tile_size=ts,
+                            head=head,
+                            direction=d,
+                            view_radius=view_radius,
+                            rotate_to_head=rotate_to_head,
+                            oob_fill_value=pixel_oob_value,
+                            return_valid=False,
+                        )
+                        frames.append(frame)
+
+                frame_arr = np.stack(frames, axis=0).astype(np.uint8, copy=False)
+                if not add_oob_mask:
+                    base = frame_arr[:, None, :, :]
+                else:
+                    mask_arr = np.stack(masks, axis=0)
+                    mask = np.full(frame_arr.shape, np.uint8(mask_oob_value), dtype=np.uint8)
+                    mask[mask_arr] = np.uint8(mask_valid_value)
+                    base = np.stack([frame_arr, mask], axis=1).astype(np.uint8, copy=False)
+
+            base_key = "pixel"
+        else:
+            grids = np.asarray(self._vec_game.tile_grids(), dtype=np.uint8)
+            vocab = self._tile_vocab
+
+            if spec.view_norm() == "world":
+                if spec._remove_border():
+                    grids = grids[:, 1:-1, 1:-1]
+                if vocab is not None:
+                    grids = vocab.lut[grids]
+                base = grids[:, None, :, :].astype(np.uint8, copy=False)
+            else:
+                view_radius = spec._view_radius()
+                rotate_to_head = spec._rotate_to_head()
+                mask_oob = spec._tile_mask_oob()
+
+                head_pos = np.asarray(self._vec_game.head_positions(), dtype=np.int32)
+                dirs = np.asarray(self._vec_game.directions(), dtype=np.int8)
+
+                frames: list[np.ndarray] = []
+                valids: list[np.ndarray] = []
+                for i in range(self.num_envs):
+                    d = _dir_from_i8(int(dirs[i]))
+                    if d is None:
+                        raise RuntimeError("direction is None in rust vec env")
+                    head = (int(head_pos[i][0]), int(head_pos[i][1]))
+                    frame, valid = head_tile_frame_with_valid(
+                        tile_grid=grids[i],
+                        head=head,
+                        direction=d,
+                        view_radius=view_radius,
+                        rotate_to_head=rotate_to_head,
+                    )
+                    frames.append(frame)
+                    valids.append(valid)
+
+                frame_arr = np.stack(frames, axis=0)
+                valid_arr = np.stack(valids, axis=0)
+
+                if vocab is not None:
+                    frame_arr = vocab.lut[frame_arr]
+
+                if not mask_oob:
+                    base = frame_arr[:, None, :, :].astype(np.uint8, copy=False)
+                else:
+                    out = np.zeros_like(frame_arr, dtype=np.uint8)
+                    out[valid_arr] = (frame_arr[valid_arr].astype(np.uint16) + 1).astype(
+                        np.uint8, copy=False
+                    )
+                    base = out[:, None, :, :].astype(np.uint8, copy=False)
+
+            base_key = "tiles"
+
+        extras: dict[str, Any] = {}
+        if spec._feature_direction():
+            extras["direction"] = np.asarray(self._vec_game.directions(), dtype=np.int64)
+
+        fill_enabled, fill_bins = spec._feature_fill()
+        if fill_enabled:
+            extras["fill"] = _compute_fill(
                 snake_len=np.asarray(self._vec_game.snake_lens(), dtype=np.int32),
                 initial_len=self.initial_snake_length,
                 max_playable=self.max_snake_length,
                 fill_bins=fill_bins,
             )
-            return {"pixel": out, "fill": fill}
 
-        if env_id in {"world_tile_id", "head_tile_id"}:
-            grids = np.asarray(self._vec_game.tile_grids(), dtype=np.uint8)
-            vocab = self._tile_vocab
-
-            if env_id == "world_tile_id":
-                remove_border = bool(p.get("remove_border", True))
-                if remove_border:
-                    grids = grids[:, 1:-1, 1:-1]
-                if vocab is not None:
-                    grids = vocab.lut[grids]
-                return grids[:, None, :, :].astype(np.uint8, copy=False)
-
-            view_radius = p.get("view_radius")
-            if view_radius is None:
-                raise ValueError("view_radius is required for head_tile_id envs")
-            rotate_to_head = bool(p.get("rotate_to_head", True))
-            mask_oob = bool(p.get("mask_oob", False))
-
-            head_pos = np.asarray(self._vec_game.head_positions(), dtype=np.int32)
-            dirs = np.asarray(self._vec_game.directions(), dtype=np.int8)
-
-            frames: list[np.ndarray] = []
-            valids: list[np.ndarray] = []
-            for i in range(self.num_envs):
-                d = _dir_from_i8(int(dirs[i]))
-                if d is None:
-                    raise RuntimeError("direction is None in rust vec env")
-                head = (int(head_pos[i][0]), int(head_pos[i][1]))
-                frame, valid = head_tile_frame_with_valid(
-                    tile_grid=grids[i],
-                    head=head,
-                    direction=d,
-                    view_radius=view_radius,
-                    rotate_to_head=rotate_to_head,
-                )
-                frames.append(frame)
-                valids.append(valid)
-
-            frame_arr = np.stack(frames, axis=0)
-            valid_arr = np.stack(valids, axis=0)
-
-            if vocab is not None:
-                frame_arr = vocab.lut[frame_arr]
-
-            if not mask_oob:
-                return frame_arr[:, None, :, :].astype(np.uint8, copy=False)
-
-            out = np.zeros_like(frame_arr, dtype=np.uint8)
-            out[valid_arr] = (frame_arr[valid_arr].astype(np.uint16) + 1).astype(
-                np.uint8, copy=False
-            )
-            return out[:, None, :, :].astype(np.uint8, copy=False)
-
-        raise ValueError(f"Unsupported env_id for RustVecEnv: {env_id}")
+        if extras:
+            return {base_key: base, **extras}
+        return base
 
 
 def _dir_from_i8(v: int) -> int | None:

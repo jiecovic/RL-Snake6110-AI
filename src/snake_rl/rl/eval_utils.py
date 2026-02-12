@@ -12,8 +12,15 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
 from snake_rl import _core as core
-from snake_rl.config.access import get_board_params, get_env_id, get_env_params, get_frame_stack_n
+from snake_rl.config.access import (
+    get_board_params,
+    get_env_action,
+    get_env_engine,
+    get_env_obs,
+    get_frame_stack_n,
+)
 from snake_rl.config.schema import RewardConfig
+from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.rl.env_factory import apply_frame_stack, make_single_env
 from snake_rl.rl.rust_vec_env import RustVecEnv
 from snake_rl.utils.obs import sanitize_observation
@@ -48,8 +55,17 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
     if len(seeds) <= 0:
         raise ValueError("seeds must be non-empty")
 
-    env_params = get_env_params(cfg)
-    engine = str(env_params.get("engine", "python")).lower()
+    engine = str(get_env_engine(cfg)).lower()
+    obs_cfg = dict(get_env_obs(cfg))
+    obs_spec = ObservationSpec(
+        kind=str(obs_cfg.get("kind")),
+        view=str(obs_cfg.get("view")),
+        params=dict(obs_cfg.get("params", {})),
+        features=dict(obs_cfg.get("features", {})),
+    )
+    obs_spec.kind_norm()
+    obs_spec.view_norm()
+    action_spec = ActionSpec(type=str(get_env_action(cfg)))
 
     if engine == "rust":
         reward = _get_reward_from_cfg(cfg)
@@ -59,8 +75,8 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
             height=int(board_cfg["height"]),
         )
         vec: VecEnv = RustVecEnv(
-            env_id=str(get_env_id(cfg)),
-            env_params=dict(env_params),
+            obs=obs_spec,
+            action=action_spec,
             board=board,
             food_count=int(board_cfg["food_count"]),
             reward=reward,
@@ -73,7 +89,11 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
         vec = DummyVecEnv(env_fns) if len(env_fns) == 1 else SubprocVecEnv(env_fns)
 
     n_stack = get_frame_stack_n(cfg)
-    vec = apply_frame_stack(vec_env=vec, n_stack=n_stack, pixel_key=str(pixel_key))
+    vec = apply_frame_stack(
+        vec_env=vec,
+        n_stack=n_stack,
+        pixel_key=str(obs_spec.frame_stack_key() or pixel_key),
+    )
     return vec
 
 
@@ -244,11 +264,13 @@ def evaluate_model(
         "std_length": float(lengths.std(ddof=0)),
         "wins": wins,
         "win_rate": float(wins / float(episodes)),
-        "env_id": get_env_id(cfg),
+        "env_obs": dict(get_env_obs(cfg)),
+        "env_action": str(get_env_action(cfg)),
+        "env_engine": str(get_env_engine(cfg)),
     }
 
     with suppress(Exception):
-        out["env_params"] = dict(get_env_params(cfg))
+        out["env_obs"] = dict(get_env_obs(cfg))
 
     if termination_counts:
         out["termination_counts"] = dict(sorted(termination_counts.items(), key=lambda kv: kv[0]))

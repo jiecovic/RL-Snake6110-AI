@@ -1,0 +1,18 @@
+---
+# Environment + observation config (board and reward are chosen separately)
+env:
+  engine: python
+  action:
+    type: relative
+  obs:
+    kind: tile_id
+    view: head
+    params:
+      tile_vocab: head_v1
+      view_radius: 6
+      rotate_to_head: true
+      mask_oob: true
+  frame_stack:
+    n_frames: 1
+
+

@@ -1,0 +1,17 @@
+---
+# Environment + observation config (board and reward are chosen separately)
+env:
+  engine: python
+  action:
+    type: relative
+  obs:
+    kind: pixel
+    view: head
+    params:
+      view_radius: 6
+      rotate_to_head: true
+      add_oob_mask: false
+  frame_stack:
+    n_frames: 1
+
+
