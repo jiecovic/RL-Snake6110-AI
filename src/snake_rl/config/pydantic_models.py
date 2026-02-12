@@ -124,17 +124,16 @@ class AlgoConfigModel(_BaseConfigModel):
 class EvalConfigModel(_BaseConfigModel):
     enabled: bool = False
     episodes: int = 10
-    best_metric: str = "mean_reward"
     deterministic: bool = True
     seed_offset: int = 10_000
 
-    @field_validator("best_metric")
+    @model_validator(mode="before")
     @classmethod
-    def _best_metric_allowed(cls, v: str) -> str:
-        s = str(v)
-        if s not in {"mean_reward", "mean_score"}:
-            raise ValueError("eval.best_metric must be one of: mean_reward, mean_score")
-        return s
+    def _drop_legacy_best_metric(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "best_metric" in data:
+            data = dict(data)
+            data.pop("best_metric", None)
+        return data
 
 
 class MetricsGroupConfigModel(_BaseConfigModel):
@@ -213,7 +212,6 @@ class TrainConfigModel(_BaseConfigModel):
                 eval=EvalConfig(
                     enabled=bool(self.train.eval.enabled),
                     episodes=int(self.train.eval.episodes),
-                    best_metric=str(self.train.eval.best_metric),
                     deterministic=bool(self.train.eval.deterministic),
                     seed_offset=int(self.train.eval.seed_offset),
                 ),

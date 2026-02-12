@@ -144,7 +144,6 @@ class FeaturesExtractorConfig:
 class EvalConfig:
     enabled: bool = False
     episodes: int = 10
-    best_metric: str = "mean_reward"
     deterministic: bool = True
     seed_offset: int = 10_000
 

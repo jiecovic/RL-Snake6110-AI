@@ -68,7 +68,6 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "eval": {
                 "enabled": bool(cfg.train.eval.enabled),
                 "episodes": int(cfg.train.eval.episodes),
-                "best_metric": str(cfg.train.eval.best_metric),
                 "deterministic": bool(cfg.train.eval.deterministic),
                 "seed_offset": int(cfg.train.eval.seed_offset),
             },

@@ -45,7 +45,7 @@ def _parse_args() -> argparse.Namespace:
         "--which",
         type=str,
         default="latest",
-        choices=["auto", "latest", "best", "final"],
+        choices=["auto", "latest", "best", "best_reward", "best_score", "best_win", "final"],
     )
     p.add_argument("--episodes", type=int, default=20)
 

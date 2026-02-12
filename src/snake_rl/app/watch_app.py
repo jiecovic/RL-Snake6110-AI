@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
         "--which",
         type=str,
         default="best",
-        choices=["auto", "latest", "best", "final"],
+        choices=["auto", "latest", "best", "best_reward", "best_score", "best_win", "final"],
     )
     p.add_argument(
         "--reload",
@@ -122,6 +122,8 @@ class WatchController:
         self.last_reload_check = 0.0
         self.last_reload_at = time.time()
         self.win_count = 0
+        self.episode_return = 0.0
+        self.last_reward = 0.0
 
         self.logger = logger
         self.repo = repo
@@ -167,8 +169,11 @@ class WatchController:
         else:
             act = np.asarray(action, dtype=np.int64).reshape((1,))
 
-        obs_next, _reward, dones, infos = self.vec_env.step(act)
+        obs_next, reward, dones, infos = self.vec_env.step(act)
         done0 = bool(np.asarray(dones).reshape((-1,))[0])
+        reward0 = float(np.asarray(reward).reshape((-1,))[0])
+        self.last_reward = reward0
+        self.episode_return += reward0
 
         info0 = None
         if isinstance(infos, (list, tuple)) and infos:
@@ -188,7 +193,11 @@ class WatchController:
                     except Exception:
                         pass
 
-        self.obs = self.vec_env.reset() if done0 else obs_next
+        if done0:
+            self.obs = self.vec_env.reset()
+            self.episode_return = 0.0
+        else:
+            self.obs = obs_next
 
 
 def main() -> None:
@@ -271,6 +280,8 @@ def main() -> None:
         controller.step()
         hud_info["reload"] = f"{controller.reload_age_seconds():.1f}s"
         hud_info["wins"] = str(controller.win_count)
+        hud_info["reward"] = f"{controller.last_reward:+.3f}"
+        hud_info["ep_return"] = f"{controller.episode_return:.3f}"
 
     try:
         run_pygame_app(

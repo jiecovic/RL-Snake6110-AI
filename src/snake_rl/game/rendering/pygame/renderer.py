@@ -96,6 +96,8 @@ class PygameRenderer:
         paused = bool(ctx.paused)
         running = bool(game.running)
         wins = self.hud_info.get("wins")
+        reward = self.hud_info.get("reward")
+        ep_return = self.hud_info.get("ep_return")
 
         status_pairs = [
             ("Score", f"{int(game.score)}"),
@@ -104,6 +106,10 @@ class PygameRenderer:
         ]
         if wins is not None:
             status_pairs.append(("Wins", str(wins)))
+        if reward is not None:
+            status_pairs.append(("Reward", str(reward)))
+        if ep_return is not None:
+            status_pairs.append(("Return", str(ep_return)))
         status_pairs.extend(
             [
                 ("State", "running" if running else "stopped"),
