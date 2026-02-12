@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import time
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -23,17 +22,12 @@ from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.rl.env_factory import apply_frame_stack
-from snake_rl.tools.obs_debug import debug_print_obs
 from snake_rl.utils.checkpoints import pick_checkpoint
 from snake_rl.utils.logging import setup_logger
 from snake_rl.utils.model_params import format_sb3_param_report, format_sb3_param_summary
 from snake_rl.utils.models import load_ppo
 from snake_rl.utils.obs import sanitize_observation
 from snake_rl.utils.paths import relpath, repo_root, resolve_run_dir
-
-
-def _ts() -> str:
-    return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
 
 
 def _make_engine_from_board_params(board: dict[str, int]) -> SnakeEngine:
@@ -82,10 +76,6 @@ def parse_args() -> argparse.Namespace:
         help="Logging level (DEBUG, INFO, WARNING, ERROR).",
     )
 
-    p.add_argument("--print-obs", action="store_true")
-    p.add_argument("--print-obs-every", type=int, default=1)
-    p.add_argument("--print-obs-max", type=int, default=5)
-
     p.add_argument(
         "--config",
         type=str,
@@ -116,9 +106,6 @@ class WatchController:
         device: str,
         reload_seconds: float,
         initial_ckpt: Path,
-        print_obs: bool,
-        print_obs_every: int,
-        print_obs_max: int,
         logger,
         repo: Path,
     ):
@@ -134,21 +121,10 @@ class WatchController:
         self.current_mtime = initial_ckpt.stat().st_mtime
         self.last_reload_check = 0.0
 
-        self.print_obs = bool(print_obs)
-        self.print_obs_every = max(1, int(print_obs_every))
-        self.print_obs_max = max(0, int(print_obs_max))
-        self._step_i = 0
-        self._printed = 0
-
         self.logger = logger
         self.repo = repo
 
         self.obs = self.vec_env.reset()
-
-        if self.print_obs and (self.print_obs_max == 0 or self._printed < self.print_obs_max):
-            self.logger.info(f"obs dump after reset() [{_ts()}]")
-            debug_print_obs(self.obs, header="[watch][obs] raw observation:")
-            self._printed += 1
 
     def maybe_reload(self) -> None:
         if not (self.reload_seconds and self.reload_seconds > 0):
@@ -174,14 +150,6 @@ class WatchController:
     def step(self) -> None:
         self.maybe_reload()
 
-        if self.print_obs:
-            do_print = (self._step_i % self.print_obs_every) == 0
-            under_limit = (self.print_obs_max == 0) or (self._printed < self.print_obs_max)
-            if do_print and under_limit:
-                self.logger.info(f"obs dump step={self._step_i} [{_ts()}]")
-                debug_print_obs(self.obs, header="[watch][obs] raw observation:")
-                self._printed += 1
-
         obs_for_model = sanitize_observation(self.obs)
         action, _ = self.model.predict(obs_for_model, deterministic=True)
 
@@ -197,7 +165,6 @@ class WatchController:
         done0 = bool(np.asarray(dones).reshape((-1,))[0])
 
         self.obs = self.vec_env.reset() if done0 else obs_next
-        self._step_i += 1
 
 
 def main() -> None:
@@ -264,9 +231,6 @@ def main() -> None:
         device=str(args.device),
         reload_seconds=float(args.reload),
         initial_ckpt=ckpt,
-        print_obs=bool(args.print_obs),
-        print_obs_every=int(args.print_obs_every),
-        print_obs_max=int(args.print_obs_max),
         logger=logger,
         repo=repo,
     )

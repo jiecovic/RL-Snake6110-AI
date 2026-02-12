@@ -107,11 +107,6 @@ Legacy runs under `experiments/` are still supported for loading.
 
 ## Dev Tools
 
-One-command checks:
-```
-snake-check
-```
-
 Manual checks:
 ```
 python -m ruff check src/snake_rl
