@@ -282,7 +282,7 @@ impl PyVecSnakeEngine {
         if n == 0 {
             let arr = ndarray::Array3::<u8>::zeros((0, 0, 0));
             if return_valid {
-                let v = ndarray::Array3::<bool>::zeros((0, 0, 0));
+                let v = ndarray::Array3::from_shape_vec((0, 0, 0), Vec::<bool>::new()).unwrap();
                 let tup = (arr.into_pyarray_bound(py).unbind(), v.into_pyarray_bound(py).unbind())
                     .to_object(py);
                 return Ok(tup);
@@ -339,7 +339,7 @@ impl PyVecSnakeEngine {
         if n == 0 {
             let arr = ndarray::Array3::<u8>::zeros((0, 0, 0));
             if return_valid {
-                let v = ndarray::Array3::<bool>::zeros((0, 0, 0));
+                let v = ndarray::Array3::from_shape_vec((0, 0, 0), Vec::<bool>::new()).unwrap();
                 let tup = (arr.into_pyarray_bound(py).unbind(), v.into_pyarray_bound(py).unbind())
                     .to_object(py);
                 return Ok(tup);
