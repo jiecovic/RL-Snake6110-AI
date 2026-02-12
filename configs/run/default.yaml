@@ -1,6 +1,6 @@
-name: snake_run
-seed: 42
-num_envs: 12
-total_timesteps: 1_000_000
-checkpoint_freq: 10_000
-resume_checkpoint: null
+name: snake_run             # Run name (used for run folder naming).
+seed: 42                    # RNG seed for training.
+num_envs: 12                # Number of parallel environments.
+total_timesteps: 1_000_000  # Total training timesteps.
+checkpoint_freq: 10_000     # Checkpoint frequency (in timesteps).
+resume_checkpoint: null     # Optional checkpoint path to resume from (null = no resume).

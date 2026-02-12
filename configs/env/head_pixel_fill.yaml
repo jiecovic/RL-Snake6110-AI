@@ -1,20 +1,19 @@
 ---
-# Environment + observation config (board and reward are chosen separately)
-engine: python
-action:
-  type: relative
-obs:
-  kind: pixel
-  view: head
-  params:
-    view_radius: 6
-    rotate_to_head: true
-    add_oob_mask: false
-  features:
-    fill:
-      enabled: true
-      bins: null
-frame_stack:
-  n_frames: 1
+engine: python            # Environment + observation config (board and reward are chosen separately). / Engine implementation ("python" or "rust").
+action:                   # Action spec (relative or cardinal).
+  type: relative          # Action type: relative|cardinal.
+obs:                      # Observation spec.
+  kind: pixel             # Observation kind: pixel|categorical.
+  view: head              # Observation view: head|world.
+  params:                 # View-specific parameters.
+    view_radius: 6        # Head view radius (int or [y, x]).
+    rotate_to_head: true  # Rotate head view to face "up".
+    add_oob_mask: false   # Include OOB mask channel (pixel head view only).
+  features:               # Optional global features (legacy "fill" alias for snake_progress).
+    fill:                 # Snake progress (legacy key; prefer snake_progress).
+      enabled: true       # Enable this feature.
+      bins: null          # Optional discretization bins (null = continuous).
+frame_stack:              # Frame stacking configuration.
+  n_frames: 1             # Number of frames to stack.
 
 

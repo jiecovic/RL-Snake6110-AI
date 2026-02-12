@@ -1,4 +1,4 @@
-height: 17
-width: 30
-food_count: 1
+height: 17     # Board height in tiles.
+width: 30      # Board width in tiles.
+food_count: 1  # Number of food items spawned simultaneously.
 

@@ -40,17 +40,17 @@ PyTorch install guidance: https://pytorch.org/get-started/locally/
 
 Train a PPO agent:
 ```
-snake-train --config-name main_head_pixel_ppo
+snake-train -cfg configs/preset_head_pixel_ppo.yaml
 ```
 
 Common overrides:
 ```
-snake-train --config-name main_head_pixel_ppo run.seed=123 run.num_envs=8 run.total_timesteps=5_000_000
+snake-train -cfg configs/preset_head_pixel_ppo.yaml --override run.seed=123 --override run.num_envs=8 --override run.total_timesteps=5_000_000
 ```
 
 Use the Rust vectorized engine for higher throughput:
 ```
-snake-train --config-name main_head_pixel_ppo env.engine=rust
+snake-train -cfg configs/preset_head_pixel_ppo.yaml --override env.engine=rust
 ```
 
 Evaluate a trained run:
@@ -80,7 +80,7 @@ Hydra config groups live under `configs/`:
 - `train/` (algorithm + eval scheduling)
 - `run/` (seed, num_envs, total_timesteps, checkpoints)
 
-Main configs live at the top level: `configs/main_*.yaml`.
+Main configs live at the top level: `configs/preset_*.yaml`.
 
 Notes:
 - `train.algo.params.policy_kwargs.net_arch` controls the policy MLP layout.

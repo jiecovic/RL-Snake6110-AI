@@ -1,20 +1,20 @@
-defaults:
-  - run: default
-  - board: classic
-  - reward: default
-  - env: head_pixel
-  - feature_extractor: snake_pixel_cnn
-  - train: ppo
-  - metrics: default
-  - logging: default
-  - _self_
+defaults:                               # Hydra defaults: select config groups.
+  - run: default                        # Run config (name, seed, timesteps, etc.).
+  - board: classic                      # Board size and food count.
+  - reward: default                     # Reward shaping parameters.
+  - env: head_pixel                     # Environment + observation spec.
+  - feature_extractor: snake_pixel_cnn  # Feature extractor architecture.
+  - algo: ppo                           # Algorithm config.
+  - metrics: default                    # Metrics logging config.
+  - logging: default                    # Logging config.
+  - _self_                              # Include this file's top-level keys.
 
 hydra:
-  run:
+  run:                                  # Hydra run directory (keep local).
     dir: .
-  job:
+  job:                                  # Do not chdir into run dir.
     chdir: false
-  output_subdir: null
+  output_subdir: null                   # Disable hydra output subdir.
 
 
 

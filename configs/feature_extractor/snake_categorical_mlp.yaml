@@ -1,15 +1,15 @@
-type: snake_unified
-features_dim: 512
-params:
-  stem:
-    type: cat_identity
-    params:
-      d_model: 32
-      frame_fuse: sum
-  mixer:
-    type: identity
-  pooling: flatten
-  use_cls_token: false
-  use_token_mask: true
-  mask_token_id: 0
-  flatten_mlp_hidden_dim: 512
+type: snake_unified            # Feature extractor type (use snake_unified for modular stems/mixers).
+features_dim: 512              # Final feature dimension exposed to SB3 policy.
+params:                        # Unified extractor parameters.
+  stem:                        # Token stem (categorical grid -> tokens).
+    type: cat_identity         # Stem type: cat_identity|cat_patch|px_cnn.
+    params:                    # Stem-specific parameters.
+      d_model: 32              # Token embedding dimension.
+      frame_fuse: sum          # Frame fuse mode: sum|concat.
+  mixer:                       # Mixer (token processing).
+    type: identity             # Mixer type: identity|transformer.
+  pooling: flatten             # Pooling mode: cls|mean|max|cls_mean|meanmax|flatten.
+  use_cls_token: false         # Add CLS token (required for pooling=cls|cls_mean).
+  use_token_mask: true         # Mask out token ids equal to mask_token_id.
+  mask_token_id: 0             # Token id considered "masked" (typically OOB id).
+  flatten_mlp_hidden_dim: 512  # Hidden dim for flatten + MLP head.

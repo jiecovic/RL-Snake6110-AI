@@ -1,24 +1,24 @@
-type: snake_unified
-features_dim: 128
-params:
-  stem:
-    type: cat_patch
-    params:
-      d_model: 64
-      patch: 2
-      stride: 2
-      frame_fuse: sum
-  mixer:
-    type: transformer
-    params:
-      n_layers: 4
-      n_heads: 4
-      ffn_dim: 128
-      dropout: 0.1
-      norm_first: true
-  pooling: cls_mean
-  pos_mode: abs_2d
-  use_cls_token: true
-  use_frame_embed: true
-  use_token_mask: true
-  mask_token_id: 0
+type: snake_unified      # Feature extractor type (use snake_unified for modular stems/mixers).
+features_dim: 128        # Final feature dimension exposed to SB3 policy.
+params:                  # Unified extractor parameters.
+  stem:                  # Token stem (categorical grid -> tokens).
+    type: cat_patch      # Stem type: cat_identity|cat_patch|px_cnn.
+    params:              # Stem-specific parameters.
+      d_model: 64        # Token embedding dimension.
+      patch: 2           # Patch size (categorical patching).
+      stride: 2          # Patch stride (defaults to patch if null).
+      frame_fuse: sum    # Frame fuse mode (cat_patch supports sum).
+  mixer:                 # Mixer (token processing).
+    type: transformer    # Mixer type: identity|transformer.
+    params:              # Transformer mixer parameters.
+      n_layers: 4        # Number of transformer layers.
+      n_heads: 4         # Number of attention heads.
+      ffn_dim: 128       # FFN dimension.
+      dropout: 0.1       # Dropout probability.
+      norm_first: true   # Pre-norm transformer (true) or post-norm (false).
+  pooling: cls_mean      # Pooling mode: cls|mean|max|cls_mean|meanmax|flatten.
+  pos_mode: abs_2d       # Positional encoding mode (abs_2d|none).
+  use_cls_token: true    # Add CLS token (required for pooling=cls|cls_mean).
+  use_frame_embed: true  # Add frame embedding for stacked frames.
+  use_token_mask: true   # Mask out token ids equal to mask_token_id.
+  mask_token_id: 0       # Token id considered "masked" (typically OOB id).

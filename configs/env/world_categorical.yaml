@@ -1,14 +1,13 @@
 ---
-# Environment + observation config (board and reward are chosen separately)
-engine: python
-action:
-  type: relative
-obs:
-  kind: categorical
-  view: world
-  params:
-    remove_border: true
-frame_stack:
-  n_frames: 1
+engine: python           # Environment + observation config (board and reward are chosen separately). / Engine implementation ("python" or "rust").
+action:                  # Action spec (relative or cardinal).
+  type: relative         # Action type: relative|cardinal.
+obs:                     # Observation spec.
+  kind: categorical      # Observation kind: pixel|categorical.
+  view: world            # Observation view: head|world.
+  params:                # View-specific parameters.
+    remove_border: true  # Remove the border tiles from world view.
+frame_stack:             # Frame stacking configuration.
+  n_frames: 1            # Number of frames to stack.
 
 
