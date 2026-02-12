@@ -6,8 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import snake_rl._core as core
-
+from snake_rl import _core as core
 from snake_rl.game.rendering.pygame.renderer import PygameRenderer
 from snake_rl.game.rendering.pygame.window import PygameRenderContext, create_pygame_context
 from snake_rl.game.snake_engine import SnakeEngine

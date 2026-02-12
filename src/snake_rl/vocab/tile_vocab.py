@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import numpy as np
-import snake_rl._core as core
+
+from snake_rl import _core as core
 
 
 @dataclass(frozen=True)

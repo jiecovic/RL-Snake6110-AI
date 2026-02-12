@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import snake_rl._core as core
 from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 
+from snake_rl import _core as core
 from snake_rl.config.access import (
     get_board_params,
     get_env_id,

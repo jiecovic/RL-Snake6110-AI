@@ -5,11 +5,7 @@ from typing import Any
 
 import numpy as np
 
-try:
-    import snake_rl._core as rust_core
-except Exception:  # pragma: no cover
-    rust_core = None  # type: ignore[assignment]
-
+from snake_rl import _core as rust_core
 
 _TILESET_TILES: np.ndarray | None = None
 _TILESET_TILE_SIZE: int | None = None

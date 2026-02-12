@@ -5,9 +5,9 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import gymnasium as gym
-import snake_rl._core as core
 from gymnasium import spaces
 
+from snake_rl import _core as core
 from snake_rl.config.schema import RewardConfig
 from snake_rl.game.snake_engine import SnakeEngine
 

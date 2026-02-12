@@ -5,7 +5,6 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import numpy as np
-import snake_rl._core as core
 from gymnasium import spaces
 from stable_baselines3.common.vec_env import (
     SubprocVecEnv,
@@ -15,6 +14,7 @@ from stable_baselines3.common.vec_env import (
 )
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
+from snake_rl import _core as core
 from snake_rl.config.access import (
     cfg_get,
     get_board_params,

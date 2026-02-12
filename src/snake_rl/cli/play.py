@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import argparse
 
-import snake_rl._core as core
-
+from snake_rl import _core as core
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
 from snake_rl.game.snake_engine import SnakeEngine
 
