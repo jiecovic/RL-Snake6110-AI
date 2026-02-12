@@ -4,7 +4,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-POS_MODES: set[str] = {"abs_2d", "abs_1d", "pov_center"}
+POS_MODES: set[str] = {"abs_2d", "abs_1d", "head_center"}
 
 
 class GridPositionalEncoding(nn.Module):
@@ -14,7 +14,7 @@ class GridPositionalEncoding(nn.Module):
     Modes:
       - "abs_2d"     : learned row+col embeddings (ViT-style)
       - "abs_1d"     : learned 1D index embedding over flattened tokens
-      - "pov_center" : learned offsets from grid center (anchor at center)
+      - "head_center" : learned offsets from grid center (anchor at center)
 
     Input/Output:
       x: [B, T=H*W, D]
@@ -29,6 +29,8 @@ class GridPositionalEncoding(nn.Module):
         self.seq_len = int(self.h * self.w)
 
         pos_mode = str(pos_mode)
+        if pos_mode == "pov_center":
+            pos_mode = "head_center"
         if pos_mode not in POS_MODES:
             raise ValueError(f"pos_mode must be one of {sorted(POS_MODES)}, got {pos_mode!r}")
         self.pos_mode = pos_mode
@@ -87,7 +89,7 @@ class GridPositionalEncoding(nn.Module):
         pe = self.pos_1d(idx)
         return x + pe.unsqueeze(0)
 
-    def _add_pov_center(self, x: torch.Tensor) -> torch.Tensor:
+    def _add_head_center(self, x: torch.Tensor) -> torch.Tensor:
         assert self.rel_row is not None and self.rel_col is not None
         dy = torch.reshape(self._dy_base, (1, -1))  # [1,T]
         dx = torch.reshape(self._dx_base, (1, -1))  # [1,T]
@@ -107,7 +109,7 @@ class GridPositionalEncoding(nn.Module):
             return self._add_abs_2d(x)
         if self.pos_mode == "abs_1d":
             return self._add_abs_1d(x)
-        return self._add_pov_center(x)
+        return self._add_head_center(x)
 
 
 def masked_mean(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:

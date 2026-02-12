@@ -2,13 +2,14 @@ defaults:
   - run: default
   - board: small
   - reward: default
-  - env: pov_tile_id
-  - feature_extractor: tile_vit
+  - env: world_tile_id
+  - feature_extractor: tile_mlp
   - train: ppo
   - logging: default
   - _self_
 
 run:
-  name: pov_tile_vit_small
+  name: world_tile_mlp_large
+
 
 

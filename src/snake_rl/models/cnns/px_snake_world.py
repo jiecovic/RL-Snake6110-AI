@@ -1,4 +1,4 @@
-# src/snake_rl/models/cnns/px_snake_global.py
+# src/snake_rl/models/cnns/px_snake_world.py
 from __future__ import annotations
 
 from gymnasium import spaces
@@ -7,7 +7,7 @@ from torch import nn
 from snake_rl.models.cnns.base import BaseCNNExtractor
 
 
-class PxSnakeGlobal(BaseCNNExtractor):
+class PxSnakeWorld(BaseCNNExtractor):
     """
     Strided pixel CNN with tile-aligned downsampling.
 

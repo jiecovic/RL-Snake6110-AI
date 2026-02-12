@@ -6,7 +6,7 @@ from gymnasium import spaces
 
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.base import BaseSnakeEnv
-from snake_rl.envs.obs_utils import global_tile_frame, pov_tile_frame_with_valid
+from snake_rl.envs.obs_utils import head_tile_frame_with_valid, world_tile_frame
 from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.snake_engine import SnakeEngine, tileset_tile_count
 from snake_rl.vocab import load_tile_vocab
@@ -17,9 +17,9 @@ def _tile_vocab_size() -> int:
     return int(tileset_tile_count())
 
 
-class GlobalTileIdEnv(BaseSnakeEnv):
+class WorldTileIdEnv(BaseSnakeEnv):
     """
-    Global symbolic grid observation (no pixels).
+    World symbolic grid observation (no pixels).
 
     Observation:
       Box(shape=(1, H, W), dtype=uint8)
@@ -88,7 +88,7 @@ class GlobalTileIdEnv(BaseSnakeEnv):
         self._last_class_grid: np.ndarray | None = None
 
     def _get_grid_view(self) -> np.ndarray:
-        return global_tile_frame(tile_grid=self.game.tile_grid, remove_border=self.remove_border)
+        return world_tile_frame(tile_grid=self.game.tile_grid, remove_border=self.remove_border)
 
     def get_obs(self):
         raw = self._get_grid_view()
@@ -100,9 +100,9 @@ class GlobalTileIdEnv(BaseSnakeEnv):
         return grid[None, :, :].astype(np.uint8, copy=False)
 
 
-class PovTileIdEnv(BaseSnakeEnv):
+class HeadTileIdEnv(BaseSnakeEnv):
     """
-    POV symbolic grid observation (tile ids), centered on head.
+    Head-centered symbolic grid observation (tile ids).
 
     Observation:
       Box(shape=(1, VY, VX), dtype=uint8)
@@ -184,7 +184,7 @@ class PovTileIdEnv(BaseSnakeEnv):
         self._last_raw_grid: np.ndarray | None = None
         self._last_class_grid: np.ndarray | None = None
 
-    def _pov_tile_frame_with_valid(self) -> tuple[np.ndarray, np.ndarray]:
+    def _head_tile_frame_with_valid(self) -> tuple[np.ndarray, np.ndarray]:
         """
         Return (raw_frame, valid_mask), both (VY,VX).
 
@@ -193,7 +193,7 @@ class PovTileIdEnv(BaseSnakeEnv):
         """
         d = self.game.direction
         assert d is not None, "SnakeEngine.direction is None (did you call game.reset()?)"
-        return pov_tile_frame_with_valid(
+        return head_tile_frame_with_valid(
             tile_grid=self.game.tile_grid,
             head=self.game.get_head_position(),
             direction=d,
@@ -202,7 +202,7 @@ class PovTileIdEnv(BaseSnakeEnv):
         )
 
     def get_obs(self):
-        raw, valid = self._pov_tile_frame_with_valid()
+        raw, valid = self._head_tile_frame_with_valid()
 
         # Map raw -> class IDs (or identity).
         frame = raw if self._tile_vocab is None else self._tile_vocab.lut[raw]

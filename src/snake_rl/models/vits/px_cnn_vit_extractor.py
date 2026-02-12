@@ -89,7 +89,7 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
     Positional modes (single source of truth via `pos_mode`):
       - "abs_2d"     : learned row+col embeddings over the CNN token grid (H',W') (default)
       - "abs_1d"     : learned 1D index embedding over flattened tokens (T=H'*W')
-      - "pov_center" : learned center-anchored offsets over the CNN token grid (H',W')
+      - "head_center" : learned center-anchored offsets over the CNN token grid (H',W')
 
     Pooling modes:
       - "cls"      : use CLS token only (requires use_cls_token=True)
@@ -101,7 +101,7 @@ class PxCnnViTExtractor(BaseFeaturesExtractor):
       - If force_in_proj=False, use Identity when C' == d_model, otherwise apply 1x1 projection.
 
     Notes:
-      - "pov_center" assumes the observation is head-centered (POV); the anchor is
+      - "head_center" assumes the observation is head-centered; the anchor is
         token-grid center.
       - This extractor does not try to infer direction from pixels; rotate egocentrically
         in the env.

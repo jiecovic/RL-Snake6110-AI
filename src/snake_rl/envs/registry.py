@@ -3,20 +3,30 @@ from __future__ import annotations
 
 from snake_rl.envs.base import BaseSnakeEnv
 from snake_rl.envs.pixel_envs import (
-    GlobalPixelDirectionEnv,
-    GlobalPixelEnv,
-    PovPixelEnv,
-    PovPixelFillEnv,
+    HeadPixelEnv,
+    HeadPixelFillEnv,
+    WorldPixelDirectionEnv,
+    WorldPixelEnv,
 )
-from snake_rl.envs.tile_id_env import GlobalTileIdEnv, PovTileIdEnv
+from snake_rl.envs.tile_id_env import HeadTileIdEnv, WorldTileIdEnv
 
 ENV_REGISTRY: dict[str, type[BaseSnakeEnv]] = {
-    "global_pixel": GlobalPixelEnv,
-    "global_pixel_dir": GlobalPixelDirectionEnv,
-    "pov_pixel": PovPixelEnv,
-    "pov_pixel_fill": PovPixelFillEnv,
-    "global_tile_id": GlobalTileIdEnv,
-    "pov_tile_id": PovTileIdEnv,
+    "world_pixel": WorldPixelEnv,
+    "world_pixel_dir": WorldPixelDirectionEnv,
+    "head_pixel": HeadPixelEnv,
+    "head_pixel_fill": HeadPixelFillEnv,
+    "world_tile_id": WorldTileIdEnv,
+    "head_tile_id": HeadTileIdEnv,
+}
+
+# Back-compat aliases for older config names.
+ENV_ALIASES: dict[str, str] = {
+    "global_pixel": "world_pixel",
+    "global_pixel_dir": "world_pixel_dir",
+    "pov_pixel": "head_pixel",
+    "pov_pixel_fill": "head_pixel_fill",
+    "global_tile_id": "world_tile_id",
+    "pov_tile_id": "head_tile_id",
 }
 
 
@@ -27,6 +37,8 @@ def get_env_cls(env_id: str) -> type[BaseSnakeEnv]:
     This is the single source of truth for env lookup/validation.
     """
     key = str(env_id)
+    if key in ENV_ALIASES:
+        key = ENV_ALIASES[key]
     try:
         return ENV_REGISTRY[key]
     except KeyError as e:

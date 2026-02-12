@@ -45,6 +45,15 @@ class TileVocab:
 _VOCAB_CACHE: dict[str, TileVocab] = {}
 
 
+def _normalize_vocab_name(name: str) -> str:
+    key = str(name).strip()
+    if key.startswith("pov_"):
+        return "head_" + key[len("pov_") :]
+    if key.startswith("global_"):
+        return "world_" + key[len("global_") :]
+    return key
+
+
 def _all_tile_names() -> list[str]:
     return [str(x) for x in core.tileset_tile_names()]
 
@@ -139,7 +148,7 @@ def list_tile_vocabs() -> list[str]:
 
 
 def load_tile_vocab(name: str) -> TileVocab:
-    key = str(name).strip()
+    key = _normalize_vocab_name(name)
     if not key:
         raise ValueError("tile_vocab name must be a non-empty string")
 

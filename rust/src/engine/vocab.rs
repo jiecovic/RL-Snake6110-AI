@@ -337,19 +337,19 @@ static COARSE_V1: [VocabClass; 9] = [
 
 static VOCAB_DEFS: [VocabDef; 5] = [
     VocabDef {
-        name: "global_no_border_v1",
+        name: "world_no_border_v1",
         classes: &GLOBAL_NO_BORDER_V1,
     },
     VocabDef {
-        name: "global_v2",
+        name: "world_v2",
         classes: &GLOBAL_V2,
     },
     VocabDef {
-        name: "pov_v1",
+        name: "head_v1",
         classes: &POV_V1,
     },
     VocabDef {
-        name: "pov_v2",
+        name: "head_v2",
         classes: &POV_V2,
     },
     VocabDef {

@@ -41,7 +41,7 @@ class TileViTExtractor(BaseFeaturesExtractor):
     Positional modes (single source of truth via `pos_mode`):
       - "abs_2d"     : learned row+col embeddings (classic ViT-ish)
       - "abs_1d"     : learned 1D index embedding over flattened tokens
-      - "pov_center" : learned offsets from grid center (anchor at center)
+      - "head_center" : learned offsets from grid center (anchor at center)
 
     Optional masking (attention padding mask):
       - if use_token_mask=True, tokens with tile_id == mask_token_id are ignored by attention

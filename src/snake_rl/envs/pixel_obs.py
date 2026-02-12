@@ -5,7 +5,7 @@ from typing import Literal, overload
 
 import numpy as np
 
-from snake_rl.envs.obs_utils import global_pixel_frame, pov_pixel_frame
+from snake_rl.envs.obs_utils import head_pixel_frame, world_pixel_frame
 from snake_rl.game.snake_engine import SnakeEngine
 
 Radius = int | tuple[int, int]
@@ -16,25 +16,25 @@ class PixelObsEnvBase:
     Small helper base for pixel observations.
 
     This does NOT implement gym.Env. Concrete envs inherit this alongside BaseSnakeEnv.
-    It exists to keep pixel-frame extraction logic (global vs POV) out of each env.
+    It exists to keep pixel-frame extraction logic (world vs head-centered) out of each env.
     """
 
     def __init__(self, game: SnakeEngine):
         self.game = game
         self._tilesize = self.game.tile_size
 
-    def _global_pixel_frame(self) -> np.ndarray:
+    def _world_pixel_frame(self) -> np.ndarray:
         """
-        Return a single global pixel frame as (H,W) uint8.
+        Return a single world pixel frame as (H,W) uint8.
         """
-        return global_pixel_frame(
+        return world_pixel_frame(
             pixel_grid=self.game.pixel_buffer.astype(np.uint8, copy=False),
             tile_size=int(self._tilesize),
             remove_border=False,
         )
 
     @overload
-    def _pov_pixel_frame(
+    def _head_pixel_frame(
         self,
         *,
         view_radius: Radius,
@@ -44,7 +44,7 @@ class PixelObsEnvBase:
     ) -> tuple[np.ndarray, np.ndarray]: ...
 
     @overload
-    def _pov_pixel_frame(
+    def _head_pixel_frame(
         self,
         *,
         view_radius: Radius,
@@ -53,7 +53,7 @@ class PixelObsEnvBase:
         return_valid: Literal[False] = False,
     ) -> np.ndarray: ...
 
-    def _pov_pixel_frame(
+    def _head_pixel_frame(
         self,
         *,
         view_radius: Radius,
@@ -62,11 +62,11 @@ class PixelObsEnvBase:
         return_valid: bool = False,
     ):
         """
-        Return a single POV pixel frame centered on the head.
+        Return a single head-centered pixel frame.
 
         view_radius:
-          - int r        => square POV (r, r)
-          - (ry, rx)     => rectangular POV
+          - int r        => square head window (r, r)
+          - (ry, rx)     => rectangular head window
 
         rotate_to_head:
           - True  => egocentric (forward is UP). For rectangular radii, (ry, rx) is
@@ -86,7 +86,7 @@ class PixelObsEnvBase:
         """
         d = self.game.direction
         assert d is not None, "SnakeEngine.direction is None (did you call game.reset()?)"
-        return pov_pixel_frame(
+        return head_pixel_frame(
             pixel_grid=self.game.pixel_buffer.astype(np.uint8, copy=False),
             tile_size=int(self._tilesize),
             head=self.game.get_head_position(),

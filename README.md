@@ -40,17 +40,17 @@ PyTorch install guidance: https://pytorch.org/get-started/locally/
 
 Train a PPO agent:
 ```
-snake-train --config-name main_pov_pixel_ppo
+snake-train --config-name main_head_pixel_ppo
 ```
 
 Common overrides:
 ```
-snake-train --config-name main_pov_pixel_ppo run.seed=123 run.num_envs=8 run.total_timesteps=5_000_000
+snake-train --config-name main_head_pixel_ppo run.seed=123 run.num_envs=8 run.total_timesteps=5_000_000
 ```
 
 Use the Rust vectorized engine for higher throughput:
 ```
-snake-train --config-name main_pov_pixel_ppo env.params.engine=rust
+snake-train --config-name main_head_pixel_ppo env.params.engine=rust
 ```
 
 Evaluate a trained run:

@@ -14,7 +14,7 @@ def _u8(x: int) -> np.uint8:
     return np.uint8(int(x) & 0xFF)
 
 
-def _global_pixel_dims(game: SnakeEngine, *, remove_border: bool) -> tuple[int, int]:
+def _world_pixel_dims(game: SnakeEngine, *, remove_border: bool) -> tuple[int, int]:
     game.reset()
     h, w = game.pixel_buffer.shape
     if not remove_border:
@@ -35,15 +35,15 @@ def _maybe_crop(frame: np.ndarray, game: SnakeEngine, *, remove_border: bool) ->
     return frame[ts:-ts, ts:-ts]
 
 
-class GlobalPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
+class WorldPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
     """
-    Baseline: global pixel only.
+    Baseline: world pixel only.
 
     Observation: Box (1,H,W) uint8
     Stacking: handled by wrappers (train/eval/watch should see consistent behavior).
 
     Optional cropping (remove_border) is handled here (env-level), not in SnakeEngine.
-    This mirrors GlobalTileIdEnv behavior for symbolic obs.
+    This mirrors WorldTileIdEnv behavior for symbolic obs.
     """
 
     def __init__(
@@ -58,19 +58,19 @@ class GlobalPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
 
         self.remove_border = bool(remove_border)
 
-        h, w = _global_pixel_dims(self.game, remove_border=self.remove_border)
+        h, w = _world_pixel_dims(self.game, remove_border=self.remove_border)
 
         self.observation_space = spaces.Box(low=0, high=255, shape=(1, h, w), dtype=np.uint8)
 
     def get_obs(self):
-        frame = self._global_pixel_frame()
+        frame = self._world_pixel_frame()
         frame = _maybe_crop(frame, self.game, remove_border=self.remove_border)
         return frame[None, :, :].astype(np.uint8, copy=False)
 
 
-class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
+class WorldPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
     """
-    Baseline: global pixel + absolute direction.
+    Baseline: world pixel + absolute direction.
 
     Observation: Dict(
       pixel=Box((1,H,W), uint8),
@@ -94,7 +94,7 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
 
         self.remove_border = bool(remove_border)
 
-        h, w = _global_pixel_dims(self.game, remove_border=self.remove_border)
+        h, w = _world_pixel_dims(self.game, remove_border=self.remove_border)
 
         self.observation_space = spaces.Dict(
             {
@@ -104,7 +104,7 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
         )
 
     def get_obs(self):
-        frame = self._global_pixel_frame()
+        frame = self._world_pixel_frame()
         frame = _maybe_crop(frame, self.game, remove_border=self.remove_border)
         pixel = frame[None, :, :].astype(np.uint8, copy=False)
 
@@ -118,12 +118,12 @@ class GlobalPixelDirectionEnv(BaseSnakeEnv, PixelObsEnvBase):
         }
 
 
-class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
+class HeadPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
     """
-    Baseline: POV pixel only (centered on head).
+    Baseline: head-centered pixel only.
 
-    If rotate_to_head=True (default), POV is rotated so forward is UP (egocentric).
-    If rotate_to_head=False, POV is world-oriented (allocentric).
+    If rotate_to_head=True (default), view is rotated so forward is UP (egocentric).
+    If rotate_to_head=False, view is world-oriented (allocentric).
 
     Optional OOB mask channel:
       - add_oob_mask=False: obs is (1,H,W) uint8 (pixel only)
@@ -163,7 +163,7 @@ class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
         self.game.reset()
 
         if self.add_oob_mask:
-            frame, _valid = self._pov_pixel_frame(
+            frame, _valid = self._head_pixel_frame(
                 view_radius=self.view_radius,
                 rotate_to_head=self.rotate_to_head,
                 oob_fill_value=self.pixel_oob_value,
@@ -171,7 +171,7 @@ class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
             )
             c = 2
         else:
-            frame = self._pov_pixel_frame(
+            frame = self._head_pixel_frame(
                 view_radius=self.view_radius,
                 rotate_to_head=self.rotate_to_head,
                 oob_fill_value=self.pixel_oob_value,
@@ -184,7 +184,7 @@ class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
 
     def get_obs(self):
         if not self.add_oob_mask:
-            frame = self._pov_pixel_frame(
+            frame = self._head_pixel_frame(
                 view_radius=self.view_radius,
                 rotate_to_head=self.rotate_to_head,
                 oob_fill_value=self.pixel_oob_value,
@@ -192,7 +192,7 @@ class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
             )
             return frame[None, :, :].astype(np.uint8, copy=False)
 
-        frame, valid = self._pov_pixel_frame(
+        frame, valid = self._head_pixel_frame(
             view_radius=self.view_radius,
             rotate_to_head=self.rotate_to_head,
             oob_fill_value=self.pixel_oob_value,
@@ -206,12 +206,12 @@ class PovPixelEnv(BaseSnakeEnv, PixelObsEnvBase):
         return out.astype(np.uint8, copy=False)
 
 
-class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
+class HeadPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
     """
-    Baseline: POV pixel + global fill indicator.
+    Baseline: head-centered pixel + world fill indicator.
 
-    If rotate_to_head=True (default), POV is rotated so forward is UP (egocentric).
-    If rotate_to_head=False, POV is world-oriented (allocentric).
+    If rotate_to_head=True (default), view is rotated so forward is UP (egocentric).
+    If rotate_to_head=False, view is world-oriented (allocentric).
 
     Observation: Dict(
       pixel=Box((C,H,W), uint8),   where C=1 or 2 depending on add_oob_mask
@@ -220,7 +220,7 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
 
     Stacking: handled by wrappers (stack pixel only, keep fill passthrough).
 
-    Optional OOB mask channel (same convention as PovPixelEnv).
+    Optional OOB mask channel (same convention as HeadPixelEnv).
     """
 
     def __init__(
@@ -251,7 +251,7 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
         self.game.reset()
 
         if self.add_oob_mask:
-            frame, _valid = self._pov_pixel_frame(
+            frame, _valid = self._head_pixel_frame(
                 view_radius=self.view_radius,
                 rotate_to_head=self.rotate_to_head,
                 oob_fill_value=self.pixel_oob_value,
@@ -259,7 +259,7 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
             )
             c = 2
         else:
-            frame = self._pov_pixel_frame(
+            frame = self._head_pixel_frame(
                 view_radius=self.view_radius,
                 rotate_to_head=self.rotate_to_head,
                 oob_fill_value=self.pixel_oob_value,
@@ -284,7 +284,7 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
 
     def get_obs(self):
         if not self.add_oob_mask:
-            frame = self._pov_pixel_frame(
+            frame = self._head_pixel_frame(
                 view_radius=self.view_radius,
                 rotate_to_head=self.rotate_to_head,
                 oob_fill_value=self.pixel_oob_value,
@@ -292,7 +292,7 @@ class PovPixelFillEnv(BaseSnakeEnv, PixelObsEnvBase):
             )
             pixel = frame[None, :, :].astype(np.uint8, copy=False)
         else:
-            frame, valid = self._pov_pixel_frame(
+            frame, valid = self._head_pixel_frame(
                 view_radius=self.view_radius,
                 rotate_to_head=self.rotate_to_head,
                 oob_fill_value=self.pixel_oob_value,

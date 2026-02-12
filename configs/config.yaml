@@ -2,7 +2,7 @@ defaults:
   - run: default
   - board: classic
   - reward: default
-  - env: pov_pixel
+  - env: head_pixel
   - feature_extractor: px_strided_cnn_l1k4
   - train: ppo
   - logging: default
@@ -14,5 +14,6 @@ hydra:
   job:
     chdir: false
   output_subdir: null
+
 
 

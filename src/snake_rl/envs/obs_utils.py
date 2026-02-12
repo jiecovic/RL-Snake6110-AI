@@ -50,7 +50,7 @@ def _rotate_tile_block(block: np.ndarray, d: int) -> np.ndarray:
     return np.rot90(block, k=k).copy()
 
 
-def global_pixel_frame(
+def world_pixel_frame(
     *,
     pixel_grid: np.ndarray,
     tile_size: int,
@@ -63,7 +63,7 @@ def global_pixel_frame(
 
 
 @overload
-def pov_pixel_frame(
+def head_pixel_frame(
     *,
     pixel_grid: np.ndarray,
     tile_size: int,
@@ -77,7 +77,7 @@ def pov_pixel_frame(
 
 
 @overload
-def pov_pixel_frame(
+def head_pixel_frame(
     *,
     pixel_grid: np.ndarray,
     tile_size: int,
@@ -90,7 +90,7 @@ def pov_pixel_frame(
 ) -> np.ndarray: ...
 
 
-def pov_pixel_frame(
+def head_pixel_frame(
     *,
     pixel_grid: np.ndarray,
     tile_size: int,
@@ -201,13 +201,13 @@ def pov_pixel_frame(
     return vision
 
 
-def global_tile_frame(*, tile_grid: np.ndarray, remove_border: bool) -> np.ndarray:
+def world_tile_frame(*, tile_grid: np.ndarray, remove_border: bool) -> np.ndarray:
     if not remove_border:
         return tile_grid
     return tile_grid[1:-1, 1:-1]
 
 
-def pov_tile_frame_with_valid(
+def head_tile_frame_with_valid(
     *,
     tile_grid: np.ndarray,
     head: tuple[int, int] | list[int] | np.ndarray,
@@ -275,8 +275,8 @@ def pov_tile_frame_with_valid(
 
 
 __all__ = [
-    "global_pixel_frame",
-    "pov_pixel_frame",
-    "global_tile_frame",
-    "pov_tile_frame_with_valid",
+    "world_pixel_frame",
+    "head_pixel_frame",
+    "world_tile_frame",
+    "head_tile_frame_with_valid",
 ]

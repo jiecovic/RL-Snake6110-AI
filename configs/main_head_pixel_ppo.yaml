@@ -2,13 +2,14 @@ defaults:
   - run: default
   - board: small
   - reward: default
-  - env: global_tile_id
-  - feature_extractor: tile_mlp
+  - env: head_pixel
+  - feature_extractor: px_strided_cnn_l1k4
   - train: ppo
   - logging: default
   - _self_
 
 run:
-  name: global_tile_mlp_large
+  name: head_pixel_ppo
+
 
 

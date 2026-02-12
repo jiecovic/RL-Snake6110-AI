@@ -11,8 +11,8 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvIndices
 
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.obs_utils import (
-    pov_pixel_frame,
-    pov_tile_frame_with_valid,
+    head_pixel_frame,
+    head_tile_frame_with_valid,
 )
 from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.snake_engine import ensure_rust_core, tileset_tile_count, tileset_tile_size
@@ -83,7 +83,7 @@ class RustVecEnv(VecEnv):
         h = int(self.board.height)
         w = int(self.board.width)
 
-        if env_id in {"global_pixel", "global_pixel_dir"}:
+        if env_id in {"world_pixel", "world_pixel_dir"}:
             remove_border = bool(p.get("remove_border", True))
             ph = h * ts
             pw = w * ts
@@ -91,21 +91,21 @@ class RustVecEnv(VecEnv):
                 ph -= 2 * ts
                 pw -= 2 * ts
             pixel_space = spaces.Box(low=0, high=255, shape=(1, ph, pw), dtype=np.uint8)
-            if env_id == "global_pixel_dir":
+            if env_id == "world_pixel_dir":
                 return spaces.Dict({"pixel": pixel_space, "direction": spaces.Discrete(4)})
             return pixel_space
 
-        if env_id in {"pov_pixel", "pov_pixel_fill"}:
+        if env_id in {"head_pixel", "head_pixel_fill"}:
             view_radius = p.get("view_radius")
             if view_radius is None:
-                raise ValueError("view_radius is required for pov_pixel envs")
+                raise ValueError("view_radius is required for head_pixel envs")
             ry, rx = parse_view_radius(view_radius)
             vh = (2 * ry + 1) * ts
             vw = (2 * rx + 1) * ts
             add_oob_mask = bool(p.get("add_oob_mask", False))
             c = 2 if add_oob_mask else 1
             pixel_space = spaces.Box(low=0, high=255, shape=(c, vh, vw), dtype=np.uint8)
-            if env_id == "pov_pixel":
+            if env_id == "head_pixel":
                 return pixel_space
 
             fill_bins = p.get("fill_bins")
@@ -116,13 +116,13 @@ class RustVecEnv(VecEnv):
             )
             return spaces.Dict({"pixel": pixel_space, "fill": fill_space})
 
-        if env_id in {"global_tile_id", "pov_tile_id"}:
+        if env_id in {"world_tile_id", "head_tile_id"}:
             if self._tile_vocab is not None:
                 base_num = int(self._tile_vocab.num_classes)
             else:
                 base_num = int(tileset_tile_count())
 
-            if env_id == "global_tile_id":
+            if env_id == "world_tile_id":
                 remove_border = bool(p.get("remove_border", True))
                 gh = h - 2 if remove_border else h
                 gw = w - 2 if remove_border else w
@@ -135,7 +135,7 @@ class RustVecEnv(VecEnv):
 
             view_radius = p.get("view_radius")
             if view_radius is None:
-                raise ValueError("view_radius is required for pov_tile_id envs")
+                raise ValueError("view_radius is required for head_tile_id envs")
             ry, rx = parse_view_radius(view_radius)
             vy = 2 * ry + 1
             vx = 2 * rx + 1
@@ -290,22 +290,22 @@ class RustVecEnv(VecEnv):
         p = self.env_params
         ts = int(self.tile_size)
 
-        if env_id in {"global_pixel", "global_pixel_dir"}:
+        if env_id in {"world_pixel", "world_pixel_dir"}:
             pixels = np.asarray(self._vec_game.pixel_grids(), dtype=np.uint8)
             remove_border = bool(p.get("remove_border", True))
             if remove_border:
                 pixels = pixels[:, ts:-ts, ts:-ts]
             pixels = pixels[:, None, :, :].astype(np.uint8, copy=False)
-            if env_id == "global_pixel_dir":
+            if env_id == "world_pixel_dir":
                 dirs = np.asarray(self._vec_game.directions(), dtype=np.int64)
                 return {"pixel": pixels, "direction": dirs}
             return pixels
 
-        if env_id in {"pov_pixel", "pov_pixel_fill"}:
+        if env_id in {"head_pixel", "head_pixel_fill"}:
             pixels = np.asarray(self._vec_game.pixel_grids(), dtype=np.uint8)
             view_radius = p.get("view_radius")
             if view_radius is None:
-                raise ValueError("view_radius is required for pov_pixel envs")
+                raise ValueError("view_radius is required for head_pixel envs")
             rotate_to_head = bool(p.get("rotate_to_head", True))
             add_oob_mask = bool(p.get("add_oob_mask", False))
             pixel_oob_value = int(p.get("pixel_oob_value", 255))
@@ -323,7 +323,7 @@ class RustVecEnv(VecEnv):
                     raise RuntimeError("direction is None in rust vec env")
                 head = (int(head_pos[i][0]), int(head_pos[i][1]))
                 if add_oob_mask:
-                    frame, valid = pov_pixel_frame(
+                    frame, valid = head_pixel_frame(
                         pixel_grid=pixels[i],
                         tile_size=ts,
                         head=head,
@@ -336,7 +336,7 @@ class RustVecEnv(VecEnv):
                     frames.append(frame)
                     masks.append(valid)
                 else:
-                    frame = pov_pixel_frame(
+                    frame = head_pixel_frame(
                         pixel_grid=pixels[i],
                         tile_size=ts,
                         head=head,
@@ -357,10 +357,10 @@ class RustVecEnv(VecEnv):
                 mask[mask_arr] = np.uint8(mask_valid_value)
                 out = np.stack([frame_arr, mask], axis=1).astype(np.uint8, copy=False)
 
-            if env_id == "pov_pixel":
+            if env_id == "head_pixel":
                 return out
 
-            # pov_pixel_fill
+            # head_pixel_fill
             fill_bins = p.get("fill_bins")
             fill = _compute_fill(
                 snake_len=np.asarray(self._vec_game.snake_lens(), dtype=np.int32),
@@ -370,11 +370,11 @@ class RustVecEnv(VecEnv):
             )
             return {"pixel": out, "fill": fill}
 
-        if env_id in {"global_tile_id", "pov_tile_id"}:
+        if env_id in {"world_tile_id", "head_tile_id"}:
             grids = np.asarray(self._vec_game.tile_grids(), dtype=np.uint8)
             vocab = self._tile_vocab
 
-            if env_id == "global_tile_id":
+            if env_id == "world_tile_id":
                 remove_border = bool(p.get("remove_border", True))
                 if remove_border:
                     grids = grids[:, 1:-1, 1:-1]
@@ -384,7 +384,7 @@ class RustVecEnv(VecEnv):
 
             view_radius = p.get("view_radius")
             if view_radius is None:
-                raise ValueError("view_radius is required for pov_tile_id envs")
+                raise ValueError("view_radius is required for head_tile_id envs")
             rotate_to_head = bool(p.get("rotate_to_head", True))
             mask_oob = bool(p.get("mask_oob", False))
 
@@ -398,7 +398,7 @@ class RustVecEnv(VecEnv):
                 if d is None:
                     raise RuntimeError("direction is None in rust vec env")
                 head = (int(head_pos[i][0]), int(head_pos[i][1]))
-                frame, valid = pov_tile_frame_with_valid(
+                frame, valid = head_tile_frame_with_valid(
                     tile_grid=grids[i],
                     head=head,
                     direction=d,

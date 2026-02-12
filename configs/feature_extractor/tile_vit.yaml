@@ -7,5 +7,6 @@ feature_extractor:
     n_heads: 8
     dropout: 0.0
     pooling: cls_mean
-    pos_mode: pov_center
+    pos_mode: head_center
     use_token_mask: true
+
