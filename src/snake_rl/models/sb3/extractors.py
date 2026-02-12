@@ -267,12 +267,14 @@ class SnakeExtractor(BaseFeaturesExtractor):
         use_flatten: bool,
     ) -> nn.Module:
         if use_flatten and flatten_hidden is not None:
-            return nn.Sequential(
+            layers: list[nn.Module] = [
                 nn.LayerNorm(int(in_dim)),
                 nn.Linear(int(in_dim), int(flatten_hidden)),
                 nn.GELU(),
-                nn.Linear(int(flatten_hidden), int(out_dim)),
-            )
+            ]
+            if int(flatten_hidden) != int(out_dim):
+                layers.append(nn.Linear(int(flatten_hidden), int(out_dim)))
+            return nn.Sequential(*layers)
         if not hidden:
             if int(in_dim) == int(out_dim):
                 return nn.Identity()
@@ -286,7 +288,8 @@ class SnakeExtractor(BaseFeaturesExtractor):
             if float(dropout) > 0:
                 layers.append(nn.Dropout(float(dropout)))
             d = int(h)
-        layers.append(nn.Linear(d, int(out_dim)))
+        if int(d) != int(out_dim):
+            layers.append(nn.Linear(d, int(out_dim)))
         return nn.Sequential(*layers)
 
     def _split_obs(
