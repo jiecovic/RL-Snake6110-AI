@@ -7,12 +7,7 @@ from typing import Any
 import numpy as np
 from gymnasium import spaces
 
-from snake_rl.envs.obs_utils import (
-    head_pixel_frame,
-    head_tile_frame_with_valid,
-    world_pixel_frame,
-    world_tile_frame,
-)
+from snake_rl.envs.obs_utils import world_pixel_frame, world_tile_frame
 from snake_rl.envs.view_radius import parse_view_radius
 from snake_rl.game.snake_engine import SnakeEngine, tileset_tile_count
 from snake_rl.vocab import TileVocab, load_tile_vocab
@@ -258,14 +253,8 @@ class ObservationSpec:
                 )
                 base = frame[None, :, :].astype(np.uint8, copy=False)
             else:
-                d = game.direction
-                assert d is not None, "SnakeEngine.direction is None (did you call game.reset()?)"
                 if self._add_oob_mask():
-                    frame, valid = head_pixel_frame(
-                        pixel_grid=game.pixel_buffer.astype(np.uint8, copy=False),
-                        tile_size=int(game.tile_size),
-                        head=game.get_head_position(),
-                        direction=int(d),
+                    frame, valid = game.head_pixel_view(
                         view_radius=self._view_radius(),
                         rotate_to_head=self._rotate_to_head(),
                         oob_fill_value=self._pixel_oob_value(),
@@ -275,11 +264,7 @@ class ObservationSpec:
                     mask[valid] = np.uint8(self._mask_valid_value())
                     base = np.stack([frame.astype(np.uint8, copy=False), mask], axis=0)
                 else:
-                    frame = head_pixel_frame(
-                        pixel_grid=game.pixel_buffer.astype(np.uint8, copy=False),
-                        tile_size=int(game.tile_size),
-                        head=game.get_head_position(),
-                        direction=int(d),
+                    frame = game.head_pixel_view(
                         view_radius=self._view_radius(),
                         rotate_to_head=self._rotate_to_head(),
                         oob_fill_value=self._pixel_oob_value(),
@@ -295,14 +280,11 @@ class ObservationSpec:
                 frame = raw if tile_vocab is None else tile_vocab.lut[raw]
                 base = frame[None, :, :].astype(np.uint8, copy=False)
             else:
-                d = game.direction
-                assert d is not None, "SnakeEngine.direction is None (did you call game.reset()?)"
-                raw, valid = head_tile_frame_with_valid(
-                    tile_grid=grid,
-                    head=game.get_head_position(),
-                    direction=int(d),
+                raw, valid = game.head_tile_view(
                     view_radius=self._view_radius(),
                     rotate_to_head=self._rotate_to_head(),
+                    empty_id=None,
+                    return_valid=True,
                 )
                 frame = raw if tile_vocab is None else tile_vocab.lut[raw]
                 if self._tile_mask_oob():

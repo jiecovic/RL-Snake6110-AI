@@ -82,6 +82,55 @@ impl PySnakeEngine {
         self.inner.step_cardinal(abs_dir as i32).map_err(map_engine_err)
     }
 
+    #[pyo3(signature = (view_radius, rotate_to_head = true, oob_fill_value = 0, return_valid = false))]
+    fn head_pixel_view<'py>(
+        &self,
+        py: Python<'py>,
+        view_radius: (i32, i32),
+        rotate_to_head: bool,
+        oob_fill_value: u8,
+        return_valid: bool,
+    ) -> PyResult<PyObject> {
+        let (view, valid, h, w) = self
+            .inner
+            .head_pixel_view(view_radius.0, view_radius.1, rotate_to_head, oob_fill_value)
+            .map_err(map_engine_err)?;
+        let arr = ndarray::Array2::from_shape_vec((h, w), view).unwrap();
+        if return_valid {
+            let v = ndarray::Array2::from_shape_vec((h, w), valid).unwrap();
+            let tup = (arr.into_pyarray_bound(py).unbind(), v.into_pyarray_bound(py).unbind())
+                .to_object(py);
+            Ok(tup)
+        } else {
+            Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
+        }
+    }
+
+    #[pyo3(signature = (view_radius, rotate_to_head = true, empty_id = None, return_valid = false))]
+    fn head_tile_view<'py>(
+        &self,
+        py: Python<'py>,
+        view_radius: (i32, i32),
+        rotate_to_head: bool,
+        empty_id: Option<u8>,
+        return_valid: bool,
+    ) -> PyResult<PyObject> {
+        let empty = empty_id.unwrap_or(TILE_EMPTY);
+        let (view, valid, h, w) = self
+            .inner
+            .head_tile_view(view_radius.0, view_radius.1, rotate_to_head, empty)
+            .map_err(map_engine_err)?;
+        let arr = ndarray::Array2::from_shape_vec((h, w), view).unwrap();
+        if return_valid {
+            let v = ndarray::Array2::from_shape_vec((h, w), valid).unwrap();
+            let tup = (arr.into_pyarray_bound(py).unbind(), v.into_pyarray_bound(py).unbind())
+                .to_object(py);
+            Ok(tup)
+        } else {
+            Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
+        }
+    }
+
     fn tile_grid<'py>(&self, py: Python<'py>) -> Py<PyArray2<u8>> {
         let arr = ndarray::Array2::from_shape_vec(
             (self.inner.height(), self.inner.width()),
@@ -218,6 +267,121 @@ impl PyVecSnakeEngine {
             out.push(m);
         }
         Ok(out)
+    }
+
+    #[pyo3(signature = (view_radius, rotate_to_head = true, oob_fill_value = 0, return_valid = false))]
+    fn head_pixel_views<'py>(
+        &self,
+        py: Python<'py>,
+        view_radius: (i32, i32),
+        rotate_to_head: bool,
+        oob_fill_value: u8,
+        return_valid: bool,
+    ) -> PyResult<PyObject> {
+        let n = self.games.len();
+        if n == 0 {
+            let arr = ndarray::Array3::<u8>::zeros((0, 0, 0));
+            if return_valid {
+                let v = ndarray::Array3::<bool>::zeros((0, 0, 0));
+                let tup = (arr.into_pyarray_bound(py).unbind(), v.into_pyarray_bound(py).unbind())
+                    .to_object(py);
+                return Ok(tup);
+            }
+            return Ok(arr.into_pyarray_bound(py).unbind().to_object(py));
+        }
+
+        let (view0, valid0, h, w) = self.games[0]
+            .head_pixel_view(view_radius.0, view_radius.1, rotate_to_head, oob_fill_value)
+            .map_err(map_engine_err)?;
+        let mut data = Vec::with_capacity(n * h * w);
+        data.extend_from_slice(&view0);
+
+        let mut vdata: Vec<bool> = Vec::new();
+        if return_valid {
+            vdata = Vec::with_capacity(n * h * w);
+            vdata.extend_from_slice(&valid0);
+        }
+
+        for g in self.games.iter().skip(1) {
+            let (view, valid, hh, ww) =
+                g.head_pixel_view(view_radius.0, view_radius.1, rotate_to_head, oob_fill_value)
+                    .map_err(map_engine_err)?;
+            if hh != h || ww != w {
+                return Err(PyValueError::new_err("head_pixel_views: inconsistent shapes"));
+            }
+            data.extend_from_slice(&view);
+            if return_valid {
+                vdata.extend_from_slice(&valid);
+            }
+        }
+
+        let arr = ndarray::Array3::from_shape_vec((n, h, w), data).unwrap();
+        if return_valid {
+            let v = ndarray::Array3::from_shape_vec((n, h, w), vdata).unwrap();
+            let tup = (arr.into_pyarray_bound(py).unbind(), v.into_pyarray_bound(py).unbind())
+                .to_object(py);
+            Ok(tup)
+        } else {
+            Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
+        }
+    }
+
+    #[pyo3(signature = (view_radius, rotate_to_head = true, empty_id = None, return_valid = false))]
+    fn head_tile_views<'py>(
+        &self,
+        py: Python<'py>,
+        view_radius: (i32, i32),
+        rotate_to_head: bool,
+        empty_id: Option<u8>,
+        return_valid: bool,
+    ) -> PyResult<PyObject> {
+        let n = self.games.len();
+        if n == 0 {
+            let arr = ndarray::Array3::<u8>::zeros((0, 0, 0));
+            if return_valid {
+                let v = ndarray::Array3::<bool>::zeros((0, 0, 0));
+                let tup = (arr.into_pyarray_bound(py).unbind(), v.into_pyarray_bound(py).unbind())
+                    .to_object(py);
+                return Ok(tup);
+            }
+            return Ok(arr.into_pyarray_bound(py).unbind().to_object(py));
+        }
+
+        let empty = empty_id.unwrap_or(TILE_EMPTY);
+        let (view0, valid0, h, w) = self.games[0]
+            .head_tile_view(view_radius.0, view_radius.1, rotate_to_head, empty)
+            .map_err(map_engine_err)?;
+        let mut data = Vec::with_capacity(n * h * w);
+        data.extend_from_slice(&view0);
+
+        let mut vdata: Vec<bool> = Vec::new();
+        if return_valid {
+            vdata = Vec::with_capacity(n * h * w);
+            vdata.extend_from_slice(&valid0);
+        }
+
+        for g in self.games.iter().skip(1) {
+            let (view, valid, hh, ww) =
+                g.head_tile_view(view_radius.0, view_radius.1, rotate_to_head, empty)
+                    .map_err(map_engine_err)?;
+            if hh != h || ww != w {
+                return Err(PyValueError::new_err("head_tile_views: inconsistent shapes"));
+            }
+            data.extend_from_slice(&view);
+            if return_valid {
+                vdata.extend_from_slice(&valid);
+            }
+        }
+
+        let arr = ndarray::Array3::from_shape_vec((n, h, w), data).unwrap();
+        if return_valid {
+            let v = ndarray::Array3::from_shape_vec((n, h, w), vdata).unwrap();
+            let tup = (arr.into_pyarray_bound(py).unbind(), v.into_pyarray_bound(py).unbind())
+                .to_object(py);
+            Ok(tup)
+        } else {
+            Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
+        }
     }
 
     fn tile_grids<'py>(&self, py: Python<'py>) -> Py<PyArray3<u8>> {

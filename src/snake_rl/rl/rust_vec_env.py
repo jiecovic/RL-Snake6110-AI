@@ -10,10 +10,6 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvIndices
 
 from snake_rl import _core as core
 from snake_rl.config.schema import RewardConfig
-from snake_rl.envs.obs_utils import (
-    head_pixel_frame,
-    head_tile_frame_with_valid,
-)
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.snake_engine import ensure_rust_core, tileset_tile_size
 
@@ -238,47 +234,27 @@ class RustVecEnv(VecEnv):
                 mask_valid_value = spec._mask_valid_value()
                 mask_oob_value = spec._mask_oob_value()
 
-                head_pos = np.asarray(self._vec_game.head_positions(), dtype=np.int32)
-                dirs = np.asarray(self._vec_game.directions(), dtype=np.int8)
+                if add_oob_mask:
+                    frame_arr, valid = self._vec_game.head_pixel_views(
+                        (int(view_radius[0]), int(view_radius[1])),
+                        rotate_to_head=rotate_to_head,
+                        oob_fill_value=int(pixel_oob_value),
+                        return_valid=True,
+                    )
+                else:
+                    frame_arr = self._vec_game.head_pixel_views(
+                        (int(view_radius[0]), int(view_radius[1])),
+                        rotate_to_head=rotate_to_head,
+                        oob_fill_value=int(pixel_oob_value),
+                        return_valid=False,
+                    )
+                    valid = None
 
-                frames: list[np.ndarray] = []
-                masks: list[np.ndarray] = []
-                for i in range(self.num_envs):
-                    d = _dir_from_i8(int(dirs[i]))
-                    if d is None:
-                        raise RuntimeError("direction is None in rust vec env")
-                    head = (int(head_pos[i][0]), int(head_pos[i][1]))
-                    if add_oob_mask:
-                        frame, valid = head_pixel_frame(
-                            pixel_grid=pixels[i],
-                            tile_size=ts,
-                            head=head,
-                            direction=d,
-                            view_radius=view_radius,
-                            rotate_to_head=rotate_to_head,
-                            oob_fill_value=pixel_oob_value,
-                            return_valid=True,
-                        )
-                        frames.append(frame)
-                        masks.append(valid)
-                    else:
-                        frame = head_pixel_frame(
-                            pixel_grid=pixels[i],
-                            tile_size=ts,
-                            head=head,
-                            direction=d,
-                            view_radius=view_radius,
-                            rotate_to_head=rotate_to_head,
-                            oob_fill_value=pixel_oob_value,
-                            return_valid=False,
-                        )
-                        frames.append(frame)
-
-                frame_arr = np.stack(frames, axis=0).astype(np.uint8, copy=False)
+                frame_arr = np.asarray(frame_arr, dtype=np.uint8)
                 if not add_oob_mask:
                     base = frame_arr[:, None, :, :]
                 else:
-                    mask_arr = np.stack(masks, axis=0)
+                    mask_arr = np.asarray(valid, dtype=bool)
                     mask = np.full(frame_arr.shape, np.uint8(mask_oob_value), dtype=np.uint8)
                     mask[mask_arr] = np.uint8(mask_valid_value)
                     base = np.stack([frame_arr, mask], axis=1).astype(np.uint8, copy=False)
@@ -298,36 +274,30 @@ class RustVecEnv(VecEnv):
                 view_radius = spec._view_radius()
                 rotate_to_head = spec._rotate_to_head()
                 mask_oob = spec._tile_mask_oob()
-
-                head_pos = np.asarray(self._vec_game.head_positions(), dtype=np.int32)
-                dirs = np.asarray(self._vec_game.directions(), dtype=np.int8)
-
-                frames: list[np.ndarray] = []
-                valids: list[np.ndarray] = []
-                for i in range(self.num_envs):
-                    d = _dir_from_i8(int(dirs[i]))
-                    if d is None:
-                        raise RuntimeError("direction is None in rust vec env")
-                    head = (int(head_pos[i][0]), int(head_pos[i][1]))
-                    frame, valid = head_tile_frame_with_valid(
-                        tile_grid=grids[i],
-                        head=head,
-                        direction=d,
-                        view_radius=view_radius,
+                if mask_oob:
+                    frame_arr, valid_arr = self._vec_game.head_tile_views(
+                        (int(view_radius[0]), int(view_radius[1])),
                         rotate_to_head=rotate_to_head,
+                        empty_id=None,
+                        return_valid=True,
                     )
-                    frames.append(frame)
-                    valids.append(valid)
+                else:
+                    frame_arr = self._vec_game.head_tile_views(
+                        (int(view_radius[0]), int(view_radius[1])),
+                        rotate_to_head=rotate_to_head,
+                        empty_id=None,
+                        return_valid=False,
+                    )
+                    valid_arr = None
 
-                frame_arr = np.stack(frames, axis=0)
-                valid_arr = np.stack(valids, axis=0)
-
+                frame_arr = np.asarray(frame_arr, dtype=np.uint8)
                 if vocab is not None:
                     frame_arr = vocab.lut[frame_arr]
 
                 if not mask_oob:
                     base = frame_arr[:, None, :, :].astype(np.uint8, copy=False)
                 else:
+                    valid_arr = np.asarray(valid_arr, dtype=bool)
                     out = np.zeros_like(frame_arr, dtype=np.uint8)
                     out[valid_arr] = (frame_arr[valid_arr].astype(np.uint16) + 1).astype(
                         np.uint8, copy=False
@@ -352,12 +322,6 @@ class RustVecEnv(VecEnv):
         if extras:
             return {base_key: base, **extras}
         return base
-
-
-def _dir_from_i8(v: int) -> int | None:
-    if v < 0:
-        return None
-    return int(v)
 
 
 def _termination_cause(mask: int, truncated: bool) -> str:

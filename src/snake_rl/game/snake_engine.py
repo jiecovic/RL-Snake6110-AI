@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 from snake_rl import _core as rust_core
+from snake_rl.envs.view_radius import parse_view_radius
 
 _TILESET_TILES: np.ndarray | None = None
 _TILESET_TILE_SIZE: int | None = None
@@ -134,6 +135,44 @@ class SnakeEngine:
         mask = int(step(int(abs_dir)))
         self._refresh_state()
         return mask
+
+    def head_pixel_view(
+        self,
+        *,
+        view_radius: int | tuple[int, int],
+        rotate_to_head: bool = True,
+        oob_fill_value: int = 0,
+        return_valid: bool = False,
+    ):
+        ry, rx = parse_view_radius(view_radius)
+        fn = getattr(self._core, "head_pixel_view", None)
+        if fn is None:
+            raise RuntimeError("Rust core does not expose head_pixel_view (rebuild the extension).")
+        return fn(
+            (int(ry), int(rx)),
+            rotate_to_head=bool(rotate_to_head),
+            oob_fill_value=int(oob_fill_value),
+            return_valid=bool(return_valid),
+        )
+
+    def head_tile_view(
+        self,
+        *,
+        view_radius: int | tuple[int, int],
+        rotate_to_head: bool = True,
+        empty_id: int | None = None,
+        return_valid: bool = False,
+    ):
+        ry, rx = parse_view_radius(view_radius)
+        fn = getattr(self._core, "head_tile_view", None)
+        if fn is None:
+            raise RuntimeError("Rust core does not expose head_tile_view (rebuild the extension).")
+        return fn(
+            (int(ry), int(rx)),
+            rotate_to_head=bool(rotate_to_head),
+            empty_id=None if empty_id is None else int(empty_id),
+            return_valid=bool(return_valid),
+        )
 
     def _refresh_state(self) -> None:
         self._tile_grid = np.asarray(self._core.tile_grid(), dtype=np.uint8)
