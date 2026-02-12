@@ -37,7 +37,7 @@ class LayoutConfig:
     hud_col_gap: int = 0
     hud_col_w_status: int = 180
     hud_col_w_perf: int = 200
-    hud_col_w_info: int = 220
+    hud_col_w_info: int = 320
     hud_col_min: int = 160
     hud_col_last_min: int = 220
     font_name: str = "Consolas"
