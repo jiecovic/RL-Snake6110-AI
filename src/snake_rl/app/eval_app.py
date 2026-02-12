@@ -5,6 +5,7 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 from stable_baselines3 import PPO
 
@@ -19,13 +20,9 @@ from snake_rl.utils.runs.checkpoints import pick_checkpoint
 from snake_rl.utils.runs.paths import repo_root, resolve_run_dir
 
 try:
-    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+    from stable_baselines3.common.callbacks import tqdm as sb3_tqdm  # type: ignore
 except Exception:  # pragma: no cover
-    Progress = None  # type: ignore[assignment]
-    SpinnerColumn = None  # type: ignore[assignment]
-    TextColumn = None  # type: ignore[assignment]
-    BarColumn = None  # type: ignore[assignment]
-    TimeElapsedColumn = None  # type: ignore[assignment]
+    sb3_tqdm = None  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -160,35 +157,38 @@ def main() -> None:
 
     total_eps = int(args.episodes)
 
-    progress = None
-    task_id = None
+    pbar = None
 
-    if use_rich and Progress is not None:
-        assert SpinnerColumn is not None
-        assert TextColumn is not None
-        assert BarColumn is not None
-        assert TimeElapsedColumn is not None
-        progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("{task.completed}/{task.total}"),
-            TimeElapsedColumn(),
-            transient=True,
-        )
-        progress.start()
-        task_id = progress.add_task("eval", total=total_eps)
+    if use_rich and sb3_tqdm is not None:
+        pbar = sb3_tqdm(total=total_eps, desc="eval", leave=False)
 
-    def _on_episode(done: int, _total: int, reward: float | None) -> None:
-        if progress is None or task_id is None:
+    _sum_return = 0.0
+    _count_return = 0
+
+    sum_steps = 0
+    start_ts = perf_counter()
+
+    def _on_episode(done: int, _total: int, reward: float | None, length: int | None) -> None:
+        if pbar is None:
             return
         if reward is None:
             return
-        progress.update(
-            task_id,
-            completed=int(done),
-            description=f"eval (last_return={float(reward):.3g})",
-        )
+        nonlocal _sum_return, _count_return
+        nonlocal sum_steps
+        _sum_return += float(reward)
+        _count_return += 1
+        mean_return = _sum_return / max(_count_return, 1)
+        if length is not None:
+            sum_steps += int(length)
+        elapsed = perf_counter() - start_ts
+        steps_per_s = None if elapsed <= 0 else float(sum_steps) / float(elapsed)
+        if steps_per_s is None:
+            pbar.set_description(f"eval (mean_return={mean_return:.3g})")
+        else:
+            pbar.set_description(
+                f"eval (mean_return={mean_return:.3g}, steps/s={steps_per_s:,.0f})"
+            )
+        pbar.update(int(done) - pbar.n)
 
     try:
         metrics = evaluate_model(
@@ -198,11 +198,12 @@ def main() -> None:
             deterministic=bool(args.deterministic),
             seed_base=int(seed_base),
             num_envs=int(num_envs),
-            on_episode=_on_episode if progress is not None else None,
+            on_episode=_on_episode if pbar is not None else None,
         )
     finally:
-        if progress is not None:
-            progress.stop()
+        if pbar is not None:
+            pbar.refresh()
+            pbar.close()
 
     metrics["phase"] = "manual"
     metrics["run"] = str(args.run)

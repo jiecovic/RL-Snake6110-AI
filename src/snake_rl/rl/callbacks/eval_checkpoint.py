@@ -6,10 +6,12 @@ from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from stable_baselines3.common.callbacks import BaseCallback
 
+from snake_rl.config.access import get_run_num_envs
 from snake_rl.rl.eval.eval_utils import evaluate_model
 from snake_rl.rl.eval.table import EvalTablePrinter
 from snake_rl.rl.metrics import (
@@ -225,40 +227,69 @@ class EvalCheckpointCallback(BaseCallback):
         # Table output will show eval rows; avoid separate start/done lines.
 
         pbar = None
-        try:
-            from tqdm.auto import tqdm  # type: ignore
+        if self.verbose > 0:
+            try:
+                from stable_baselines3.common.callbacks import tqdm as sb3_tqdm  # type: ignore
 
-            if self.verbose > 0:
-                pbar = tqdm(
-                    total=int(episodes),
-                    desc="eval",
-                    leave=False,
-                    dynamic_ncols=True,
-                )
-        except Exception:
-            pbar = None
+                pbar = sb3_tqdm(total=int(episodes), desc="eval", leave=False)
+            except Exception:
+                pbar = None
 
-        on_episode_cb: Callable[[int, int, float | None], None] | None = None
+        on_episode_cb: Callable[[int, int, float | None, int | None], None] | None = None
         if pbar is not None:
             last_done = {"n": 0}
+            sum_return = {"v": 0.0}
+            count_return = {"n": 0}
+            sum_steps = {"n": 0}
+            start_ts = {"t": perf_counter()}
 
-            def _on_episode(done: int, total: int, _reward: float | None) -> None:
-                if done > last_done["n"]:
-                    pbar.update(done - last_done["n"])
-                    last_done["n"] = done
+            def _on_episode(
+                done: int,
+                total: int,
+                reward: float | None,
+                length: int | None,
+            ) -> None:
+                if done <= last_done["n"]:
+                    return
+                pbar.update(done - last_done["n"])
+                last_done["n"] = done
+                if reward is not None:
+                    sum_return["v"] += float(reward)
+                    count_return["n"] += 1
+                if length is not None:
+                    sum_steps["n"] += int(length)
+                    mean_return = sum_return["v"] / max(count_return["n"], 1)
+                    elapsed = perf_counter() - start_ts["t"]
+                    steps_per_s = None if elapsed <= 0 else float(sum_steps["n"]) / float(elapsed)
+                    if steps_per_s is None:
+                        pbar.set_description(f"eval (mean_return={mean_return:.3g})")
+                    else:
+                        pbar.set_description(
+                            f"eval (mean_return={mean_return:.3g}, steps/s={steps_per_s:,.0f})"
+                        )
 
             on_episode_cb = _on_episode
 
-        metrics = evaluate_model(
-            model=self.model,
-            cfg=self.cfg,
-            episodes=episodes,
-            deterministic=deterministic,
-            seed_base=seed_base,
-            on_episode=on_episode_cb,
-        )
-        if pbar is not None:
-            pbar.close()
+        try:
+            try:
+                eval_num_envs = int(get_run_num_envs(self.cfg))
+            except Exception:
+                eval_num_envs = 1
+            eval_num_envs = max(1, min(int(eval_num_envs), int(episodes)))
+
+            metrics = evaluate_model(
+                model=self.model,
+                cfg=self.cfg,
+                episodes=episodes,
+                deterministic=deterministic,
+                seed_base=seed_base,
+                num_envs=int(eval_num_envs),
+                on_episode=on_episode_cb,
+            )
+        finally:
+            if pbar is not None:
+                pbar.refresh()
+                pbar.close()
 
         metrics["phase"] = "periodic"
         metrics["timesteps"] = int(self.num_timesteps)

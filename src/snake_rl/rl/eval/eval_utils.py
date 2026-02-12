@@ -118,7 +118,7 @@ def evaluate_model(
     seed_base: int,
     num_envs: int = 1,
     pixel_key: str = "pixel",
-    on_episode: Callable[[int, int, float | None], None] | None = None,
+    on_episode: Callable[[int, int, float | None, int | None], None] | None = None,
 ) -> dict[str, Any]:
     episodes = int(episodes)
     if episodes <= 0:
@@ -155,7 +155,7 @@ def evaluate_model(
 
         if on_episode is not None:
             for _ in range(n_envs):
-                on_episode(finished, episodes, None)
+                on_episode(finished, episodes, None, None)
 
         while finished < episodes:
             obs_for_model = sanitize_observation(obs)
@@ -200,7 +200,7 @@ def evaluate_model(
 
                 finished += 1
                 if on_episode is not None:
-                    on_episode(finished, episodes, float(s.reward))
+                    on_episode(finished, episodes, float(s.reward), int(s.length))
 
                 if next_ep < episodes:
                     new_ep_idx = next_ep
@@ -218,7 +218,7 @@ def evaluate_model(
                     slots[i] = _SlotState(episode_idx=new_ep_idx, seed=int(new_seed))
 
                     if on_episode is not None:
-                        on_episode(finished, episodes, None)
+                        on_episode(finished, episodes, None, None)
                 else:
                     slots[i].episode_idx = -1
     finally:
