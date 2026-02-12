@@ -92,6 +92,8 @@ class ObservationSpec:
         return self._feature_enabled("fill")
 
     def _feature_time_since_food(self) -> bool:
+        if self._feature_enabled("time_since_food"):
+            return True
         return self._feature_enabled("time_since_last_food")
 
     def _feature_closest_food(self) -> tuple[bool, str]:

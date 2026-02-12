@@ -12,7 +12,12 @@ from snake_rl.game.rendering.pygame.draw import (
     draw_hud_controls,
     draw_panel,
 )
-from snake_rl.game.rendering.pygame.hud import feature_items, hud_feature_flags, info_pairs
+from snake_rl.game.rendering.pygame.hud import (
+    feature_flags_from_spec,
+    feature_items,
+    hud_feature_flags,
+    info_pairs,
+)
 from snake_rl.game.rendering.pygame.layout import hud_layout
 from snake_rl.game.rendering.pygame.surf import gray255_to_surface
 from snake_rl.game.rendering.pygame.theme import BG, HUD_BG, PANEL_BORDER
@@ -90,13 +95,20 @@ class PygameRenderer:
         steps = int(game.episode_steps)
         paused = bool(ctx.paused)
         running = bool(game.running)
+        wins = self.hud_info.get("wins")
 
         status_pairs = [
             ("Score", f"{int(game.score)}"),
             ("Len", f"{int(game.snake_len)}"),
             ("Steps", f"{steps}"),
-            ("State", "running" if running else "stopped"),
         ]
+        if wins is not None:
+            status_pairs.append(("Wins", str(wins)))
+        status_pairs.extend(
+            [
+                ("State", "running" if running else "stopped"),
+            ]
+        )
         perf_pairs = [
             ("Render", f"{fps:.1f} fps"),
             ("Sim", f"{sim:.1f} fps"),
@@ -104,6 +116,8 @@ class PygameRenderer:
             ("Paused", "yes" if paused else "no"),
         ]
         flags = hud_feature_flags(hud_mode=self.hud_mode, hud_features=self.hud_features)
+        if not flags and self.hud_mode.strip().lower() == "selected" and self.agent_view_spec:
+            flags = feature_flags_from_spec(self.agent_view_spec)
         feature_pairs = feature_items(game=game, flags=flags, include_snake_progress=True)
         info_items = info_pairs(hud_info=self.hud_info, agent_view_spec=self.agent_view_spec)
 

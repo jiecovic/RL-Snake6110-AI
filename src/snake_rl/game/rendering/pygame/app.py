@@ -87,6 +87,9 @@ def run_pygame_app(
     pygame.init()
     try:
         agent_view_grid = _compute_agent_view_grid(game=game, spec=cfg.agent_view_spec)
+        hud_info = cfg.hud_info if cfg.hud_info is not None else {}
+        cfg.hud_info = hud_info
+
         ctx: PygameRenderContext = create_pygame_context(
             game=game,
             pixel_size=cfg.pixel_size,
@@ -102,11 +105,14 @@ def run_pygame_app(
             agent_view_vocab_num_classes=cfg.agent_view_vocab_num_classes,
             hud_mode=str(cfg.hud_mode),
             hud_features=cfg.hud_features,
-            hud_info=cfg.hud_info,
+            hud_info=hud_info,
         )
 
         paused = False
         queued_turn: int | None = None  # buffered human input
+        win_count = 0
+        if "wins" not in hud_info:
+            hud_info["wins"] = "0"
 
         if cfg.turn_keys is None:
             left_keys = {pygame.K_a, pygame.K_LEFT}
@@ -183,6 +189,9 @@ def run_pygame_app(
                                 rel = 0
 
                             results = game.move(int(rel))
+                            if results & core.MOVE_WIN:
+                                win_count += 1
+                                hud_info["wins"] = str(win_count)
                             if cfg.reset_on_done and (results & _END_MASK):
                                 game.reset()
                                 queued_turn = None
@@ -220,6 +229,9 @@ def run_pygame_app(
                                 rel = 0
 
                             results = game.move(int(rel))
+                            if results & core.MOVE_WIN:
+                                win_count += 1
+                                hud_info["wins"] = str(win_count)
                             if cfg.reset_on_done and (results & _END_MASK):
                                 game.reset()
                                 queued_turn = None

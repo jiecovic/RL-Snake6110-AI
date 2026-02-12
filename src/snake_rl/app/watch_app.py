@@ -121,6 +121,7 @@ class WatchController:
         self.current_mtime = initial_ckpt.stat().st_mtime
         self.last_reload_check = 0.0
         self.last_reload_at = time.time()
+        self.win_count = 0
 
         self.logger = logger
         self.repo = repo
@@ -166,8 +167,26 @@ class WatchController:
         else:
             act = np.asarray(action, dtype=np.int64).reshape((1,))
 
-        obs_next, _reward, dones, _infos = self.vec_env.step(act)
+        obs_next, _reward, dones, infos = self.vec_env.step(act)
         done0 = bool(np.asarray(dones).reshape((-1,))[0])
+
+        info0 = None
+        if isinstance(infos, (list, tuple)) and infos:
+            info0 = infos[0]
+        elif isinstance(infos, dict):
+            info0 = infos
+        if isinstance(info0, dict):
+            cause = str(info0.get("termination_cause", "")).strip().lower()
+            if cause == "win":
+                self.win_count += 1
+            else:
+                move_results = info0.get("move_results")
+                if move_results is not None:
+                    try:
+                        if int(move_results) & int(core.MOVE_WIN):
+                            self.win_count += 1
+                    except Exception:
+                        pass
 
         self.obs = self.vec_env.reset() if done0 else obs_next
 
@@ -251,6 +270,7 @@ def main() -> None:
     def _controller_step() -> None:
         controller.step()
         hud_info["reload"] = f"{controller.reload_age_seconds():.1f}s"
+        hud_info["wins"] = str(controller.win_count)
 
     try:
         run_pygame_app(

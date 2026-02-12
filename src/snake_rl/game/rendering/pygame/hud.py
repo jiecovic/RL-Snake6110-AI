@@ -53,6 +53,26 @@ def hud_feature_flags(*, hud_mode: str, hud_features: dict[str, Any]) -> dict[st
     }
 
 
+def feature_flags_from_spec(spec: ObservationSpec) -> dict[str, Any]:
+    flags: dict[str, Any] = {}
+    if spec._feature_direction():
+        flags["direction"] = True
+    if spec._feature_snake_progress():
+        flags["snake_progress"] = True
+    if spec._feature_time_since_food():
+        flags["time_since_food"] = True
+    closest_enabled, metric = spec._feature_closest_food()
+    if closest_enabled:
+        flags["closest_food"] = metric
+    if spec._feature_collision("collision_ahead"):
+        flags["collision_ahead"] = True
+    if spec._feature_collision("collision_left"):
+        flags["collision_left"] = True
+    if spec._feature_collision("collision_right"):
+        flags["collision_right"] = True
+    return flags
+
+
 def feature_items(
     *, game: SnakeEngine, flags: dict[str, Any], include_snake_progress: bool = True
 ) -> list[tuple[str, str]]:
