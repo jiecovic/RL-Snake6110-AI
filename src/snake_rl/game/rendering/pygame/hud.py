@@ -20,8 +20,6 @@ def _normalize_feature_flags(hud_features: dict[str, Any]) -> dict[str, Any]:
         flags["direction"] = hud_features.get("direction")
     if "snake_progress" in hud_features:
         flags["snake_progress"] = hud_features.get("snake_progress")
-    if "fill" in hud_features and "snake_progress" not in flags:
-        flags["snake_progress"] = hud_features.get("fill")
     if "time_since_food" in hud_features:
         flags["time_since_food"] = hud_features.get("time_since_food")
     if "time_since_last_food" in hud_features and "time_since_food" not in flags:

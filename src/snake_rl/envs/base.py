@@ -23,6 +23,9 @@ class BaseSnakeEnv(gym.Env, ABC):
     trigger mixin __init__ methods via MRO and break when they require args.
     """
 
+    metadata = {"render_modes": []}
+    render_mode = None
+
     FATAL_MASK = (
         core.MOVE_HIT_SELF
         | core.MOVE_HIT_WALL
@@ -63,6 +66,7 @@ class BaseSnakeEnv(gym.Env, ABC):
 
         self.action_spec = action if action is not None else ActionSpec()
         self.action_space: spaces.Space = self.action_spec.action_space()
+        self.render_mode = None
 
         if reward is None:
             reward_cfg = RewardConfig()

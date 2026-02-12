@@ -23,6 +23,9 @@ class RustVecEnv(VecEnv):
     Note: returns VecEnv-style outputs (obs, rewards, dones, infos).
     """
 
+    metadata = {"render_modes": []}
+    render_mode = None
+
     def __init__(
         self,
         *,
@@ -37,6 +40,7 @@ class RustVecEnv(VecEnv):
     ) -> None:
         self.obs_spec = obs
         self.action_spec = action if action is not None else ActionSpec()
+        self.render_mode = None
         if not isinstance(board, core.Board):
             raise TypeError("board must be a snake_rl._core.Board instance")
         self.board = board

@@ -86,10 +86,7 @@ class ObservationSpec:
         return bool(v)
 
     def _feature_snake_progress(self) -> bool:
-        if self._feature_enabled("snake_progress"):
-            return True
-        # legacy alias
-        return self._feature_enabled("fill")
+        return self._feature_enabled("snake_progress")
 
     def _feature_time_since_food(self) -> bool:
         if self._feature_enabled("time_since_food"):

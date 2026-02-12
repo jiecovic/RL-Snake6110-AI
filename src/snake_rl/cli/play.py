@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import warnings
 
 from snake_rl import _core as core
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
@@ -20,6 +21,11 @@ def parse_args():
 
 
 def main() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        message="pkg_resources is deprecated as an API.*",
+        category=UserWarning,
+    )
     args = parse_args()
     board = core.Board(width=int(args.width), height=int(args.height))
     game = SnakeEngine(board=board, food_count=args.food)
