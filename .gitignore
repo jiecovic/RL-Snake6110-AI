@@ -225,6 +225,9 @@ __marimo__/
 runs/
 runs/**/tb/
 runs/**/tb/**
+# Allow code under src/snake_rl/utils/runs (gitignore "runs/" is broad).
+!src/snake_rl/utils/runs/
+!src/snake_rl/utils/runs/**
 
 # Legacy experiments outputs
 experiments/
