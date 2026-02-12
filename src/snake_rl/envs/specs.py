@@ -7,9 +7,10 @@ from typing import Any
 import numpy as np
 from gymnasium import spaces
 
+from snake_rl import _core as core
 from snake_rl.envs.obs_utils import world_pixel_frame, world_tile_frame
 from snake_rl.envs.view_radius import parse_view_radius
-from snake_rl.game.snake_engine import SnakeEngine, tileset_tile_count
+from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.vocab import TileVocab, load_tile_vocab
 
 
@@ -192,7 +193,7 @@ class ObservationSpec:
             if tile_vocab is not None:
                 base_num = int(tile_vocab.num_classes)
             else:
-                base_num = int(tileset_tile_count())
+                base_num = int(core.tileset_tile_count())
 
             if view == "world":
                 gh = int(height)

@@ -5,12 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from snake_rl.game.snake_engine import (
-    tile_empty_id,
-    tileset_tile_count,
-    tileset_tile_size,
-    tileset_tiles,
-)
+from snake_rl import _core as core
 
 
 def _as_u8_2d_last_frame(arr: np.ndarray) -> np.ndarray:
@@ -84,7 +79,7 @@ def obs_last_frame_and_kind(
         vmax = int(frame.max()) if frame.size else 0
         vmin = int(frame.min()) if frame.size else 0
         # If values are within tile id range and non-negative, it's likely categorical ids.
-        max_tid = int(tileset_tile_count()) - 1
+        max_tid = int(core.tileset_tile_count()) - 1
         if vmin >= 0 and vmax <= max_tid:
             return frame, "categorical"
 
@@ -99,7 +94,7 @@ def obs_last_frame_and_kind(
 
     vmax = int(frame.max()) if frame.size else 0
     vmin = int(frame.min()) if frame.size else 0
-    max_tid = int(tileset_tile_count()) - 1
+    max_tid = int(core.tileset_tile_count()) - 1
     kind = "categorical" if vmin >= 0 and vmax <= max_tid else "pixel"
     return frame, kind
 
@@ -118,18 +113,17 @@ def categorical_frame_to_pixels(
         raise TypeError(f"tile_ids must be 2D (H,W), got {tile_ids.shape}")
 
     if tiles is None:
-        tiles = tileset_tiles()
-    if tile_size is None:
-        tile_size = tileset_tile_size()
+        tiles = np.asarray(core.tileset_tiles(), dtype=np.uint8)
+    tile_size = int(core.tileset_tile_size()) if tile_size is None else int(tile_size)
 
     td = int(tile_size)
     h, w = int(tile_ids.shape[0]), int(tile_ids.shape[1])
 
     out = np.zeros((h * td, w * td), dtype=np.uint8)
 
-    empty_id = int(tile_empty_id())
+    empty_id = int(core.TILE_EMPTY)
     cache: dict[int, np.ndarray] = {}
-    for tid in range(int(tileset_tile_count())):
+    for tid in range(int(core.tileset_tile_count())):
         if tid == empty_id:
             continue
         cache[int(tid)] = np.asarray(tiles[int(tid)], dtype=np.uint8)

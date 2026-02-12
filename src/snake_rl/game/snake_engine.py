@@ -8,11 +8,6 @@ import numpy as np
 from snake_rl import _core as rust_core
 from snake_rl.envs.view_radius import parse_view_radius
 
-_TILESET_TILES: np.ndarray | None = None
-_TILESET_TILE_SIZE: int | None = None
-_TILE_ID_COUNT: int | None = None
-_TILE_NAMES: list[str] | None = None
-
 
 def has_rust_core() -> bool:
     return rust_core is not None
@@ -24,55 +19,6 @@ def ensure_rust_core() -> Any:
             "Rust core module not available. Run `maturin develop` or install with `pip install .`."
         )
     return rust_core
-
-
-def tileset_tile_size() -> int:
-    global _TILESET_TILE_SIZE
-    if _TILESET_TILE_SIZE is None:
-        core = ensure_rust_core()
-        _TILESET_TILE_SIZE = int(core.tileset_tile_size())
-    return _TILESET_TILE_SIZE
-
-
-def tileset_tiles() -> np.ndarray:
-    global _TILESET_TILES
-    if _TILESET_TILES is None:
-        core = ensure_rust_core()
-        _TILESET_TILES = np.asarray(core.tileset_tiles(), dtype=np.uint8)
-    return _TILESET_TILES
-
-
-def tile_empty_id() -> int:
-    core = ensure_rust_core()
-    return int(core.TILE_EMPTY)
-
-
-def tile_oob_id() -> int:
-    core = ensure_rust_core()
-    return int(core.TILE_OOB)
-
-
-def tileset_tile_count() -> int:
-    global _TILE_ID_COUNT
-    if _TILE_ID_COUNT is None:
-        core = ensure_rust_core()
-        _TILE_ID_COUNT = int(core.tileset_tile_count())
-    return _TILE_ID_COUNT
-
-
-def tileset_tile_names() -> list[str]:
-    global _TILE_NAMES
-    if _TILE_NAMES is None:
-        core = ensure_rust_core()
-        _TILE_NAMES = [str(x) for x in core.tileset_tile_names()]
-    return list(_TILE_NAMES)
-
-
-def _i8_to_dir(v: int) -> int | None:
-    iv = int(v)
-    if iv < 0:
-        return None
-    return iv
 
 
 class SnakeEngine:
@@ -103,26 +49,13 @@ class SnakeEngine:
             seed=None,
         )
 
-        self._tile_grid: np.ndarray | None = None
-        self._pixel_buffer: np.ndarray | None = None
-        self._direction: int | None = None
-        self._score: int = 0
-        self._running: bool = True
-        self._snake_len: int = 0
-        self._head_pos: tuple[int, int] = (0, 0)
-        self._food_positions: list[tuple[int, int]] = []
-        self._spawnable_count: int = 0
-
         self._core.reset(None if seed is None else int(seed))
-        self._refresh_state()
 
     def reset(self, seed: int | None = None) -> None:
         self._core.reset(None if seed is None else int(seed))
-        self._refresh_state()
 
     def move(self, rel_dir: int = 0) -> int:
         mask = int(self._core.step(int(rel_dir)))
-        self._refresh_state()
         return mask
 
     def move_relative(self, rel_dir: int = 0) -> int:
@@ -130,7 +63,6 @@ class SnakeEngine:
         if step is None:
             step = self._core.step
         mask = int(step(int(rel_dir)))
-        self._refresh_state()
         return mask
 
     def move_cardinal(self, abs_dir: int) -> int:
@@ -138,7 +70,6 @@ class SnakeEngine:
         if step is None:
             raise RuntimeError("Rust core does not expose step_cardinal (rebuild the extension).")
         mask = int(step(int(abs_dir)))
-        self._refresh_state()
         return mask
 
     def head_pixel_view(
@@ -179,18 +110,6 @@ class SnakeEngine:
             return_valid=bool(return_valid),
         )
 
-    def _refresh_state(self) -> None:
-        self._tile_grid = np.asarray(self._core.tile_grid(), dtype=np.uint8)
-        self._pixel_buffer = np.asarray(self._core.pixel_grid(), dtype=np.uint8)
-        self._direction = _i8_to_dir(int(self._core.direction()))
-        self._score = int(self._core.score)
-        self._running = bool(self._core.running)
-        self._snake_len = int(self._core.snake_len())
-        hx, hy = self._core.head_pos()
-        self._head_pos = (int(hx), int(hy))
-        self._food_positions = [(int(x), int(y)) for x, y in self._core.food_positions()]
-        self._spawnable_count = int(self._core.spawnable_count())
-
     # ---- properties used by envs/renderers ----
 
     @property
@@ -207,37 +126,35 @@ class SnakeEngine:
 
     @property
     def tile_grid(self) -> np.ndarray:
-        if self._tile_grid is None:
-            self._tile_grid = np.asarray(self._core.tile_grid(), dtype=np.uint8)
-        return self._tile_grid
+        return np.asarray(self._core.tile_grid(), dtype=np.uint8)
 
     @property
     def pixel_buffer(self) -> np.ndarray:
-        if self._pixel_buffer is None:
-            self._pixel_buffer = np.asarray(self._core.pixel_grid(), dtype=np.uint8)
-        return self._pixel_buffer
+        return np.asarray(self._core.pixel_grid(), dtype=np.uint8)
 
     @property
     def direction(self) -> int | None:
-        return self._direction
+        d = int(self._core.direction())
+        return None if d < 0 else d
 
     @property
     def score(self) -> int:
-        return self._score
+        return int(self._core.score)
 
     @property
     def running(self) -> bool:
-        return self._running
+        return bool(self._core.running)
 
     @property
     def snake_len(self) -> int:
-        return self._snake_len
+        return int(self._core.snake_len())
 
     def get_head_position(self) -> tuple[int, int]:
-        return self._head_pos
+        hx, hy = self._core.head_pos()
+        return (int(hx), int(hy))
 
     def get_food_positions(self) -> list[tuple[int, int]]:
-        return list(self._food_positions)
+        return [(int(x), int(y)) for x, y in self._core.food_positions()]
 
     @property
     def max_playable_tiles(self) -> int:
@@ -245,17 +162,11 @@ class SnakeEngine:
 
     @property
     def spawnable_count(self) -> int:
-        return self._spawnable_count
+        return int(self._core.spawnable_count())
 
 
 __all__ = [
     "SnakeEngine",
     "ensure_rust_core",
     "has_rust_core",
-    "tile_oob_id",
-    "tile_empty_id",
-    "tileset_tile_count",
-    "tileset_tile_names",
-    "tileset_tile_size",
-    "tileset_tiles",
 ]

@@ -11,7 +11,7 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvIndices
 from snake_rl import _core as core
 from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
-from snake_rl.game.snake_engine import ensure_rust_core, tileset_tile_size
+from snake_rl.game.snake_engine import ensure_rust_core
 
 
 class RustVecEnv(VecEnv):
@@ -40,7 +40,7 @@ class RustVecEnv(VecEnv):
         self.reward = reward
         self.num_envs = int(num_envs)
 
-        self.tile_size = tileset_tile_size()
+        self.tile_size = int(core.tileset_tile_size())
         self._tile_vocab = self.obs_spec.load_tile_vocab()
         ext = ensure_rust_core()
 
