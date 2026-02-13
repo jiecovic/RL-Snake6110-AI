@@ -173,7 +173,7 @@ impl SnakeEngine {
 
         self.spawn_snake()?;
         self.initial_snake_len = self.snake.len();
-        self.spawn_food();
+        let _ = self.spawn_food();
         self.rebuild_grids();
         self.step_counter = 0;
         self.update_world_stacks(true);
@@ -747,14 +747,14 @@ impl SnakeEngine {
         Err(EngineError::SpawnFailed)
     }
 
-    fn spawn_food(&mut self) {
+    fn spawn_food(&mut self) -> Vec<usize> {
         let need = if self.target_food_count > self.food.len() {
             self.target_food_count - self.food.len()
         } else {
             0
         };
         if need == 0 {
-            return;
+            return Vec::new();
         }
 
         let mut spawnable: Vec<usize> = Vec::new();
@@ -772,16 +772,19 @@ impl SnakeEngine {
         }
 
         if spawnable.is_empty() {
-            return;
+            return Vec::new();
         }
 
         let k = std::cmp::min(need, spawnable.len());
         let indices = sample(&mut self.rng, spawnable.len(), k);
+        let mut spawned = Vec::with_capacity(k);
         for idx_i in indices.iter() {
             let p = spawnable[idx_i];
             self.food.push(p);
             self.food_mask[p] = true;
+            spawned.push(p);
         }
+        spawned
     }
 
     fn won(&self) -> bool {
@@ -842,25 +845,26 @@ impl SnakeEngine {
 
         let mut result = MOVE_OK;
 
-        if self.food_mask[new_head_idx] {
+        let ate_food = self.food_mask[new_head_idx];
+        if ate_food {
             self.food_mask[new_head_idx] = false;
             if let Some(pos) = self.food.iter().position(|&i| i == new_head_idx) {
                 self.food.remove(pos);
             }
             self.score += 1;
             result |= MOVE_FOOD;
-            self.spawn_food();
+            let spawned = self.spawn_food();
 
             if self.food.is_empty() && self.won() {
                 self.running = false;
                 result |= MOVE_WIN;
             }
+            self.update_tiles_after_step(new_dir, None, &spawned);
         } else {
             let tail = self.snake.pop().unwrap();
             self.snake_mask[tail] = false;
+            self.update_tiles_after_step(new_dir, Some(tail), &[]);
         }
-
-        self.rebuild_grids();
         self.step_counter = self.step_counter.wrapping_add(1);
         if result & MOVE_FOOD != 0 {
             self.steps_since_food = 0;
@@ -875,6 +879,7 @@ impl SnakeEngine {
                 }
             }
         }
+        self.rebuild_pixels();
         self.update_world_stacks(false);
         Ok(result)
     }
@@ -912,6 +917,48 @@ impl SnakeEngine {
         }
 
         self.rebuild_pixels();
+    }
+
+    fn update_tiles_after_step(
+        &mut self,
+        new_dir: i8,
+        old_tail_idx: Option<usize>,
+        spawned_food: &[usize],
+    ) {
+        if let Some(tail_idx) = old_tail_idx {
+            self.tile_grid[tail_idx] = self.static_grid[tail_idx];
+        }
+
+        if self.snake.is_empty() {
+            return;
+        }
+
+        let head_idx = self.snake[0];
+        self.tile_grid[head_idx] = head_tile(new_dir);
+
+        let len = self.snake.len();
+        if len >= 2 {
+            if len >= 3 {
+                let prev = self.snake[0];
+                let curr = self.snake[1];
+                let next = self.snake[2];
+                self.tile_grid[curr] = body_tile(
+                    idx_to_point(prev, self.width),
+                    idx_to_point(curr, self.width),
+                    idx_to_point(next, self.width),
+                );
+            }
+            let tail_idx = self.snake[len - 1];
+            let prev_idx = self.snake[len - 2];
+            self.tile_grid[tail_idx] = tail_tile(
+                idx_to_point(prev_idx, self.width),
+                idx_to_point(tail_idx, self.width),
+            );
+        }
+
+        for &idx in spawned_food {
+            self.tile_grid[idx] = TILE_FOOD;
+        }
     }
 
     fn rebuild_pixels(&mut self) {
