@@ -29,7 +29,7 @@ def load_snapshot_config(*, run_dir: Path) -> SnapshotConfig:
     Load the snapshot config from a run directory.
 
     Single source of truth:
-      <run_dir>/config_snapshot.yaml
+      <run_dir>/config_snapshot.yaml (full validated config)
     """
     cfg_path = Path(run_dir) / "config_snapshot.yaml"
     if not cfg_path.is_file():

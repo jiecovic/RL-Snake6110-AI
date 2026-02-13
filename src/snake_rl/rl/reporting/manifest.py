@@ -9,13 +9,25 @@ import yaml
 from snake_rl.config.schema import TrainConfig
 
 
-def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
-    """
-    Build the persisted run snapshot dict.
+def _render_header(lines: list[str]) -> str:
+    return "\n".join(f"# {line}" if line else "#" for line in lines) + "\n"
 
-    Note: This is a curated snapshot of the effective config fields that matter for
-    reproducibility across train/eval/watch. If you add a new config field that should
-    be reproducible, add it here.
+
+def _write_yaml_text(*, path: Path, body: str, header_lines: list[str] | None = None) -> None:
+    text = body
+    if not text.endswith("\n"):
+        text += "\n"
+    if header_lines:
+        text = _render_header(header_lines) + text
+    path.write_text(text, encoding="utf-8")
+
+
+def _to_summary_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
+    """
+    Build a curated summary of the effective config fields.
+
+    If you add a new config field that should be visible in the summary,
+    add it here.
     """
     fe = cfg.feature_extractor
 
@@ -41,6 +53,7 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "height": int(cfg.board.height),
             "width": int(cfg.board.width),
             "food_count": int(cfg.board.food_count),
+            "spawn_random_dir": bool(cfg.board.spawn_random_dir),
         },
         "reward": {
             "max_steps_factor": float(cfg.reward.max_steps_factor),
@@ -92,6 +105,12 @@ def _to_snapshot_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
     return d
 
 
+def _snapshot_payload(cfg: TrainConfig, validated_cfg: dict[str, Any] | None) -> dict[str, Any]:
+    if validated_cfg is not None:
+        return dict(validated_cfg)
+    return _to_summary_yaml_dict(cfg)
+
+
 def save_manifest(
     *,
     run_dir: Path,
@@ -100,32 +119,66 @@ def save_manifest(
     validated_cfg: dict[str, Any] | None = None,
 ) -> None:
     """
-    Persist the snapshot training configuration plus resolved config artifacts.
+    Persist the training configuration plus resolved config artifacts.
 
-    config_snapshot.yaml is the single source of truth for reproducing a run.
+    Files:
+      - config_snapshot.yaml: full validated config (single source of truth).
+      - config_summary.yaml: curated subset for quick inspection.
     """
     run_dir.mkdir(parents=True, exist_ok=True)
 
     if hydra_yaml:
-        (run_dir / "config_hydra.yaml").write_text(hydra_yaml, encoding="utf-8")
+        _write_yaml_text(
+            path=run_dir / "config_hydra.yaml",
+            body=hydra_yaml,
+            header_lines=[
+                "Hydra-resolved training config (resolved defaults + overrides).",
+                "Source of truth for what was composed.",
+            ],
+        )
 
     if validated_cfg is not None:
-        (run_dir / "config_validated.yaml").write_text(
-            yaml.safe_dump(
+        _write_yaml_text(
+            path=run_dir / "config_validated.yaml",
+            body=yaml.safe_dump(
                 validated_cfg,
                 sort_keys=False,
                 default_flow_style=False,
                 allow_unicode=True,
             ),
-            encoding="utf-8",
+            header_lines=[
+                "Validated training config (pydantic model).",
+                "Equivalent to what training uses at runtime.",
+            ],
         )
 
-    (run_dir / "config_snapshot.yaml").write_text(
-        yaml.safe_dump(
-            _to_snapshot_yaml_dict(cfg),
+    snapshot_payload = _snapshot_payload(cfg, validated_cfg)
+    summary_payload = _to_summary_yaml_dict(cfg)
+
+    _write_yaml_text(
+        path=run_dir / "config_summary.yaml",
+        body=yaml.safe_dump(
+            summary_payload,
             sort_keys=False,
             default_flow_style=False,
             allow_unicode=True,
         ),
-        encoding="utf-8",
+        header_lines=[
+            "Curated summary config for quick inspection.",
+            "Not guaranteed to include all fields.",
+        ],
+    )
+
+    _write_yaml_text(
+        path=run_dir / "config_snapshot.yaml",
+        body=yaml.safe_dump(
+            snapshot_payload,
+            sort_keys=False,
+            default_flow_style=False,
+            allow_unicode=True,
+        ),
+        header_lines=[
+            "Full validated training config.",
+            "Single source of truth for reproducing a run.",
+        ],
     )

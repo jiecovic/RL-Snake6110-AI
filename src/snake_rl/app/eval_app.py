@@ -68,7 +68,8 @@ def _parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "Optional config path. If omitted, uses runs/<run>/config_snapshot.yaml. "
+            "Optional config path. If omitted, uses runs/<run>/config_snapshot.yaml "
+            "(full validated config). "
             "If path is under configs/, Hydra defaults + overrides are applied."
         ),
     )
