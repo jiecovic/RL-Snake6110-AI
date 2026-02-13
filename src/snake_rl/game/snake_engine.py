@@ -37,6 +37,7 @@ class SnakeEngine:
         food_count: int | None = None,
         seed: int | None = None,
         frame_stack_n: int = 1,
+        max_steps: int | None = None,
     ):
         if food_count is None:
             raise ValueError("food_count must be provided (board does not encode food).")
@@ -52,6 +53,8 @@ class SnakeEngine:
         )
 
         self._core.reset(None if seed is None else int(seed))
+        if max_steps is not None:
+            self.set_max_steps(int(max_steps))
 
     def reset(self, seed: int | None = None) -> None:
         self._core.reset(None if seed is None else int(seed))
@@ -296,6 +299,12 @@ class SnakeEngine:
                 "Rust core does not expose steps_since_food (rebuild the extension)."
             )
         return int(fn())
+
+    def set_max_steps(self, max_steps: int | None) -> None:
+        fn = getattr(self._core, "set_max_steps", None)
+        if fn is None:
+            raise RuntimeError("Rust core does not expose set_max_steps (rebuild the extension).")
+        fn(None if max_steps is None else int(max_steps))
 
     def time_since_food_norm(self, max_steps: int) -> float:
         fn = getattr(self._core, "time_since_food_norm", None)

@@ -56,6 +56,8 @@ class RustVecEnv(VecEnv):
         if seeds is not None:
             seed_list = [int(s) for s in seeds]
 
+        self._max_playable = int(self.board.max_playable_tiles)
+        self.max_steps = max(1, int(self._max_playable * float(self.reward.max_steps_factor)))
         self._vec_game = ext.VecSnakeEngine(
             n=int(self.num_envs),
             board=self.board,
@@ -63,9 +65,8 @@ class RustVecEnv(VecEnv):
             seeds=seed_list,
             frame_stack_n=int(self.frame_stack_n),
         )
+        self._set_max_steps(int(self.max_steps))
 
-        self._max_playable = int(self._vec_game.max_playable_tiles())
-        self.max_steps = max(1, int(self._max_playable * float(self.reward.max_steps_factor)))
         self.max_snake_length = int(self._max_playable)
         self.tiny_reward = float(self.reward.step_penalty_scale) / float(self.max_steps)
 
@@ -116,6 +117,7 @@ class RustVecEnv(VecEnv):
         steps_since_food = self._steps_since_foods()
         is_win = (masks & int(core.MOVE_WIN)) > 0
         is_food = (masks & int(core.MOVE_FOOD)) > 0
+        is_timeout = (masks & int(core.MOVE_TIMEOUT)) > 0
         is_fatal = (
             masks
             & int(
@@ -142,12 +144,11 @@ class RustVecEnv(VecEnv):
         if np.any(is_fatal):
             reward[is_fatal] -= float(self.reward.fatal_penalty)
 
-        is_truncated = (steps_since_food >= int(self.max_steps)) & (~is_fatal) & (~is_win)
-        if np.any(is_truncated):
-            reward[is_truncated] -= float(self.reward.timeout_penalty)
+        if np.any(is_timeout):
+            reward[is_timeout] -= float(self.reward.timeout_penalty)
 
         terminated = is_fatal | is_win
-        truncated = is_truncated
+        truncated = is_timeout & (~is_fatal) & (~is_win)
         dones = terminated | truncated
 
         infos: list[dict[str, Any]] = [{} for _ in range(self.num_envs)]
@@ -235,6 +236,12 @@ class RustVecEnv(VecEnv):
                 "Rust core does not expose steps_since_foods (rebuild the extension)."
             )
         return np.asarray(fn(), dtype=np.int32)
+
+    def _set_max_steps(self, max_steps: int | None) -> None:
+        fn = getattr(self._vec_game, "set_max_steps", None)
+        if fn is None:
+            raise RuntimeError("Rust core does not expose set_max_steps (rebuild the extension).")
+        fn(None if max_steps is None else int(max_steps))
 
 
 def _index_obs(obs, indices: np.ndarray):

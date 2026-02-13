@@ -89,17 +89,19 @@ def make_single_env(*, cfg: Any, seed: int, frame_stack_n: int) -> Callable[[], 
         # Create engine WITHOUT a seed.
         # RNG will be injected from the env's np_random during reset().
         board_cfg = get_board_params(cfg)
+        reward_cfg = _get_reward_from_cfg(cfg)
         board = core.Board(
             width=int(board_cfg["width"]),
             height=int(board_cfg["height"]),
         )
+        max_playable = int(board.max_playable_tiles)
+        max_steps = max(1, int(max_playable * float(reward_cfg.max_steps_factor)))
         game = SnakeEngine(
             board=board,
             food_count=int(board_cfg["food_count"]),
             frame_stack_n=int(frame_stack_n),
         )
-
-        reward_cfg = _get_reward_from_cfg(cfg)
+        game.set_max_steps(int(max_steps))
         # Construct the Gymnasium environment
         env = SnakeEnv(
             game,

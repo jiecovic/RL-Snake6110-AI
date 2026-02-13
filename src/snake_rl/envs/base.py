@@ -94,6 +94,7 @@ class BaseSnakeEnv(gym.Env, ABC):
 
         # Bind the game's RNG to the env RNG. This makes seeding robust and
         # consistent with Gymnasium/SB3 behavior (per-env streams).
+        # Note: Rust treats seed=None as "do not reseed", so RNG stream continues.
         self.game.reset(seed=seed)
         self.initial_snake_length = int(self.game.snake_len)
 
@@ -120,6 +121,7 @@ class BaseSnakeEnv(gym.Env, ABC):
         is_win = bool(results & core.MOVE_WIN)
         is_fatal = bool(results & self.FATAL_MASK)
         is_food = bool(results & core.MOVE_FOOD)
+        is_timeout = bool(results & core.MOVE_TIMEOUT)
         if is_win:
             reward += float(self.reward.win_reward)
             terminated = True
@@ -136,9 +138,8 @@ class BaseSnakeEnv(gym.Env, ABC):
             if is_fatal:
                 reward -= float(self.reward.fatal_penalty)
 
-            is_truncated = steps_since_food >= self.max_steps
             terminated = is_fatal
-            truncated = not terminated and is_truncated
+            truncated = not terminated and is_timeout
             if truncated:
                 reward -= float(self.reward.timeout_penalty)
 
