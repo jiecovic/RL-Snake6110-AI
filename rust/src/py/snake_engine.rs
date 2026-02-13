@@ -185,14 +185,14 @@ impl PySnakeEngine {
         Ok(arr.into_pyarray_bound(py).unbind().to_object(py))
     }
 
-    fn tile_grid_stacked<'py>(&self, py: Python<'py>) -> Py<PyArray3<u8>> {
+    fn tile_grid_stacked<'py>(&mut self, py: Python<'py>) -> Py<PyArray3<u8>> {
         let (view, n, h, w) = self.inner.tile_grid_stacked();
         let arr = ndarray::Array3::from_shape_vec((n, h, w), view).unwrap();
         arr.into_pyarray_bound(py).unbind()
     }
 
     fn tile_grid_stacked_vocab<'py>(
-        &self,
+        &mut self,
         py: Python<'py>,
         vocab: &str,
     ) -> PyResult<Py<PyArray3<u8>>> {
@@ -204,7 +204,7 @@ impl PySnakeEngine {
         Ok(arr.into_pyarray_bound(py).unbind())
     }
 
-    fn pixel_grid_stacked<'py>(&self, py: Python<'py>) -> PyResult<Py<PyArray3<u8>>> {
+    fn pixel_grid_stacked<'py>(&mut self, py: Python<'py>) -> PyResult<Py<PyArray3<u8>>> {
         let (view, n, h, w) = self.inner.pixel_grid_stacked().map_err(map_engine_err)?;
         let arr = ndarray::Array3::from_shape_vec((n, h, w), view).unwrap();
         Ok(arr.into_pyarray_bound(py).unbind())

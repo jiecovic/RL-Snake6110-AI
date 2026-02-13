@@ -5,18 +5,22 @@ pub struct Point {
     pub y: i32,
 }
 
+#[inline]
 pub fn idx(x: i32, y: i32, width: usize) -> usize {
     (y as usize) * width + (x as usize)
 }
 
+#[inline]
 pub fn dir_turn_left(d: i8) -> i8 {
     (d + 3) % 4
 }
 
+#[inline]
 pub fn dir_turn_right(d: i8) -> i8 {
     (d + 1) % 4
 }
 
+#[inline]
 pub fn dir_vec(d: i8) -> (i32, i32) {
     match d {
         0 => (0, -1),
@@ -43,7 +47,7 @@ pub fn is_straight_spawn_valid(
     cells: &[Point],
     width: i32,
     height: i32,
-    wall_mask: &[bool],
+    wall_mask: &[u8],
 ) -> bool {
     for p in cells.iter() {
         if p.x < 0 || p.x >= width || p.y < 0 || p.y >= height {
@@ -53,13 +57,14 @@ pub fn is_straight_spawn_valid(
             return false;
         }
         let i = idx(p.x, p.y, width as usize);
-        if wall_mask[i] {
+        if wall_mask[i] != 0 {
             return false;
         }
     }
     true
 }
 
+#[inline]
 pub fn idx_to_point(i: usize, width: usize) -> Point {
     Point {
         x: (i % width) as i32,

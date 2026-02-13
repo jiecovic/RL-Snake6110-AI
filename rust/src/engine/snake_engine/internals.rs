@@ -17,7 +17,7 @@ impl SnakeEngine {
         self.spawnable.clear();
         self.spawnable_pos.fill(usize::MAX);
         for i in 0..(self.width * self.height) {
-            if self.wall_mask[i] {
+            if self.wall_mask[i] != 0 {
                 continue;
             }
             self.spawnable_pos[i] = self.spawnable.len();
@@ -25,6 +25,7 @@ impl SnakeEngine {
         }
     }
 
+    #[inline]
     pub(crate) fn spawnable_remove(&mut self, idx: usize) {
         let pos = self.spawnable_pos[idx];
         if pos == usize::MAX {
@@ -37,6 +38,7 @@ impl SnakeEngine {
         self.spawnable_pos[idx] = usize::MAX;
     }
 
+    #[inline]
     pub(crate) fn spawnable_add(&mut self, idx: usize) {
         if self.spawnable_pos[idx] != usize::MAX {
             return;
@@ -45,6 +47,7 @@ impl SnakeEngine {
         self.spawnable.push(idx);
     }
 
+    #[inline]
     pub(crate) fn would_collide(&self, dir: i8) -> bool {
         if self.snake.is_empty() {
             return false;
@@ -59,10 +62,10 @@ impl SnakeEngine {
             return true;
         }
         let nidx = idx(nx, ny, self.width);
-        if self.wall_mask[nidx] {
+        if self.wall_mask[nidx] != 0 {
             return true;
         }
-        if self.snake_mask[nidx] {
+        if self.snake_mask[nidx] != 0 {
             return true;
         }
         false
@@ -122,11 +125,11 @@ impl SnakeEngine {
                 &self.wall_mask,
             ) {
                 self.snake.clear();
-                self.snake_mask.fill(false);
+                self.snake_mask.fill(0);
                 for p in cells.iter() {
                     let i = idx(p.x, p.y, self.width);
                     self.snake.push_back(i);
-                    self.snake_mask[i] = true;
+                    self.snake_mask[i] = 1;
                     self.spawnable_remove(i);
                 }
                 self.direction = Some(direction);
@@ -159,7 +162,7 @@ impl SnakeEngine {
         }
         for &p in spawned.iter() {
             self.food.push(p);
-            self.food_mask[p] = true;
+            self.food_mask[p] = 1;
             self.spawnable_remove(p);
         }
         spawned
@@ -207,26 +210,26 @@ impl SnakeEngine {
 
         let new_head_idx = idx(new_head.x, new_head.y, self.width);
 
-        if self.wall_mask[new_head_idx] {
+        if self.wall_mask[new_head_idx] != 0 {
             self.running = false;
             return Ok(MOVE_HIT_WALL);
         }
 
-        if self.snake_mask[new_head_idx] {
+        if self.snake_mask[new_head_idx] != 0 {
             self.running = false;
             return Ok(MOVE_HIT_SELF);
         }
 
         self.direction = Some(new_dir);
         self.snake.push_front(new_head_idx);
-        self.snake_mask[new_head_idx] = true;
+        self.snake_mask[new_head_idx] = 1;
         self.spawnable_remove(new_head_idx);
 
         let mut result = MOVE_OK;
 
-        let ate_food = self.food_mask[new_head_idx];
+        let ate_food = self.food_mask[new_head_idx] != 0;
         if ate_food {
-            self.food_mask[new_head_idx] = false;
+            self.food_mask[new_head_idx] = 0;
             if let Some(pos) = self.food.iter().position(|&i| i == new_head_idx) {
                 self.food.remove(pos);
             }
@@ -241,7 +244,7 @@ impl SnakeEngine {
             self.update_tiles_after_step(new_dir, None, &spawned);
         } else {
             let tail = self.snake.pop_back().unwrap();
-            self.snake_mask[tail] = false;
+            self.snake_mask[tail] = 0;
             self.spawnable_add(tail);
             self.update_tiles_after_step(new_dir, Some(tail), &[]);
         }

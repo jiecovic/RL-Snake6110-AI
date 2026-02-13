@@ -46,11 +46,11 @@ impl SnakeEngine {
         static_grid[idx(0, (height - 1) as i32, width)] = TILE_WALL_BL;
         static_grid[idx((width - 1) as i32, (height - 1) as i32, width)] = TILE_WALL_BR;
 
-        let mut wall_mask = vec![false; width * height];
+        let mut wall_mask = vec![0u8; width * height];
         let mut wall_count = 0usize;
         for (i, v) in static_grid.iter().enumerate() {
             if *v != TILE_EMPTY {
-                wall_mask[i] = true;
+                wall_mask[i] = 1;
                 wall_count += 1;
             }
         }
@@ -64,7 +64,7 @@ impl SnakeEngine {
         let mut spawnable = Vec::with_capacity(width * height - wall_count);
         let mut spawnable_pos = vec![usize::MAX; width * height];
         for i in 0..(width * height) {
-            if wall_mask[i] {
+            if wall_mask[i] != 0 {
                 continue;
             }
             spawnable_pos[i] = spawnable.len();
@@ -95,9 +95,9 @@ impl SnakeEngine {
             target_food_count: food_count,
             rng,
             snake: std::collections::VecDeque::new(),
-            snake_mask: vec![false; width * height],
+            snake_mask: vec![0u8; width * height],
             food: Vec::new(),
-            food_mask: vec![false; width * height],
+            food_mask: vec![0u8; width * height],
             direction: None,
             score: 0,
             running: true,
@@ -134,8 +134,8 @@ impl SnakeEngine {
         self.steps_since_food = 0;
         self.snake.clear();
         self.food.clear();
-        self.snake_mask.fill(false);
-        self.food_mask.fill(false);
+        self.snake_mask.fill(0);
+        self.food_mask.fill(0);
         self.direction = None;
         self.spawnable_reset();
 

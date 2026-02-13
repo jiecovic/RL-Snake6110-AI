@@ -6,6 +6,8 @@ pub struct FrameStacker {
     frame_len: usize,
     buf: Vec<u8>,
     head: usize,
+    stacked: Vec<u8>,
+    dirty: bool,
 }
 
 impl FrameStacker {
@@ -15,6 +17,8 @@ impl FrameStacker {
             frame_len: 0,
             buf: Vec::new(),
             head: 0,
+            stacked: Vec::new(),
+            dirty: true,
         }
     }
 
@@ -27,6 +31,8 @@ impl FrameStacker {
             self.buf[dst..dst + len].copy_from_slice(frame);
         }
         self.head = self.n_stack.saturating_sub(1);
+        self.stacked.clone_from(&self.buf);
+        self.dirty = false;
     }
 
     pub fn push(&mut self, frame: &[u8]) {
@@ -39,31 +45,45 @@ impl FrameStacker {
         if self.n_stack <= 1 {
             self.buf[..len].copy_from_slice(frame);
             self.head = 0;
+            self.stacked.clone_from(&self.buf);
+            self.dirty = false;
             return;
         }
 
         self.head = (self.head + 1) % self.n_stack;
         let dst = self.head * len;
         self.buf[dst..dst + len].copy_from_slice(frame);
+        self.dirty = true;
     }
 
-    pub fn stacked(&self) -> Vec<u8> {
+    pub fn stacked(&mut self) -> &[u8] {
         if self.frame_len == 0 || self.buf.is_empty() {
-            return Vec::new();
+            self.stacked.clear();
+            self.dirty = false;
+            return &self.stacked;
         }
         if self.n_stack <= 1 {
-            return self.buf.clone();
+            if self.dirty {
+                self.stacked.clone_from(&self.buf);
+                self.dirty = false;
+            }
+            return &self.stacked;
         }
-        let len = self.frame_len;
-        let mut out = vec![0u8; self.buf.len()];
-        let start = (self.head + 1) % self.n_stack;
-        for i in 0..self.n_stack {
-            let src_slot = (start + i) % self.n_stack;
-            let src = src_slot * len;
-            let dst = i * len;
-            out[dst..dst + len].copy_from_slice(&self.buf[src..src + len]);
+        if self.dirty {
+            let len = self.frame_len;
+            if self.stacked.len() != self.buf.len() {
+                self.stacked.resize(self.buf.len(), 0);
+            }
+            let start = (self.head + 1) % self.n_stack;
+            for i in 0..self.n_stack {
+                let src_slot = (start + i) % self.n_stack;
+                let src = src_slot * len;
+                let dst = i * len;
+                self.stacked[dst..dst + len].copy_from_slice(&self.buf[src..src + len]);
+            }
+            self.dirty = false;
         }
-        out
+        &self.stacked
     }
 }
 
@@ -107,7 +127,7 @@ impl HeadStacker {
         self.stacker.push(frame);
     }
 
-    pub fn stacked(&self) -> Vec<u8> {
+    pub fn stacked(&mut self) -> &[u8] {
         self.stacker.stacked()
     }
 

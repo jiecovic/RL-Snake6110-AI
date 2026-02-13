@@ -9,13 +9,13 @@ impl SnakeEngine {
         &self.tile_grid
     }
 
-    pub fn tile_grid_stacked(&self) -> (Vec<u8>, usize, usize, usize) {
+    pub fn tile_grid_stacked(&mut self) -> (Vec<u8>, usize, usize, usize) {
         let n = self.frame_stack_n;
         if n <= 1 {
             return (self.tile_grid.clone(), 1, self.height, self.width);
         }
-        if let Some(stacker) = self.world_tile_stack.as_ref() {
-            return (stacker.stacked(), n, self.height, self.width);
+        if let Some(stacker) = self.world_tile_stack.as_mut() {
+            return (stacker.stacked().to_vec(), n, self.height, self.width);
         }
         (self.tile_grid.clone(), 1, self.height, self.width)
     }
@@ -27,7 +27,7 @@ impl SnakeEngine {
         Ok(&self.pixel_grid)
     }
 
-    pub fn pixel_grid_stacked(&self) -> Result<(Vec<u8>, usize, usize, usize), EngineError> {
+    pub fn pixel_grid_stacked(&mut self) -> Result<(Vec<u8>, usize, usize, usize), EngineError> {
         if !self.pixel_grid_enabled {
             return Err(EngineError::PixelGridDisabled);
         }
@@ -37,8 +37,8 @@ impl SnakeEngine {
         if n <= 1 {
             return Ok((self.pixel_grid.clone(), 1, h, w));
         }
-        if let Some(stacker) = self.world_pixel_stack.as_ref() {
-            return Ok((stacker.stacked(), n, h, w));
+        if let Some(stacker) = self.world_pixel_stack.as_mut() {
+            return Ok((stacker.stacked().to_vec(), n, h, w));
         }
         Ok((self.pixel_grid.clone(), 1, h, w))
     }

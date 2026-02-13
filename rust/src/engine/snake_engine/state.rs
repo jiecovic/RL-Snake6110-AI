@@ -36,7 +36,7 @@ pub struct SnakeEngine {
     pub(crate) step_counter: u64,
 
     pub(crate) static_grid: Vec<u8>,
-    pub(crate) wall_mask: Vec<bool>,
+    pub(crate) wall_mask: Vec<u8>,
     pub(crate) wall_count: usize,
     pub(crate) spawnable: Vec<usize>,
     pub(crate) spawnable_pos: Vec<usize>,
@@ -51,9 +51,9 @@ pub struct SnakeEngine {
     pub(crate) rng: ChaCha8Rng,
 
     pub(crate) snake: VecDeque<usize>,
-    pub(crate) snake_mask: Vec<bool>,
+    pub(crate) snake_mask: Vec<u8>,
     pub(crate) food: Vec<usize>,
-    pub(crate) food_mask: Vec<bool>,
+    pub(crate) food_mask: Vec<u8>,
     pub(crate) direction: Option<i8>,
 
     pub(crate) score: i32,

@@ -84,7 +84,7 @@ impl SnakeEngine {
         };
         if let Some(stacker) = self.head_tile_stack.as_mut() {
             stacker.update(self.step_counter, key, &view);
-            return Ok((stacker.stacked(), n, h, w));
+            return Ok((stacker.stacked().to_vec(), n, h, w));
         }
         Ok((view, 1, h, w))
     }
@@ -212,11 +212,11 @@ impl SnakeEngine {
         };
         if let Some(stacker) = self.head_pixel_stack.as_mut() {
             stacker.update(self.step_counter, key, &view);
-            let stacked = stacker.stacked();
+            let stacked = stacker.stacked().to_vec();
 
             if let Some(vs) = self.head_pixel_valid_stack.as_mut() {
                 vs.update(self.step_counter, key, &valid_u8);
-                let valid_stacked = vs.stacked();
+                let valid_stacked = vs.stacked().to_vec();
                 return Ok((stacked, valid_stacked, n, h, w));
             }
         }

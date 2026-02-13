@@ -2,6 +2,7 @@
 use crate::engine::constants::*;
 use crate::engine::spatial::Point;
 
+#[inline]
 pub fn head_tile(direction: i8) -> u8 {
     match direction {
         0 => TILE_HEAD_UP,
@@ -12,6 +13,7 @@ pub fn head_tile(direction: i8) -> u8 {
     }
 }
 
+#[inline]
 pub fn tail_tile(prev: Point, tail: Point) -> u8 {
     if prev.x < tail.x {
         return TILE_TAIL_RIGHT;
@@ -28,6 +30,7 @@ pub fn tail_tile(prev: Point, tail: Point) -> u8 {
     TILE_TAIL_RIGHT
 }
 
+#[inline]
 pub fn body_tile(prev: Point, curr: Point, nxt: Point) -> u8 {
     if prev.x == nxt.x {
         if prev.y < nxt.y {
