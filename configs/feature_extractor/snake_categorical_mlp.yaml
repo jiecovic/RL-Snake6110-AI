@@ -13,3 +13,5 @@ params:                        # Unified extractor parameters.
   use_token_mask: true         # Mask out token ids equal to mask_token_id.
   mask_token_id: 0             # Token id considered "masked" (typically OOB id).
   flatten_mlp_hidden_dim: 512  # Hidden dim for flatten + MLP head (pooling=flatten only).
+  feature_tokens: []           # Feature token groups (enable features here).
+  feature_options: {}          # Optional per-feature params (e.g. closest_food: {metric: manhattan}).

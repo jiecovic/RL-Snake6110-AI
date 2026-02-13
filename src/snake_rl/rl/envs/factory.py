@@ -14,6 +14,8 @@ from snake_rl.config.access import (
     get_board_params,
     get_env_action,
     get_env_obs,
+    get_feature_options,
+    get_feature_tokens,
     get_frame_stack_n,
     get_run_num_envs,
     get_run_vec,
@@ -41,11 +43,26 @@ def _obs_spec_from_cfg(cfg: Any) -> ObservationSpec:
     obs_cfg = get_env_obs(cfg)
     if not isinstance(obs_cfg, dict):
         raise TypeError(f"env.obs must be a dict, got {type(obs_cfg).__name__}")
+    feature_groups = get_feature_tokens(cfg)
+    features: dict[str, Any] = {}
+    for group in feature_groups:
+        for name in group:
+            if name not in features:
+                features[name] = True
+    opts = get_feature_options(cfg)
+    for name, val in opts.items():
+        if name not in features:
+            continue
+        if isinstance(val, dict):
+            merged = dict(val)
+            merged["enabled"] = True
+            features[name] = merged
+
     spec = ObservationSpec(
         kind=str(obs_cfg.get("kind")),
         view=str(obs_cfg.get("view")),
         params=dict(obs_cfg.get("params", {})),
-        features=dict(obs_cfg.get("features", {})),
+        features=features,
     )
     # Validate early for clearer errors.
     spec.kind_norm()

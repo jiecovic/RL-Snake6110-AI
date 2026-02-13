@@ -77,7 +77,7 @@ class ObservationConfig:
       View/mode specific parameters (e.g. view_radius, rotate_to_head, remove_border).
 
     features:
-      Optional global features such as direction, snake_progress, and food metrics.
+      Deprecated. Features are now enabled via feature_extractor.params.feature_tokens.
     """
 
     kind: str

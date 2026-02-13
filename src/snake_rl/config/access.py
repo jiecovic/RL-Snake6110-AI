@@ -80,6 +80,31 @@ def get_env_obs(cfg: Any) -> dict[str, Any]:
     raise KeyError("Config missing env.obs")
 
 
+def get_feature_tokens(cfg: Any) -> list[list[str]]:
+    params = cfg_get(cfg, "feature_extractor.params", None)
+    if not isinstance(params, dict):
+        return []
+    groups = params.get("feature_tokens")
+    if groups is None:
+        return []
+    out: list[list[str]] = []
+    for g in groups:
+        items = [str(g)] if isinstance(g, str) else [str(x) for x in g]
+        items = [s.strip() for s in items if str(s).strip()]
+        if not items:
+            raise ValueError("feature_tokens entries must be non-empty")
+        out.append(items)
+    return out
+
+
+def get_feature_options(cfg: Any) -> dict[str, Any]:
+    params = cfg_get(cfg, "feature_extractor.params", None)
+    if not isinstance(params, dict):
+        return {}
+    opts = params.get("feature_options", {})
+    return dict(opts) if isinstance(opts, dict) else {}
+
+
 def get_env_action(cfg: Any) -> str:
     v = cfg_get(cfg, "env.action.type", None)
     if v is None:

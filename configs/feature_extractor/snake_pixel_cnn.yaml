@@ -1,12 +1,13 @@
 type: snake_unified                                 # Feature extractor type (use snake_unified for modular stems/mixers).
-features_dim: 128                                   # Final feature dimension exposed to SB3 policy.
+features_dim: 256                                   # Final feature dimension exposed to SB3 policy.
 params:                                             # Unified extractor parameters.
   stem:                                             # Token stem (pixel grid -> tokens).
     type: px_cnn                                    # Stem type: px_cnn|cat_identity|cat_patch.
     params:                                         # Stem-specific parameters.
-      d_model: 256                                  # Token embedding dimension.
+      d_model: 64                                  # Token embedding dimension.
       layers:                                       # CNN layers (list of conv specs).
-        - { out: 32, k: 4, s: 4, p: 0, act: relu }  # Each layer: out channels, kernel, stride, padding, activation.
+        - { out: 16, k: 4, s: 4, p: 0, act: relu }  # Each layer: out channels, kernel, stride, padding, activation.
+        - { out: 32, k: 3, s: 1, p: 0, act: relu }
         - { out: 64, k: 3, s: 1, p: 0, act: relu }
 #        - { out: 64, k: 3, s: 1, p: 1, act: relu }
 #        - { out: 128, k: 3, s: 1, p: 1, act: relu }
