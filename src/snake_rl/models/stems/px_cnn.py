@@ -30,6 +30,32 @@ def _nature_layers() -> list[dict[str, Any]]:
     ]
 
 
+def _maybe_pool(layer: dict[str, Any]) -> nn.Module | None:
+    pool = layer.get("pool")
+    if pool is None or pool is False:
+        return None
+    if pool is True:
+        return nn.AvgPool2d(kernel_size=2, stride=2)
+    if isinstance(pool, str):
+        name = pool.strip().lower()
+        if name in {"avg", "average"}:
+            return nn.AvgPool2d(kernel_size=2, stride=2)
+        if name in {"max"}:
+            return nn.MaxPool2d(kernel_size=2, stride=2)
+        raise ValueError(f"Unknown pool type {pool!r}")
+    if isinstance(pool, dict):
+        name = str(pool.get("type", "avg")).strip().lower()
+        k = int(pool.get("k", 2))
+        s = int(pool.get("s", k))
+        p = int(pool.get("p", 0))
+        if name in {"avg", "average"}:
+            return nn.AvgPool2d(kernel_size=k, stride=s, padding=p)
+        if name in {"max"}:
+            return nn.MaxPool2d(kernel_size=k, stride=s, padding=p)
+        raise ValueError(f"Unknown pool type {name!r}")
+    raise ValueError(f"Invalid pool spec {pool!r}")
+
+
 class PxCnnStem(TokenStem):
     def __init__(
         self,
@@ -72,6 +98,9 @@ class PxCnnStem(TokenStem):
             act = layer.get("act", "relu")
             modules.append(nn.Conv2d(in_ch, out_ch, kernel_size=k, stride=s, padding=p))
             modules.append(_act(act))
+            pool = _maybe_pool(layer)
+            if pool is not None:
+                modules.append(pool)
             in_ch = out_ch
             last_out = out_ch
 

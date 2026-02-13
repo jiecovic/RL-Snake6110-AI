@@ -29,6 +29,16 @@ def _dummy_from_space(space: spaces.Box) -> torch.Tensor:
     return torch.as_tensor(sample[None])
 
 
+def _normalize_hidden(value: int | list[int] | tuple[int, ...] | None) -> list[int] | None:
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return None
+        return [int(v) for v in value]
+    return [int(value)]
+
+
 class SnakeExtractor(BaseFeaturesExtractor):
     """
     Unified SB3 features extractor.
@@ -51,12 +61,17 @@ class SnakeExtractor(BaseFeaturesExtractor):
         mask_token_id: int = 0,
         mask_pool: bool = True,
         feature_tokens: list[list[str]] | None = None,
+        flatten_mlp_hidden: int | list[int] | None = None,
         flatten_mlp_hidden_dim: int | None = None,
         head_activation: str = "gelu",
         post_mlp_hidden: list[int] | None = None,
         post_mlp_dropout: float = 0.0,
     ) -> None:
         super().__init__(observation_space, int(features_dim))
+        if flatten_mlp_hidden is not None and flatten_mlp_hidden_dim is not None:
+            raise ValueError("Use flatten_mlp_hidden or flatten_mlp_hidden_dim, not both.")
+        if flatten_mlp_hidden is None and flatten_mlp_hidden_dim is not None:
+            flatten_mlp_hidden = int(flatten_mlp_hidden_dim)
 
         stem_type = str(stem.get("type", "")).strip().lower()
         stem_params = dict(stem.get("params", {}))
@@ -165,7 +180,7 @@ class SnakeExtractor(BaseFeaturesExtractor):
             out_dim=int(features_dim),
             hidden=post_mlp_hidden,
             dropout=float(post_mlp_dropout),
-            flatten_hidden=flatten_mlp_hidden_dim,
+            flatten_hidden=flatten_mlp_hidden,
             use_flatten=(self.pooling == "flatten"),
             activation=str(head_activation),
         )
@@ -267,7 +282,7 @@ class SnakeExtractor(BaseFeaturesExtractor):
         out_dim: int,
         hidden: list[int] | None,
         dropout: float,
-        flatten_hidden: int | None,
+        flatten_hidden: int | list[int] | None,
         use_flatten: bool,
         activation: str,
     ) -> nn.Module:
@@ -287,15 +302,18 @@ class SnakeExtractor(BaseFeaturesExtractor):
         else:
             raise ValueError(f"Unknown head_activation {activation!r}")
 
-        if use_flatten and flatten_hidden is not None:
-            layers: list[nn.Module] = [
-                nn.LayerNorm(int(in_dim)),
-                nn.Linear(int(in_dim), int(flatten_hidden)),
-                act_layer(),
-            ]
-            if int(flatten_hidden) != int(out_dim):
-                layers.append(nn.Linear(int(flatten_hidden), int(out_dim)))
-            return nn.Sequential(*layers)
+        if use_flatten:
+            flat_hidden = _normalize_hidden(flatten_hidden)
+            if flat_hidden is not None:
+                layers: list[nn.Module] = [nn.LayerNorm(int(in_dim))]
+                d = int(in_dim)
+                for h in flat_hidden:
+                    layers.append(nn.Linear(d, int(h)))
+                    layers.append(act_layer())
+                    d = int(h)
+                if int(d) != int(out_dim):
+                    layers.append(nn.Linear(int(d), int(out_dim)))
+                return nn.Sequential(*layers)
         if not hidden:
             if int(in_dim) == int(out_dim):
                 return nn.Identity()
