@@ -10,6 +10,7 @@ class BoardConfig:
     height: int
     width: int
     food_count: int
+    spawn_random_dir: bool = False
 
 
 @dataclass(frozen=True)

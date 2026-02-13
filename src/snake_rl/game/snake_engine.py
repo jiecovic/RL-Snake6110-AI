@@ -41,6 +41,7 @@ class SnakeEngine:
         enable_pixel_grid: bool | None = None,
         enable_world_tile_stack: bool | None = None,
         enable_world_pixel_stack: bool | None = None,
+        spawn_random_dir: bool | None = None,
     ):
         if food_count is None:
             raise ValueError("food_count must be provided (board does not encode food).")
@@ -65,6 +66,9 @@ class SnakeEngine:
             enable_world_tile_stack=world_tile_stack,
             enable_world_pixel_stack=world_pixel_stack,
         )
+
+        if spawn_random_dir is not None:
+            self.set_spawn_random_dir(bool(spawn_random_dir))
 
         self._core.reset(None if seed is None else int(seed))
         if max_steps is not None:
@@ -319,6 +323,14 @@ class SnakeEngine:
         if fn is None:
             raise RuntimeError("Rust core does not expose set_max_steps (rebuild the extension).")
         fn(None if max_steps is None else int(max_steps))
+
+    def set_spawn_random_dir(self, enabled: bool) -> None:
+        fn = getattr(self._core, "set_spawn_random_dir", None)
+        if fn is None:
+            raise RuntimeError(
+                "Rust core does not expose set_spawn_random_dir (rebuild the extension)."
+            )
+        fn(bool(enabled))
 
     def time_since_food_norm(self, max_steps: int) -> float:
         fn = getattr(self._core, "time_since_food_norm", None)

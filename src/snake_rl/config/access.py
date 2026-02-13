@@ -112,13 +112,19 @@ def get_env_action(cfg: Any) -> str:
     return str(v)
 
 
-def get_board_params(cfg: Any) -> dict[str, int]:
+def get_board_params(cfg: Any) -> dict[str, Any]:
     h = cfg_get(cfg, "board.height", None)
     w = cfg_get(cfg, "board.width", None)
     f = cfg_get(cfg, "board.food_count", None)
     if h is None or w is None or f is None:
         raise KeyError("Config missing one of: board.height, board.width, board.food_count")
-    return {"height": int(h), "width": int(w), "food_count": int(f)}
+    spawn_random_dir = bool(cfg_get(cfg, "board.spawn_random_dir", False))
+    return {
+        "height": int(h),
+        "width": int(w),
+        "food_count": int(f),
+        "spawn_random_dir": spawn_random_dir,
+    }
 
 
 def get_frame_stack_n(cfg: Any) -> int:

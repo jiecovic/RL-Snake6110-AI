@@ -66,6 +66,7 @@ class BoardConfigModel(_BaseConfigModel):
     height: int
     width: int
     food_count: int
+    spawn_random_dir: bool = False
 
 
 class RewardConfigModel(_BaseConfigModel):
@@ -285,6 +286,7 @@ class TrainConfigModel(_BaseConfigModel):
                 height=int(self.board.height),
                 width=int(self.board.width),
                 food_count=int(self.board.food_count),
+                spawn_random_dir=bool(self.board.spawn_random_dir),
             ),
             reward=RewardConfig(
                 max_steps_factor=float(self.reward.max_steps_factor),
