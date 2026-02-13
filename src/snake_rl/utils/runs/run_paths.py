@@ -48,3 +48,19 @@ def make_run_paths(*, run_name: str) -> RunPaths:
         tb_dir=tb_dir,
         checkpoint_dir=checkpoint_dir,
     )
+
+
+def run_paths_from_dir(*, run_dir: Path) -> RunPaths:
+    run_dir = Path(run_dir).resolve()
+    tb_dir = run_dir / "tb"
+    checkpoint_dir = run_dir / "checkpoints"
+    tb_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    return RunPaths(
+        repo_root=repo_root(),
+        runs_root=run_dir.parent,
+        run_id=run_dir.name,
+        run_dir=run_dir,
+        tb_dir=tb_dir,
+        checkpoint_dir=checkpoint_dir,
+    )

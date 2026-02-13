@@ -17,7 +17,7 @@ from snake_rl.config.pydantic_models import TrainConfigModel
 from snake_rl.rl.train.train_loop import train
 from snake_rl.utils.runs.paths import repo_root, resolve_run_dir, runs_root
 from snake_rl.utils.runs.resume import resolve_resume_arg
-from snake_rl.utils.runs.run_paths import make_run_paths
+from snake_rl.utils.runs.run_paths import make_run_paths, run_paths_from_dir
 
 CONFIG_DIR = Path(repo_root()) / "configs"
 
@@ -54,6 +54,31 @@ def infer_config_path_from_resume(resume: str) -> Path:
         if cand.is_file():
             return cand
     raise FileNotFoundError(f"No config snapshot found in run dir: {run_dir}")
+
+
+def _infer_run_dir_from_checkpoint(
+    *, checkpoint_path: Path, runs_root_path: Path, legacy_root: Path | None
+) -> Path | None:
+    chk = checkpoint_path.resolve()
+    run_dir = None
+    if chk.parent.name == "checkpoints":
+        run_dir = chk.parent.parent
+    elif chk.name == "checkpoints":
+        run_dir = chk.parent
+    if run_dir is None:
+        return None
+    try:
+        run_dir.relative_to(runs_root_path.resolve())
+        return run_dir
+    except Exception:
+        pass
+    if legacy_root is not None:
+        try:
+            run_dir.relative_to(legacy_root.resolve())
+            return run_dir
+        except Exception:
+            pass
+    return None
 
 
 def _apply_resume_override(
@@ -103,14 +128,24 @@ def run_from_config_path(
     effective_log_level = cfg_log_level if log_level is None else str(log_level)
 
     resume_path = None
+    resume_run_dir = None
     if cfg.run.resume_checkpoint:
         resume_path = resolve_resume_arg(
             str(cfg.run.resume_checkpoint),
             runs_root=runs_root(),
             legacy_root=repo_root() / "experiments",
         )
+        resume_run_dir = _infer_run_dir_from_checkpoint(
+            checkpoint_path=resume_path,
+            runs_root_path=runs_root(),
+            legacy_root=repo_root() / "experiments",
+        )
 
-    paths = make_run_paths(run_name=str(cfg.run.name))
+    paths = (
+        run_paths_from_dir(run_dir=resume_run_dir)
+        if resume_run_dir is not None
+        else make_run_paths(run_name=str(cfg.run.name))
+    )
 
     train(
         cfg=cfg,
@@ -132,14 +167,24 @@ def main(cfg: DictConfig) -> None:
     log_level = str(logging_cfg.get("level", "INFO"))
 
     resume_path = None
+    resume_run_dir = None
     if train_cfg.run.resume_checkpoint:
         resume_path = resolve_resume_arg(
             str(train_cfg.run.resume_checkpoint),
             runs_root=runs_root(),
             legacy_root=repo_root() / "experiments",
         )
+        resume_run_dir = _infer_run_dir_from_checkpoint(
+            checkpoint_path=resume_path,
+            runs_root_path=runs_root(),
+            legacy_root=repo_root() / "experiments",
+        )
 
-    paths = make_run_paths(run_name=str(train_cfg.run.name))
+    paths = (
+        run_paths_from_dir(run_dir=resume_run_dir)
+        if resume_run_dir is not None
+        else make_run_paths(run_name=str(train_cfg.run.name))
+    )
 
     train(
         cfg=train_cfg,

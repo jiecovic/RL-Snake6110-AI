@@ -91,6 +91,7 @@ def train(
             progress_bar=bool(use_rich),
             callback=callbacks,
             tb_log_name="ppo",
+            reset_num_timesteps=resume_path is None,
         )
 
         final_path = paths.checkpoint_dir / "final.zip"
