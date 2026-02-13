@@ -160,7 +160,7 @@ class WatchController:
                 self.current_mtime = mtime
                 self.last_reload_at = time.time()
                 rel = relpath(chosen, base=self.repo)
-                self.logger.info(f"reloaded checkpoint: {rel} (mtime={int(mtime)})")
+                self.logger.debug(f"reloaded checkpoint: {rel} (mtime={int(mtime)})")
         except Exception:
             self.logger.exception("reload error")
 
