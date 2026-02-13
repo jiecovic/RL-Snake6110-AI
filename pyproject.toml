@@ -51,6 +51,7 @@ snake-play = "snake_rl.cli.play:main"
 snake-train = "snake_rl.cli.train:main"
 snake-eval = "snake_rl.cli.eval:main"
 snake-watch = "snake_rl.cli.watch:main"
+snake-bench = "snake_rl.cli.bench:main"
 
 # New tools for board and tileset printing
 
