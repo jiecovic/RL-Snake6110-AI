@@ -20,15 +20,15 @@ def _ensure_str_keys(d: dict[Any, Any]) -> dict[str, Any]:
     return {str(k): v for k, v in d.items()}
 
 
-def _filter_valid_ppo_kwargs(d: dict[str, Any]) -> dict[str, Any]:
-    sig = inspect.signature(PPO.__init__)
+def _filter_valid_algo_kwargs(model_cls: type, d: dict[str, Any]) -> dict[str, Any]:
+    sig = inspect.signature(model_cls.__init__)
     valid = set(sig.parameters.keys())
     valid.discard("self")
     return {k: v for k, v in d.items() if k in valid}
 
 
-def _coerce_ppo_types(d: dict[str, Any]) -> dict[str, Any]:
-    # Only coerce known scalar PPO kwargs; leave callables/dicts/lists alone.
+def _coerce_algo_types(d: dict[str, Any]) -> dict[str, Any]:
+    # Only coerce known scalar PPO-style kwargs; leave callables/dicts/lists alone.
     float_keys = {
         "learning_rate",
         "gamma",
@@ -85,24 +85,53 @@ def _select_policy(observation_space) -> str | type[MultiInputActorCriticPolicy]
     return "MlpPolicy"
 
 
+def _select_policy_recurrent(observation_space) -> str:
+    if isinstance(observation_space, spaces.Dict):
+        return "MultiInputLstmPolicy"
+    if isinstance(observation_space, spaces.Box) and is_image_space(
+        observation_space,
+        check_channels=False,
+    ):
+        return "CnnLstmPolicy"
+    return "MlpLstmPolicy"
+
+
+def _require_recurrent_ppo():
+    try:
+        from sb3_contrib import RecurrentPPO
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError(
+            "sb3-contrib is required for recurrent PPO. Install with: pip install sb3-contrib"
+        ) from exc
+    return RecurrentPPO
+
+
 def make_or_load_model(
     *,
     cfg: TrainConfig,
     vec_env,
     tensorboard_log: Path,
     resume_path: Path | None,
-) -> PPO:
-    if resume_path is not None:
-        return PPO.load(str(resume_path), env=vec_env)
-
+) -> Any:
     algo = str(cfg.train.algo.type).strip().lower()
-    if algo != "ppo":
-        raise NotImplementedError(f"Unsupported train.algo.type={algo!r}. Only 'ppo' is supported.")
+    if algo in {"ppo"}:
+        model_cls = PPO
+        policy = _select_policy(vec_env.observation_space)
+    elif algo in {"recurrent_ppo", "rppo"}:
+        model_cls = _require_recurrent_ppo()
+        policy = _select_policy_recurrent(vec_env.observation_space)
+    else:
+        raise NotImplementedError(
+            f"Unsupported train.algo.type={algo!r}. Expected 'ppo' or 'recurrent_ppo'."
+        )
 
-    user_ppo_kwargs = _ensure_str_keys(dict(cfg.train.algo.params))
+    if resume_path is not None:
+        return model_cls.load(str(resume_path), env=vec_env)
+
+    user_algo_kwargs = _ensure_str_keys(dict(cfg.train.algo.params))
     user_policy_kwargs = {}
-    if "policy_kwargs" in user_ppo_kwargs:
-        raw = user_ppo_kwargs.pop("policy_kwargs")
+    if "policy_kwargs" in user_algo_kwargs:
+        raw = user_algo_kwargs.pop("policy_kwargs")
         if isinstance(raw, dict):
             user_policy_kwargs = dict(raw)
 
@@ -111,24 +140,23 @@ def make_or_load_model(
         observation_space=vec_env.observation_space,
         extra_policy_kwargs=user_policy_kwargs,
     )
-    policy = _select_policy(vec_env.observation_space)
 
-    # Pass-through PPO kwargs from YAML (filtered to ctor signature + mild type coercion).
-    user_ppo_kwargs = _coerce_ppo_types(user_ppo_kwargs)
-    user_ppo_kwargs = _filter_valid_ppo_kwargs(user_ppo_kwargs)
+    # Pass-through algo kwargs from YAML (filtered to ctor signature + mild type coercion).
+    user_algo_kwargs = _coerce_algo_types(user_algo_kwargs)
+    user_algo_kwargs = _filter_valid_algo_kwargs(model_cls, user_algo_kwargs)
 
     # Default: prefer run.seed as SB3 seed unless user explicitly overrides via ppo.seed.
     # This avoids the confusing "seed: None" in effective SB3 params.
-    if "seed" not in user_ppo_kwargs:
-        user_ppo_kwargs["seed"] = int(cfg.run.seed)
+    if "seed" not in user_algo_kwargs:
+        user_algo_kwargs["seed"] = int(cfg.run.seed)
 
-    ppo_kwargs = {
+    algo_kwargs = {
         "policy": policy,
         "env": vec_env,
         "policy_kwargs": policy_kwargs,
         # Note: SB3 stores this string as-is; we already print it relative in log_ppo_params().
         "tensorboard_log": str(tensorboard_log),
-        **user_ppo_kwargs,
+        **user_algo_kwargs,
     }
 
-    return PPO(**ppo_kwargs)
+    return model_cls(**algo_kwargs)

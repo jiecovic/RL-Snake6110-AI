@@ -5,8 +5,6 @@ import inspect
 from pathlib import Path
 from typing import Any
 
-from stable_baselines3 import PPO
-
 from snake_rl.utils.model_params import format_sb3_param_summary
 from snake_rl.utils.runs.paths import relpath
 
@@ -34,8 +32,8 @@ def _try_relpath(value: Any, *, base: Path) -> str:
     return str(value)
 
 
-def _effective_ppo_init_kwargs(model: PPO) -> dict[str, Any]:
-    sig = inspect.signature(PPO.__init__)
+def _effective_ppo_init_kwargs(model: Any) -> dict[str, Any]:
+    sig = inspect.signature(model.__class__.__init__)
     keys = [k for k in sig.parameters if k != "self"]
 
     out: dict[str, Any] = {}
@@ -94,7 +92,7 @@ def _policy_summary(eff: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def log_model_layers(*, model: PPO, logger, header: str = "[train] layers:") -> None:
+def log_model_layers(*, model: Any, logger, header: str = "[train] layers:") -> None:
     policy = getattr(model, "policy", None)
     logger.info(header)
     if policy is None:
@@ -116,7 +114,7 @@ def log_model_layers(*, model: PPO, logger, header: str = "[train] layers:") -> 
     _log("value_net")
 
 
-def log_ppo_params(*, model: PPO, cfg: Any, paths: Any, logger, label: str = "train") -> None:
+def log_ppo_params(*, model: Any, cfg: Any, paths: Any, logger, label: str = "train") -> None:
     """
     Log SB3 params and model structure.
 
