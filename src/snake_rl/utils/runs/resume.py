@@ -49,6 +49,11 @@ def resolve_resume_arg(
     # Explicit checkpoint path
     if resume.endswith(".zip") and p.is_file():
         return p.resolve()
+    if p.exists() and p.is_dir():
+        if (p / "checkpoints").is_dir():
+            return _resolve_latest_checkpoint(p / "checkpoints")
+        if p.name == "checkpoints":
+            return _resolve_latest_checkpoint(p)
 
     # latest:<run_name_prefix>
     if resume.startswith("latest:"):

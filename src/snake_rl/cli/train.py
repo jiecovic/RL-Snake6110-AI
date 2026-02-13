@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from snake_rl.app.train_app import run_from_config_path
+from snake_rl.app.train_app import infer_config_path_from_resume, run_from_config_path
 
 
 def _parse_args() -> argparse.Namespace:
@@ -14,7 +14,7 @@ def _parse_args() -> argparse.Namespace:
         "-cfg",
         "--config",
         type=str,
-        default="configs/config.yaml",
+        default=None,
         help="Config path (file or configs/ entry).",
     )
     p.add_argument(
@@ -23,6 +23,16 @@ def _parse_args() -> argparse.Namespace:
         default=[],
         help="Hydra override (repeatable). Only used when --config is under configs/.",
     )
+    p.add_argument(
+        "-r",
+        "--resume",
+        type=str,
+        default=None,
+        help=(
+            "Resume from checkpoint, run id/path, or latest:<prefix>. "
+            "If --config is omitted, tries to load runs/<run>/config_snapshot.yaml."
+        ),
+    )
     p.add_argument("--no-rich", action="store_true", help="Disable Rich logging.")
     p.add_argument("--log-level", type=str, default=None, help="Override logging level.")
     return p.parse_args()
@@ -30,11 +40,18 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
+    config_path = Path(args.config) if args.config else None
+    if config_path is None:
+        if args.resume:
+            config_path = infer_config_path_from_resume(str(args.resume))
+        else:
+            config_path = Path("configs/config.yaml")
     run_from_config_path(
-        config_path=Path(args.config),
+        config_path=config_path,
         overrides=list(args.override),
         no_rich=bool(args.no_rich),
         log_level=args.log_level,
+        resume_override=args.resume,
     )
 
 
