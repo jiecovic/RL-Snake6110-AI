@@ -879,7 +879,6 @@ impl SnakeEngine {
                 }
             }
         }
-        self.rebuild_pixels();
         self.update_world_stacks(false);
         Ok(result)
     }
@@ -925,8 +924,10 @@ impl SnakeEngine {
         old_tail_idx: Option<usize>,
         spawned_food: &[usize],
     ) {
+        let mut dirty = Vec::with_capacity(4 + spawned_food.len());
         if let Some(tail_idx) = old_tail_idx {
             self.tile_grid[tail_idx] = self.static_grid[tail_idx];
+            dirty.push(tail_idx);
         }
 
         if self.snake.is_empty() {
@@ -935,6 +936,7 @@ impl SnakeEngine {
 
         let head_idx = self.snake[0];
         self.tile_grid[head_idx] = head_tile(new_dir);
+        dirty.push(head_idx);
 
         let len = self.snake.len();
         if len >= 2 {
@@ -947,6 +949,7 @@ impl SnakeEngine {
                     idx_to_point(curr, self.width),
                     idx_to_point(next, self.width),
                 );
+                dirty.push(curr);
             }
             let tail_idx = self.snake[len - 1];
             let prev_idx = self.snake[len - 2];
@@ -954,11 +957,15 @@ impl SnakeEngine {
                 idx_to_point(prev_idx, self.width),
                 idx_to_point(tail_idx, self.width),
             );
+            dirty.push(tail_idx);
         }
 
         for &idx in spawned_food {
             self.tile_grid[idx] = TILE_FOOD;
+            dirty.push(idx);
         }
+
+        self.update_pixels_for_tiles(&dirty);
     }
 
     fn rebuild_pixels(&mut self) {
@@ -980,6 +987,25 @@ impl SnakeEngine {
                     self.pixel_grid[row_start..row_start + ts]
                         .copy_from_slice(&tile[tile_row_start..tile_row_start + ts]);
                 }
+            }
+        }
+    }
+
+    fn update_pixels_for_tiles(&mut self, indices: &[usize]) {
+        let ts = self.tile_size;
+        let pw = self.width * ts;
+        for &idx in indices {
+            let tile_id = self.tile_grid[idx] as usize;
+            let tile = &self.tile_cache[tile_id];
+            let x = idx % self.width;
+            let y = idx / self.width;
+            let dst_x = x * ts;
+            let dst_y = y * ts;
+            for ty in 0..ts {
+                let row_start = (dst_y + ty) * pw + dst_x;
+                let tile_row_start = ty * ts;
+                self.pixel_grid[row_start..row_start + ts]
+                    .copy_from_slice(&tile[tile_row_start..tile_row_start + ts]);
             }
         }
     }
