@@ -1,5 +1,5 @@
 height: 13     # Board height in tiles.
 width: 22      # Board width in tiles.
 food_count: 1  # Number of food items spawned simultaneously.
-spawn_random_dir: false  # Randomize snake spawn direction on reset.
+spawn_random_dir: true  # Randomize snake spawn direction on reset.
 

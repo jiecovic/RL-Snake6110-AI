@@ -1,15 +1,12 @@
 defaults:                               # Hydra defaults: select config groups for this preset.
   - run: default                        # Run config (base values).
-  - board: small                        # Board size and food count.
+  - board: classic                      # Board size and food count.
   - reward: default                     # Reward shaping parameters.
   - env: head_pixel_small               # Environment + observation spec.
-  - feature_extractor: snake_pixel_cnn_head_pomdp  # Feature extractor architecture.
-  - algo: ppo                           # Algorithm config.
+  - feature_extractor: snake_pixel_cnn_head_pomdp_v2  # Feature extractor architecture.
+  - algo: recurrent_ppo                 # Algorithm config.
   - logging: default                    # Logging config.
   - _self_                              # Include this file's top-level keys.
 
 run:                                    # Override run name for this preset.
-  name: head_pixel_ppo                  # Run id (folder name).
-
-
-
+  name: head_pixel_recurrent_ppo_classic  # Run id (folder name).

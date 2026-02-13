@@ -1,20 +1,12 @@
-defaults:                               # Hydra defaults: select config groups.
-  - run: default                        # Run config (name, seed, timesteps, etc.).
+defaults:                               # Hydra defaults: select config groups for this preset.
+  - run: default                        # Run config (base values).
   - board: classic                      # Board size and food count.
   - reward: default                     # Reward shaping parameters.
   - env: head_pixel                     # Environment + observation spec.
   - feature_extractor: snake_pixel_cnn_head_pomdp  # Feature extractor architecture.
   - algo: ppo                           # Algorithm config.
-  - metrics: default                    # Metrics logging config.
   - logging: default                    # Logging config.
   - _self_                              # Include this file's top-level keys.
 
-hydra:
-  run:                                  # Hydra run directory (keep local).
-    dir: .
-  job:                                  # Do not chdir into run dir.
-    chdir: false
-  output_subdir: null                   # Disable hydra output subdir.
-
-
-
+run:                                    # Override run name for this preset.
+  name: head_pixel_ppo_classic          # Run id (folder name).

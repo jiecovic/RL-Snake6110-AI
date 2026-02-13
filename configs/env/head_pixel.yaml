@@ -5,7 +5,7 @@ obs:                      # Observation spec.
   kind: pixel             # Observation kind: pixel|categorical.
   view: head              # Observation view: head|world.
   params:                 # View-specific parameters.
-    view_radius: 5        # Head view radius (int or [y, x]).
+    view_radius: 10        # Head view radius (int or [y, x]).
     rotate_to_head: true  # Rotate head view to face "up".
     add_oob_mask: false   # Include OOB mask channel (pixel head view only).
 frame_stack:              # Frame stacking configuration.
