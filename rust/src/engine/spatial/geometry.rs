@@ -45,8 +45,6 @@ pub fn is_straight_spawn_valid(
     height: i32,
     wall_mask: &[bool],
 ) -> bool {
-    use std::collections::HashSet;
-    let mut seen: HashSet<(i32, i32)> = HashSet::new();
     for p in cells.iter() {
         if p.x < 0 || p.x >= width || p.y < 0 || p.y >= height {
             return false;
@@ -58,10 +56,6 @@ pub fn is_straight_spawn_valid(
         if wall_mask[i] {
             return false;
         }
-        if seen.contains(&(p.x, p.y)) {
-            return false;
-        }
-        seen.insert((p.x, p.y));
     }
     true
 }

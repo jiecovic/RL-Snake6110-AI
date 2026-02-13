@@ -1,6 +1,7 @@
 // rust/src/engine/snake_engine/state.rs
 
 use rand_chacha::ChaCha8Rng;
+use std::collections::VecDeque;
 
 use crate::engine::obs::{FrameStacker, HeadStacker};
 
@@ -49,7 +50,7 @@ pub struct SnakeEngine {
 
     pub(crate) rng: ChaCha8Rng,
 
-    pub(crate) snake: Vec<usize>,
+    pub(crate) snake: VecDeque<usize>,
     pub(crate) snake_mask: Vec<bool>,
     pub(crate) food: Vec<usize>,
     pub(crate) food_mask: Vec<bool>,

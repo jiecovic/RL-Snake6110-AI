@@ -26,7 +26,11 @@ impl SnakeEngine {
         }
 
         let tile_size = tileset_tile_size();
-        let tile_cache = tileset_tiles();
+        let tile_cache = if enable_pixel_grid {
+            tileset_tiles()
+        } else {
+            Vec::new()
+        };
 
         let mut static_grid = vec![TILE_EMPTY; width * height];
         for x in 0..width {
@@ -90,7 +94,7 @@ impl SnakeEngine {
             spawn_jitter: 0,
             target_food_count: food_count,
             rng,
-            snake: Vec::new(),
+            snake: std::collections::VecDeque::new(),
             snake_mask: vec![false; width * height],
             food: Vec::new(),
             food_mask: vec![false; width * height],

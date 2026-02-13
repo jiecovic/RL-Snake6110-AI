@@ -204,10 +204,10 @@ impl PySnakeEngine {
         Ok(arr.into_pyarray_bound(py).unbind())
     }
 
-    fn pixel_grid_stacked<'py>(&self, py: Python<'py>) -> Py<PyArray3<u8>> {
-        let (view, n, h, w) = self.inner.pixel_grid_stacked();
+    fn pixel_grid_stacked<'py>(&self, py: Python<'py>) -> PyResult<Py<PyArray3<u8>>> {
+        let (view, n, h, w) = self.inner.pixel_grid_stacked().map_err(map_engine_err)?;
         let arr = ndarray::Array3::from_shape_vec((n, h, w), view).unwrap();
-        arr.into_pyarray_bound(py).unbind()
+        Ok(arr.into_pyarray_bound(py).unbind())
     }
 
     fn tile_grid<'py>(&self, py: Python<'py>) -> Py<PyArray2<u8>> {
@@ -219,11 +219,12 @@ impl PySnakeEngine {
         arr.into_pyarray_bound(py).unbind()
     }
 
-    fn pixel_grid<'py>(&self, py: Python<'py>) -> Py<PyArray2<u8>> {
+    fn pixel_grid<'py>(&self, py: Python<'py>) -> PyResult<Py<PyArray2<u8>>> {
         let h = self.inner.height() * self.inner.tile_size();
         let w = self.inner.width() * self.inner.tile_size();
-        let arr = ndarray::Array2::from_shape_vec((h, w), self.inner.pixel_grid().to_vec()).unwrap();
-        arr.into_pyarray_bound(py).unbind()
+        let grid = self.inner.pixel_grid().map_err(map_engine_err)?;
+        let arr = ndarray::Array2::from_shape_vec((h, w), grid.to_vec()).unwrap();
+        Ok(arr.into_pyarray_bound(py).unbind())
     }
 
     #[getter]

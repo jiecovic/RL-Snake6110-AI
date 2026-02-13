@@ -2,7 +2,7 @@
 
 use crate::engine::spatial::{dir_turn_left, dir_turn_right};
 
-use super::state::SnakeEngine;
+use super::state::{EngineError, SnakeEngine};
 
 impl SnakeEngine {
     pub fn tile_grid(&self) -> &[u8] {
@@ -15,26 +15,32 @@ impl SnakeEngine {
             return (self.tile_grid.clone(), 1, self.height, self.width);
         }
         if let Some(stacker) = self.world_tile_stack.as_ref() {
-            return (stacker.stacked().to_vec(), n, self.height, self.width);
+            return (stacker.stacked(), n, self.height, self.width);
         }
         (self.tile_grid.clone(), 1, self.height, self.width)
     }
 
-    pub fn pixel_grid(&self) -> &[u8] {
-        &self.pixel_grid
+    pub fn pixel_grid(&self) -> Result<&[u8], EngineError> {
+        if !self.pixel_grid_enabled {
+            return Err(EngineError::PixelGridDisabled);
+        }
+        Ok(&self.pixel_grid)
     }
 
-    pub fn pixel_grid_stacked(&self) -> (Vec<u8>, usize, usize, usize) {
+    pub fn pixel_grid_stacked(&self) -> Result<(Vec<u8>, usize, usize, usize), EngineError> {
+        if !self.pixel_grid_enabled {
+            return Err(EngineError::PixelGridDisabled);
+        }
         let n = self.frame_stack_n;
         let h = self.height * self.tile_size;
         let w = self.width * self.tile_size;
         if n <= 1 {
-            return (self.pixel_grid.clone(), 1, h, w);
+            return Ok((self.pixel_grid.clone(), 1, h, w));
         }
         if let Some(stacker) = self.world_pixel_stack.as_ref() {
-            return (stacker.stacked().to_vec(), n, h, w);
+            return Ok((stacker.stacked(), n, h, w));
         }
-        (self.pixel_grid.clone(), 1, h, w)
+        Ok((self.pixel_grid.clone(), 1, h, w))
     }
 
     pub fn width(&self) -> usize {
@@ -126,7 +132,7 @@ impl SnakeEngine {
             .collect()
     }
 
-    pub fn closest_food(&self) -> Option<(i32, i32, i32)> {
+    fn closest_food_by_metric(&self, metric: u8) -> Option<(i32, i32)> {
         if self.food.is_empty() {
             return None;
         }
@@ -137,20 +143,28 @@ impl SnakeEngine {
             let fy = (i / self.width) as i32;
             let dx = fx - hx;
             let dy = fy - hy;
-            let dist = dx.abs() + dy.abs();
+            let dist = match metric {
+                1 | 2 => dx * dx + dy * dy,
+                _ => dx.abs() + dy.abs(),
+            };
             match best {
                 None => best = Some((dx, dy, dist)),
                 Some((_bx, _by, bd)) if dist < bd => best = Some((dx, dy, dist)),
                 _ => {}
             }
         }
-        best
+        best.map(|(dx, dy, _)| (dx, dy))
+    }
+
+    pub fn closest_food(&self) -> Option<(i32, i32, i32)> {
+        let (dx, dy) = self.closest_food_by_metric(0)?;
+        Some((dx, dy, dx.abs() + dy.abs()))
     }
 
     pub fn closest_food_norm(&self, metric: u8) -> (f32, f32, f32) {
-        let (dx, dy, _dist) = match self.closest_food() {
+        let (dx, dy) = match self.closest_food_by_metric(metric) {
             Some(v) => v,
-            None => (0, 0, 0),
+            None => (0, 0),
         };
 
         let w = (self.width.saturating_sub(1)).max(1) as f32;

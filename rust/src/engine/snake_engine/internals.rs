@@ -125,7 +125,7 @@ impl SnakeEngine {
                 self.snake_mask.fill(false);
                 for p in cells.iter() {
                     let i = idx(p.x, p.y, self.width);
-                    self.snake.push(i);
+                    self.snake.push_back(i);
                     self.snake_mask[i] = true;
                     self.spawnable_remove(i);
                 }
@@ -218,7 +218,7 @@ impl SnakeEngine {
         }
 
         self.direction = Some(new_dir);
-        self.snake.insert(0, new_head_idx);
+        self.snake.push_front(new_head_idx);
         self.snake_mask[new_head_idx] = true;
         self.spawnable_remove(new_head_idx);
 
@@ -240,7 +240,7 @@ impl SnakeEngine {
             }
             self.update_tiles_after_step(new_dir, None, &spawned);
         } else {
-            let tail = self.snake.pop().unwrap();
+            let tail = self.snake.pop_back().unwrap();
             self.snake_mask[tail] = false;
             self.spawnable_add(tail);
             self.update_tiles_after_step(new_dir, Some(tail), &[]);

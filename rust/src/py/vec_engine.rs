@@ -411,40 +411,40 @@ impl PyVecSnakeEngine {
         Ok(arr.into_pyarray_bound(py).unbind())
     }
 
-    fn pixel_grids<'py>(&self, py: Python<'py>) -> Py<PyArray3<u8>> {
+    fn pixel_grids<'py>(&self, py: Python<'py>) -> PyResult<Py<PyArray3<u8>>> {
         let n = self.games.len();
         if n == 0 {
             let arr = ndarray::Array3::<u8>::zeros((0, 0, 0));
-            return arr.into_pyarray_bound(py).unbind();
+            return Ok(arr.into_pyarray_bound(py).unbind());
         }
         let h = self.games[0].height() * self.games[0].tile_size();
         let w = self.games[0].width() * self.games[0].tile_size();
         let mut data = Vec::with_capacity(n * h * w);
         for g in self.games.iter() {
-            data.extend_from_slice(g.pixel_grid());
+            data.extend_from_slice(g.pixel_grid().map_err(map_engine_err)?);
         }
         let arr = ndarray::Array3::from_shape_vec((n, h, w), data).unwrap();
-        arr.into_pyarray_bound(py).unbind()
+        Ok(arr.into_pyarray_bound(py).unbind())
     }
 
-    fn pixel_grids_stacked<'py>(&self, py: Python<'py>) -> Py<PyArray4<u8>> {
+    fn pixel_grids_stacked<'py>(&self, py: Python<'py>) -> PyResult<Py<PyArray4<u8>>> {
         let n = self.games.len();
         if n == 0 {
             let arr = ndarray::Array4::<u8>::zeros((0, 0, 0, 0));
-            return arr.into_pyarray_bound(py).unbind();
+            return Ok(arr.into_pyarray_bound(py).unbind());
         }
-        let (view0, n_stack, h, w) = self.games[0].pixel_grid_stacked();
+        let (view0, n_stack, h, w) = self.games[0].pixel_grid_stacked().map_err(map_engine_err)?;
         let mut data = Vec::with_capacity(n * n_stack * h * w);
         data.extend_from_slice(&view0);
         for g in self.games.iter().skip(1) {
-            let (view, ns, hh, ww) = g.pixel_grid_stacked();
+            let (view, ns, hh, ww) = g.pixel_grid_stacked().map_err(map_engine_err)?;
             if ns != n_stack || hh != h || ww != w {
                 panic!("pixel_grids_stacked: inconsistent shapes");
             }
             data.extend_from_slice(&view);
         }
         let arr = ndarray::Array4::from_shape_vec((n, n_stack, h, w), data).unwrap();
-        arr.into_pyarray_bound(py).unbind()
+        Ok(arr.into_pyarray_bound(py).unbind())
     }
 
     fn directions(&self) -> Vec<i8> {
