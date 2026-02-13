@@ -22,4 +22,8 @@ impl Board {
     pub fn height(&self) -> usize {
         self.height
     }
+
+    pub fn max_playable_tiles(&self) -> usize {
+        self.width.saturating_sub(2) * self.height.saturating_sub(2)
+    }
 }

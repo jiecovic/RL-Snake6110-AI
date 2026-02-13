@@ -27,4 +27,9 @@ impl PyBoard {
     fn height(&self) -> usize {
         self.inner.height()
     }
+
+    #[getter]
+    fn max_playable_tiles(&self) -> usize {
+        self.inner.max_playable_tiles()
+    }
 }
