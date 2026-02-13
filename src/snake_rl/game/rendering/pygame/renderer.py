@@ -185,6 +185,7 @@ class PygameRenderer:
                 ep_pairs.append(("Return", str(ep_return)))
             if last_reward is not None:
                 ep_pairs.append(("Last", str(last_reward)))
+            ep_pairs.append(("Snake%", f"{float(game.snake_progress) * 100.0:.1f}%"))
             if since_food is not None:
                 ep_pairs.append(("SinceFood", str(since_food)))
 
