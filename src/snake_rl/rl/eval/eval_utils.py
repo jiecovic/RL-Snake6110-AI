@@ -53,6 +53,7 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
             width=int(board_cfg["width"]),
             height=int(board_cfg["height"]),
         )
+        spawn_random_dir = bool(board_cfg.get("spawn_random_dir", False))
         vec: VecEnv = RustVecEnv(
             obs=obs_spec,
             action=action_spec,
@@ -62,6 +63,7 @@ def make_eval_vec_env(*, cfg: Any, seeds: list[int], pixel_key: str = "pixel") -
             num_envs=len(seeds),
             seeds=seeds,
             frame_stack_n=int(n_stack),
+            spawn_random_dir=bool(spawn_random_dir),
         )
     else:
         env_fns = [make_single_env(cfg=cfg, seed=int(s), frame_stack_n=int(n_stack)) for s in seeds]

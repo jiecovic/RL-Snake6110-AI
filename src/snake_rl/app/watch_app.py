@@ -41,6 +41,7 @@ def _make_engine_from_board_params(
     enable_pixel_grid: bool = True,
     enable_world_tile_stack: bool = True,
     enable_world_pixel_stack: bool = True,
+    spawn_random_dir: bool | None = None,
 ) -> SnakeEngine:
     core_board = core.Board(width=int(board["width"]), height=int(board["height"]))
     return SnakeEngine(
@@ -50,6 +51,7 @@ def _make_engine_from_board_params(
         enable_pixel_grid=bool(enable_pixel_grid),
         enable_world_tile_stack=bool(enable_world_tile_stack),
         enable_world_pixel_stack=bool(enable_world_pixel_stack),
+        spawn_random_dir=None if spawn_random_dir is None else bool(spawn_random_dir),
     )
 
 
@@ -287,6 +289,7 @@ def main() -> None:
 
     n_stack = int(get_frame_stack_n(cfg))
     board = get_board_params(cfg)
+    spawn_random_dir = bool(board.get("spawn_random_dir", False))
     reward_cfg = _get_reward_from_cfg(cfg)
     max_playable = max(0, int(board["width"]) - 2) * max(0, int(board["height"]) - 2)
     max_steps = max(1, int(max_playable * float(reward_cfg.max_steps_factor)))
@@ -298,6 +301,7 @@ def main() -> None:
         enable_pixel_grid=True,
         enable_world_tile_stack=bool(enable_world_tile_stack),
         enable_world_pixel_stack=bool(enable_world_pixel_stack),
+        spawn_random_dir=bool(spawn_random_dir),
     )
 
     base_env = SnakeEnv(

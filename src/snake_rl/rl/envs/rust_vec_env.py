@@ -37,6 +37,7 @@ class RustVecEnv(VecEnv):
         num_envs: int,
         seeds: Iterable[int] | None = None,
         frame_stack_n: int = 1,
+        spawn_random_dir: bool | None = None,
     ) -> None:
         self.obs_spec = obs
         self.action_spec = action if action is not None else ActionSpec()
@@ -75,6 +76,8 @@ class RustVecEnv(VecEnv):
             enable_world_tile_stack=bool(enable_world_tile_stack),
             enable_world_pixel_stack=bool(enable_world_pixel_stack),
         )
+        if spawn_random_dir is not None:
+            self._set_spawn_random_dir(bool(spawn_random_dir))
         self._set_max_steps(int(self.max_steps))
 
         self.max_snake_length = int(self._max_playable)
@@ -252,6 +255,14 @@ class RustVecEnv(VecEnv):
         if fn is None:
             raise RuntimeError("Rust core does not expose set_max_steps (rebuild the extension).")
         fn(None if max_steps is None else int(max_steps))
+
+    def _set_spawn_random_dir(self, enabled: bool) -> None:
+        fn = getattr(self._vec_game, "set_spawn_random_dir", None)
+        if fn is None:
+            raise RuntimeError(
+                "Rust core does not expose set_spawn_random_dir (rebuild the extension)."
+            )
+        fn(bool(enabled))
 
 
 def _index_obs(obs, indices: np.ndarray):

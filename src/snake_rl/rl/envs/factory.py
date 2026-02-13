@@ -94,6 +94,7 @@ def make_single_env(*, cfg: Any, seed: int, frame_stack_n: int) -> Callable[[], 
             width=int(board_cfg["width"]),
             height=int(board_cfg["height"]),
         )
+        spawn_random_dir = bool(board_cfg.get("spawn_random_dir", False))
         max_playable = int(board.max_playable_tiles)
         max_steps = max(1, int(max_playable * float(reward_cfg.max_steps_factor)))
 
@@ -110,6 +111,7 @@ def make_single_env(*, cfg: Any, seed: int, frame_stack_n: int) -> Callable[[], 
             enable_pixel_grid=bool(enable_pixel_grid),
             enable_world_tile_stack=bool(enable_world_tile_stack),
             enable_world_pixel_stack=bool(enable_world_pixel_stack),
+            spawn_random_dir=bool(spawn_random_dir),
         )
         game.set_max_steps(int(max_steps))
         # Construct the Gymnasium environment
@@ -160,6 +162,7 @@ def make_vec_env(*, cfg: Any):
             width=int(board_cfg["width"]),
             height=int(board_cfg["height"]),
         )
+        spawn_random_dir = bool(board_cfg.get("spawn_random_dir", False))
         vec_env = RustVecEnv(
             obs=obs_spec,
             action=action_spec,
@@ -169,6 +172,7 @@ def make_vec_env(*, cfg: Any):
             num_envs=num_envs,
             seeds=child_seeds,
             frame_stack_n=int(n_stack),
+            spawn_random_dir=bool(spawn_random_dir),
         )
         vec_env = VecMonitor(vec_env)
         return vec_env
