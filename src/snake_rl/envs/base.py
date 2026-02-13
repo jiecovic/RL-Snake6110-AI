@@ -1,6 +1,7 @@
 # src/snake_rl/envs/base.py
 from __future__ import annotations
 
+import contextlib
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -88,6 +89,11 @@ class BaseSnakeEnv(gym.Env, ABC):
         self.initial_snake_length: int = 0
 
         self.tiny_reward: float = float(self.reward.step_penalty_scale) / float(self.max_steps)
+
+        # Keep Rust timeout logic in sync with env config.
+        # Non-Rust engines or custom engines may not expose this.
+        with contextlib.suppress(Exception):
+            self.game.set_max_steps(int(self.max_steps))
 
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
         super().reset(seed=seed, options=options)

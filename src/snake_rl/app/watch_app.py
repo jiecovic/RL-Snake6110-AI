@@ -304,6 +304,7 @@ def main() -> None:
         game,
         obs=obs_spec,
         action=action_spec,
+        reward=reward_cfg,
         frame_stack_n=int(n_stack),
     )
 
