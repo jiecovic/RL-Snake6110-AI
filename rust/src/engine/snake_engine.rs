@@ -43,6 +43,8 @@ pub struct SnakeEngine {
     static_grid: Vec<u8>,
     wall_mask: Vec<bool>,
     wall_count: usize,
+    spawnable: Vec<usize>,
+    spawnable_pos: Vec<usize>,
 
     spawn_len: usize,
     spawn_dir: i8,
@@ -120,6 +122,15 @@ impl SnakeEngine {
         };
 
         let n_stack = frame_stack_n.max(1);
+        let mut spawnable = Vec::with_capacity(width * height - wall_count);
+        let mut spawnable_pos = vec![usize::MAX; width * height];
+        for i in 0..(width * height) {
+            if wall_mask[i] {
+                continue;
+            }
+            spawnable_pos[i] = spawnable.len();
+            spawnable.push(i);
+        }
 
         Ok(Self {
             width,
@@ -130,6 +141,8 @@ impl SnakeEngine {
             static_grid,
             wall_mask,
             wall_count,
+            spawnable,
+            spawnable_pos,
             spawn_len: 3,
             spawn_dir: 1,
             spawn_random_dir: false,
@@ -170,6 +183,7 @@ impl SnakeEngine {
         self.snake_mask.fill(false);
         self.food_mask.fill(false);
         self.direction = None;
+        self.spawnable_reset();
 
         self.spawn_snake()?;
         self.initial_snake_len = self.snake.len();
@@ -644,18 +658,43 @@ impl SnakeEngine {
     }
 
     pub fn spawnable_count(&self) -> usize {
-        let max_playable = self.max_playable_tiles();
-        let snake_len = self.snake.len();
-        let food_len = self.food.len();
-        if max_playable < snake_len + food_len {
-            0
-        } else {
-            max_playable - snake_len - food_len
-        }
+        self.spawnable.len()
     }
 }
 
 impl SnakeEngine {
+    fn spawnable_reset(&mut self) {
+        self.spawnable.clear();
+        self.spawnable_pos.fill(usize::MAX);
+        for i in 0..(self.width * self.height) {
+            if self.wall_mask[i] {
+                continue;
+            }
+            self.spawnable_pos[i] = self.spawnable.len();
+            self.spawnable.push(i);
+        }
+    }
+
+    fn spawnable_remove(&mut self, idx: usize) {
+        let pos = self.spawnable_pos[idx];
+        if pos == usize::MAX {
+            return;
+        }
+        let last_idx = *self.spawnable.last().unwrap();
+        self.spawnable[pos] = last_idx;
+        self.spawnable.pop();
+        self.spawnable_pos[last_idx] = pos;
+        self.spawnable_pos[idx] = usize::MAX;
+    }
+
+    fn spawnable_add(&mut self, idx: usize) {
+        if self.spawnable_pos[idx] != usize::MAX {
+            return;
+        }
+        self.spawnable_pos[idx] = self.spawnable.len();
+        self.spawnable.push(idx);
+    }
+
     fn would_collide(&self, dir: i8) -> bool {
         if self.snake.is_empty() {
             return false;
@@ -738,6 +777,7 @@ impl SnakeEngine {
                     let i = idx(p.x, p.y, self.width);
                     self.snake.push(i);
                     self.snake_mask[i] = true;
+                    self.spawnable_remove(i);
                 }
                 self.direction = Some(direction);
                 return Ok(());
@@ -757,32 +797,20 @@ impl SnakeEngine {
             return Vec::new();
         }
 
-        let mut spawnable: Vec<usize> = Vec::new();
-        for i in 0..(self.width * self.height) {
-            if self.wall_mask[i] {
-                continue;
-            }
-            if self.snake_mask[i] {
-                continue;
-            }
-            if self.food_mask[i] {
-                continue;
-            }
-            spawnable.push(i);
-        }
-
-        if spawnable.is_empty() {
+        if self.spawnable.is_empty() {
             return Vec::new();
         }
 
-        let k = std::cmp::min(need, spawnable.len());
-        let indices = sample(&mut self.rng, spawnable.len(), k);
+        let k = std::cmp::min(need, self.spawnable.len());
+        let indices = sample(&mut self.rng, self.spawnable.len(), k);
         let mut spawned = Vec::with_capacity(k);
         for idx_i in indices.iter() {
-            let p = spawnable[idx_i];
+            spawned.push(self.spawnable[idx_i]);
+        }
+        for &p in spawned.iter() {
             self.food.push(p);
             self.food_mask[p] = true;
-            spawned.push(p);
+            self.spawnable_remove(p);
         }
         spawned
     }
@@ -842,6 +870,7 @@ impl SnakeEngine {
         self.direction = Some(new_dir);
         self.snake.insert(0, new_head_idx);
         self.snake_mask[new_head_idx] = true;
+        self.spawnable_remove(new_head_idx);
 
         let mut result = MOVE_OK;
 
@@ -863,6 +892,7 @@ impl SnakeEngine {
         } else {
             let tail = self.snake.pop().unwrap();
             self.snake_mask[tail] = false;
+            self.spawnable_add(tail);
             self.update_tiles_after_step(new_dir, Some(tail), &[]);
         }
         self.step_counter = self.step_counter.wrapping_add(1);
