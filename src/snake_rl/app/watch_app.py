@@ -5,6 +5,7 @@ import argparse
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 from stable_baselines3 import PPO
@@ -12,12 +13,14 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 
 from snake_rl import _core as core
 from snake_rl.config.access import (
+    cfg_get,
     get_board_params,
     get_env_action,
     get_env_obs,
     get_frame_stack_n,
 )
 from snake_rl.config.loader import load_train_config_from_path
+from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.snake_env import SnakeEnv
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
@@ -48,6 +51,17 @@ def _make_engine_from_board_params(
         enable_world_tile_stack=bool(enable_world_tile_stack),
         enable_world_pixel_stack=bool(enable_world_pixel_stack),
     )
+
+
+def _get_reward_from_cfg(cfg: Any) -> RewardConfig:
+    reward = cfg_get(cfg, "reward", None)
+    if reward is None:
+        return RewardConfig()
+    if isinstance(reward, RewardConfig):
+        return reward
+    if isinstance(reward, dict):
+        return RewardConfig(**reward)
+    raise TypeError(f"cfg.reward must be a dict or RewardConfig, got {type(reward).__name__}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -273,6 +287,9 @@ def main() -> None:
 
     n_stack = int(get_frame_stack_n(cfg))
     board = get_board_params(cfg)
+    reward_cfg = _get_reward_from_cfg(cfg)
+    max_playable = max(0, int(board["width"]) - 2) * max(0, int(board["height"]) - 2)
+    max_steps = max(1, int(max_playable * float(reward_cfg.max_steps_factor)))
     enable_world_tile_stack = obs_kind == "categorical" and obs_view == "world"
     enable_world_pixel_stack = obs_kind == "pixel" and obs_view == "world"
     game = _make_engine_from_board_params(
@@ -317,6 +334,7 @@ def main() -> None:
         "seed": str(args.seed),
         "obs": f"{obs_spec.kind_norm()}/{obs_spec.view_norm()}",
         "action": str(action_spec.type),
+        "max_steps": str(max_steps),
     }
 
     def _controller_step(action_override: int | None = None):
