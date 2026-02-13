@@ -45,7 +45,7 @@ impl SnakeEngine {
         self.spawnable.push(idx);
     }
 
-    fn would_collide(&self, dir: i8) -> bool {
+    pub(crate) fn would_collide(&self, dir: i8) -> bool {
         if self.snake.is_empty() {
             return false;
         }
@@ -68,7 +68,7 @@ impl SnakeEngine {
         false
     }
 
-    fn spawn_snake(&mut self) -> Result<(), EngineError> {
+    pub(crate) fn spawn_snake(&mut self) -> Result<(), EngineError> {
         let length = if self.spawn_len < 2 {
             2
         } else {
@@ -137,7 +137,7 @@ impl SnakeEngine {
         Err(EngineError::SpawnFailed)
     }
 
-    fn spawn_food(&mut self) -> Vec<usize> {
+    pub(crate) fn spawn_food(&mut self) -> Vec<usize> {
         let need = if self.target_food_count > self.food.len() {
             self.target_food_count - self.food.len()
         } else {
@@ -263,7 +263,7 @@ impl SnakeEngine {
         Ok(result)
     }
 
-    fn rebuild_grids(&mut self) {
+    pub(crate) fn rebuild_grids(&mut self) {
         self.tile_grid.clone_from(&self.static_grid);
 
         for &i in self.food.iter() {
@@ -415,7 +415,7 @@ impl SnakeEngine {
         }
     }
 
-    fn update_world_stacks(&mut self, reset: bool) {
+    pub(crate) fn update_world_stacks(&mut self, reset: bool) {
         let n = self.frame_stack_n;
         if n <= 1 {
             return;
