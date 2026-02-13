@@ -1,6 +1,7 @@
 # src/snake_rl/utils/runs/resume.py
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -82,3 +83,64 @@ def resolve_resume_arg(
             return _resolve_latest_checkpoint(legacy_run / "checkpoints")
 
     raise FileNotFoundError(f"Could not interpret --resume argument: {resume!r}")
+
+
+@dataclass(frozen=True)
+class ResumeContext:
+    resume_arg: str
+    checkpoint_path: Path
+    run_dir: Path | None
+    config_path: Path | None
+
+
+def _find_config_in_run_dir(run_dir: Path) -> Path | None:
+    for name in ("config_snapshot.yaml", "config_validated.yaml", "config_hydra.yaml"):
+        cand = run_dir / name
+        if cand.is_file():
+            return cand
+    return None
+
+
+def _infer_run_dir_from_checkpoint(checkpoint_path: Path) -> Path | None:
+    chk = checkpoint_path.resolve()
+    if chk.parent.name != "checkpoints":
+        return None
+    run_dir = chk.parent.parent
+    if run_dir.is_dir():
+        return run_dir
+    return None
+
+
+def resolve_resume_context(
+    resume: str,
+    *,
+    runs_root: Path,
+    legacy_root: Path | None = None,
+) -> ResumeContext:
+    checkpoint_path = resolve_resume_arg(
+        resume,
+        runs_root=runs_root,
+        legacy_root=legacy_root,
+    )
+    run_dir = _infer_run_dir_from_checkpoint(checkpoint_path)
+    config_path = _find_config_in_run_dir(run_dir) if run_dir is not None else None
+    return ResumeContext(
+        resume_arg=resume,
+        checkpoint_path=checkpoint_path,
+        run_dir=run_dir,
+        config_path=config_path,
+    )
+
+
+def infer_config_path_from_resume(
+    resume: str,
+    *,
+    runs_root: Path,
+    legacy_root: Path | None = None,
+) -> Path:
+    ctx = resolve_resume_context(resume, runs_root=runs_root, legacy_root=legacy_root)
+    if ctx.config_path is None:
+        raise FileNotFoundError(
+            "Could not infer run config from --resume. Pass --config or use a run id/path."
+        )
+    return ctx.config_path

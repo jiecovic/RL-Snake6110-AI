@@ -13,7 +13,15 @@ def _render_header(lines: list[str]) -> str:
     return "\n".join(f"# {line}" if line else "#" for line in lines) + "\n"
 
 
-def _write_yaml_text(*, path: Path, body: str, header_lines: list[str] | None = None) -> None:
+def _write_yaml_text(
+    *,
+    path: Path,
+    body: str,
+    header_lines: list[str] | None = None,
+    overwrite: bool = True,
+) -> None:
+    if not overwrite and path.exists():
+        return
     text = body
     if not text.endswith("\n"):
         text += "\n"
@@ -117,6 +125,7 @@ def save_manifest(
     cfg: TrainConfig,
     hydra_yaml: str | None = None,
     validated_cfg: dict[str, Any] | None = None,
+    overwrite: bool = True,
 ) -> None:
     """
     Persist the training configuration plus resolved config artifacts.
@@ -135,6 +144,7 @@ def save_manifest(
                 "Hydra-resolved training config (resolved defaults + overrides).",
                 "Source of truth for what was composed.",
             ],
+            overwrite=overwrite,
         )
 
     if validated_cfg is not None:
@@ -150,6 +160,7 @@ def save_manifest(
                 "Validated training config (pydantic model).",
                 "Equivalent to what training uses at runtime.",
             ],
+            overwrite=overwrite,
         )
 
     snapshot_payload = _snapshot_payload(cfg, validated_cfg)
@@ -167,6 +178,7 @@ def save_manifest(
             "Curated summary config for quick inspection.",
             "Not guaranteed to include all fields.",
         ],
+        overwrite=overwrite,
     )
 
     _write_yaml_text(
@@ -181,4 +193,5 @@ def save_manifest(
             "Full validated training config.",
             "Single source of truth for reproducing a run.",
         ],
+        overwrite=overwrite,
     )

@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from snake_rl.app.train_app import infer_config_path_from_resume, run_from_config_path
+from snake_rl.app.train_app import run_from_config_path
+from snake_rl.utils.runs.paths import repo_root, runs_root
+from snake_rl.utils.runs.resume import infer_config_path_from_resume
 
 
 def _parse_args() -> argparse.Namespace:
@@ -43,7 +45,11 @@ def main() -> None:
     config_path = Path(args.config) if args.config else None
     if config_path is None:
         if args.resume:
-            config_path = infer_config_path_from_resume(str(args.resume))
+            config_path = infer_config_path_from_resume(
+                str(args.resume),
+                runs_root=runs_root(),
+                legacy_root=repo_root() / "experiments",
+            )
         else:
             config_path = Path("configs/config.yaml")
     run_from_config_path(

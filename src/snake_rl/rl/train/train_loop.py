@@ -46,6 +46,7 @@ def train(
             cfg=cfg,
             hydra_yaml=config_hydra_yaml,
             validated_cfg=config_validated,
+            overwrite=resume_path is None,
         )
 
         model = make_or_load_model(
@@ -86,8 +87,38 @@ def train(
 
         callbacks = make_callbacks(cfg=cfg, checkpoint_dir=paths.checkpoint_dir)
 
+        learn_timesteps = int(cfg.run.total_timesteps)
+        if resume_path is not None:
+            try:
+                current_steps = int(getattr(model, "num_timesteps", 0))
+            except Exception:
+                current_steps = 0
+            if current_steps > 0:
+                if learn_timesteps <= current_steps:
+                    logger.warning(
+                        "[train] resume: target total_timesteps (%s) <= current (%s); "
+                        "nothing to do.",
+                        f"{learn_timesteps:,}",
+                        f"{current_steps:,}",
+                    )
+                    learn_timesteps = 0
+                else:
+                    remaining = learn_timesteps - current_steps
+                    logger.info(
+                        "[train] resume: current=%s target=%s remaining=%s",
+                        f"{current_steps:,}",
+                        f"{learn_timesteps:,}",
+                        f"{remaining:,}",
+                    )
+                    learn_timesteps = remaining
+
+        if resume_path is not None and learn_timesteps <= 0:
+            logger.info("[train] resume: no remaining timesteps; skipping learn.")
+            finished_ok = True
+            return paths
+
         model.learn(
-            total_timesteps=int(cfg.run.total_timesteps),
+            total_timesteps=int(learn_timesteps),
             progress_bar=bool(use_rich),
             callback=callbacks,
             tb_log_name="ppo",
