@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import argparse
 import time
+from pathlib import Path
 
 import numpy as np
+from gymnasium import spaces
 
 from snake_rl import _core as core
+from snake_rl.config.loader import load_train_config_from_path
+from snake_rl.rl.envs.factory import make_vec_env
+from snake_rl.utils.runs.paths import repo_root
 
 TERMINAL_MASK = (
     int(core.MOVE_HIT_SELF)
@@ -19,7 +24,25 @@ TERMINAL_MASK = (
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Benchmark Rust Snake engines (steps/s).")
+    p = argparse.ArgumentParser(description="Benchmark Rust Snake engines/envs (steps/s).")
+    p.add_argument(
+        "--mode",
+        choices=["engine", "env"],
+        default="engine",
+        help="Benchmark core engines or full envs from config.",
+    )
+    p.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Config path under configs/ (env mode only).",
+    )
+    p.add_argument(
+        "--override",
+        action="append",
+        default=[],
+        help="Hydra override (repeatable, env mode only).",
+    )
     p.add_argument("--width", type=int, default=22)
     p.add_argument("--height", type=int, default=13)
     p.add_argument("--food", type=int, default=1)
@@ -152,8 +175,82 @@ def _bench_vec(
     )
 
 
+def _resolve_config_path(config: str | None) -> Path:
+    if not config:
+        raise ValueError("--config is required in env mode")
+    repo = repo_root()
+    config_root = repo / "configs"
+
+    path = Path(config)
+    if not path.is_file():
+        candidate = config_root / path
+        if candidate.is_file():
+            path = candidate
+
+    if not path.is_file():
+        raise FileNotFoundError(f"Config not found: {config}")
+
+    if not path.resolve().is_relative_to(config_root.resolve()):
+        raise ValueError("--config must be under configs/")
+
+    return path
+
+
+def _bench_env(*, config: str | None, overrides: list[str], steps: int, warmup: int, seed: int):
+    config_path = _resolve_config_path(config)
+    repo = repo_root()
+    config_root = repo / "configs"
+    cfg, _, _, _ = load_train_config_from_path(
+        config_path=config_path,
+        config_root=config_root,
+        overrides=list(overrides),
+    )
+
+    vec_env = make_vec_env(cfg=cfg)
+    try:
+        action_space = vec_env.action_space
+        if not isinstance(action_space, spaces.Discrete):
+            raise TypeError("Only Discrete action spaces are supported for benchmark.")
+        n_actions = int(action_space.n)
+        num_envs = int(getattr(vec_env, "num_envs", 1))
+
+        _ = vec_env.reset()
+
+        rng = np.random.default_rng(int(seed))
+        if warmup > 0:
+            warm_actions = rng.integers(0, n_actions, size=(warmup, num_envs), dtype=np.int64)
+            for row in warm_actions:
+                vec_env.step(row)
+
+        actions = rng.integers(0, n_actions, size=(steps, num_envs), dtype=np.int64)
+        t0 = time.perf_counter()
+        for row in actions:
+            vec_env.step(row)
+        t1 = time.perf_counter()
+
+        elapsed = max(1e-9, t1 - t0)
+        total_steps = int(steps) * int(num_envs)
+        sps = float(total_steps) / elapsed
+        print(
+            f"env: vec={cfg.run.vec} envs={num_envs} steps={steps:,} total={total_steps:,} "
+            f"elapsed={elapsed:.3f}s steps/s={sps:,.0f} obs={cfg.env.obs.kind}/{cfg.env.obs.view}"
+        )
+    finally:
+        vec_env.close()
+
+
 def main() -> None:
     args = _parse_args()
+
+    if str(args.mode).lower() == "env":
+        _bench_env(
+            config=args.config,
+            overrides=list(args.override),
+            steps=int(args.vec_steps),
+            warmup=int(args.warmup),
+            seed=int(args.seed),
+        )
+        return
 
     board = core.Board(width=int(args.width), height=int(args.height))
 
