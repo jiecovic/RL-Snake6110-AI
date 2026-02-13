@@ -93,6 +93,10 @@ class PygameRenderer:
         fps = float(ctx.clock.get_fps())
         sim = float(ctx.sim_fps)
         steps = int(game.episode_steps)
+        max_steps = self.hud_info.get("max_steps")
+        steps_label = f"{steps}"
+        if max_steps is not None and str(max_steps).strip():
+            steps_label = f"{steps}/{max_steps}"
         paused = bool(ctx.paused)
         running = bool(game.running)
         wins = self.hud_info.get("wins")
@@ -102,7 +106,7 @@ class PygameRenderer:
         status_pairs = [
             ("Score", f"{int(game.score)}"),
             ("Len", f"{int(game.snake_len)}"),
-            ("Steps", f"{steps}"),
+            ("Steps", steps_label),
         ]
         if wins is not None:
             status_pairs.append(("Wins", str(wins)))

@@ -142,9 +142,6 @@ def info_pairs(
     action = str(hud_info.get("action", "")).strip()
     if action:
         items.append(("Action", action))
-    max_steps = hud_info.get("max_steps")
-    if max_steps is not None and str(max_steps).strip():
-        items.append(("MaxSteps", str(max_steps)))
     return items
 
 

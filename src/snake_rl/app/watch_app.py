@@ -334,7 +334,7 @@ def main() -> None:
         "seed": str(args.seed),
         "obs": f"{obs_spec.kind_norm()}/{obs_spec.view_norm()}",
         "action": str(action_spec.type),
-        "max_steps": str(max_steps),
+        "max_steps": int(max_steps),
     }
 
     def _controller_step(action_override: int | None = None):
