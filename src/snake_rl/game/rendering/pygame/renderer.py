@@ -76,7 +76,7 @@ class PygameRenderer:
 
         # Agent view (optional)
         if ctx.agent_view is not None and self.agent_view_spec is not None:
-            frame = self._build_agent_frame(game=game)
+            frame = self._build_agent_frame(game=game, ctx=ctx)
             if frame is not None:
                 view_surface = self._agent_surface(frame=frame, game=game)
                 if view_surface is not None:
@@ -175,17 +175,22 @@ class PygameRenderer:
             return f"{kind}/{view} - {vocab}"
         return f"{kind}/{view}"
 
-    def _build_agent_frame(self, *, game: SnakeEngine) -> tuple[np.ndarray, str] | None:
+    def _build_agent_frame(
+        self, *, game: SnakeEngine, ctx: PygameRenderContext
+    ) -> tuple[np.ndarray, str] | None:
         if self.agent_view_spec is None:
             return None
         spec = self.agent_view_spec
-        obs = spec.observe(
-            game=game,
-            initial_snake_length=int(game.snake_len),
-            max_playable_tiles=int(game.max_playable_tiles),
-            max_steps=int(game.max_playable_tiles),
-            frame_stack_n=int(game.frame_stack_n),
-        )
+        if ctx.agent_obs is not None:
+            obs = ctx.agent_obs
+        else:
+            obs = spec.observe(
+                game=game,
+                initial_snake_length=int(game.snake_len),
+                max_playable_tiles=int(game.max_playable_tiles),
+                max_steps=int(game.max_playable_tiles),
+                frame_stack_n=int(game.frame_stack_n),
+            )
         base: Any
         if isinstance(obs, dict):
             key = spec.frame_stack_key() or (
@@ -199,14 +204,48 @@ class PygameRenderer:
         if arr is None or arr.size == 0:
             return None
 
-        if arr.ndim == 3:
-            frame = arr[0]
-        elif arr.ndim == 2:
-            frame = arr
+        if arr.ndim == 4:
+            arr = arr[0]
+
+        kind = spec.kind_norm()
+        if kind == "pixel":
+            frame = self._pixel_frame_from_obs(arr, spec)
         else:
+            frame = self._categorical_frame_from_obs(arr)
+        if frame is None:
             return None
 
-        return frame.astype(np.uint8, copy=False), spec.kind_norm()
+        return frame.astype(np.uint8, copy=False), kind
+
+    def _pixel_frame_from_obs(self, arr: np.ndarray, spec: ObservationSpec) -> np.ndarray | None:
+        if arr.ndim == 2:
+            return arr
+        if arr.ndim != 3:
+            return None
+
+        c, h, w = arr.shape
+        if c <= 0:
+            return None
+
+        frame_base_channels = 1
+        if spec.view_norm() == "head" and spec._add_oob_mask():
+            frame_base_channels = 2
+        if c % frame_base_channels != 0:
+            return arr[0]
+
+        n_stack = max(1, c // frame_base_channels)
+        reshaped = arr.reshape(n_stack, frame_base_channels, h, w)
+        pixel_frames = reshaped[:, 0, :, :]
+        if n_stack == 1:
+            return pixel_frames[0]
+        return np.rint(pixel_frames.mean(axis=0)).astype(np.uint8, copy=False)
+
+    def _categorical_frame_from_obs(self, arr: np.ndarray) -> np.ndarray | None:
+        if arr.ndim == 2:
+            return arr
+        if arr.ndim == 3:
+            return arr[-1]
+        return None
 
     def _agent_surface(self, *, frame: tuple[np.ndarray, str], game: SnakeEngine):
         raw, kind = frame

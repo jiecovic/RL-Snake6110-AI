@@ -63,6 +63,7 @@ class PygameRenderContext:
     sim_steps: int = 0
     paused: bool = False
     target_sim_hz: int = 0
+    agent_obs: Any | None = None
 
 
 def create_pygame_context(

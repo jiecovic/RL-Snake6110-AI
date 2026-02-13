@@ -52,6 +52,7 @@ class SnakeExtractor(BaseFeaturesExtractor):
         mask_pool: bool = True,
         feature_tokens: list[list[str]] | None = None,
         flatten_mlp_hidden_dim: int | None = None,
+        head_activation: str = "gelu",
         post_mlp_hidden: list[int] | None = None,
         post_mlp_dropout: float = 0.0,
     ) -> None:
@@ -166,6 +167,7 @@ class SnakeExtractor(BaseFeaturesExtractor):
             dropout=float(post_mlp_dropout),
             flatten_hidden=flatten_mlp_hidden_dim,
             use_flatten=(self.pooling == "flatten"),
+            activation=str(head_activation),
         )
 
     def _select_obs_space(self, space: spaces.Space, kind: str) -> spaces.Box:
@@ -267,12 +269,29 @@ class SnakeExtractor(BaseFeaturesExtractor):
         dropout: float,
         flatten_hidden: int | None,
         use_flatten: bool,
+        activation: str,
     ) -> nn.Module:
+        act_name = str(activation).strip().lower()
+        if act_name in {"relu"}:
+            act_layer = nn.ReLU
+        elif act_name in {"gelu"}:
+            act_layer = nn.GELU
+        elif act_name in {"elu"}:
+            act_layer = nn.ELU
+        elif act_name in {"leaky_relu", "leakyrelu"}:
+            act_layer = nn.LeakyReLU
+        elif act_name in {"silu", "swish"}:
+            act_layer = nn.SiLU
+        elif act_name in {"tanh"}:
+            act_layer = nn.Tanh
+        else:
+            raise ValueError(f"Unknown head_activation {activation!r}")
+
         if use_flatten and flatten_hidden is not None:
             layers: list[nn.Module] = [
                 nn.LayerNorm(int(in_dim)),
                 nn.Linear(int(in_dim), int(flatten_hidden)),
-                nn.GELU(),
+                act_layer(),
             ]
             if int(flatten_hidden) != int(out_dim):
                 layers.append(nn.Linear(int(flatten_hidden), int(out_dim)))
@@ -286,7 +305,7 @@ class SnakeExtractor(BaseFeaturesExtractor):
         d = int(in_dim)
         for h in hidden:
             layers.append(nn.Linear(d, int(h)))
-            layers.append(nn.GELU())
+            layers.append(act_layer())
             if float(dropout) > 0:
                 layers.append(nn.Dropout(float(dropout)))
             d = int(h)

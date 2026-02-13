@@ -157,7 +157,7 @@ class WatchController:
     def reload_age_seconds(self) -> float:
         return max(0.0, time.time() - self.last_reload_at)
 
-    def step(self, action_override: int | None = None) -> None:
+    def step(self, action_override: int | None = None):
         self.maybe_reload()
 
         if action_override is None:
@@ -203,6 +203,8 @@ class WatchController:
             self.episode_return = 0.0
         else:
             self.obs = obs_next
+
+        return self.obs
 
 
 def main() -> None:
@@ -299,12 +301,13 @@ def main() -> None:
         "action": str(action_spec.type),
     }
 
-    def _controller_step(action_override: int | None = None) -> None:
-        controller.step(action_override)
+    def _controller_step(action_override: int | None = None):
+        obs = controller.step(action_override)
         hud_info["reload"] = f"{controller.reload_age_seconds():.1f}s"
         hud_info["wins"] = str(controller.win_count)
         hud_info["reward"] = f"{controller.last_reward:+.3f}"
         hud_info["ep_return"] = f"{controller.episode_return:.3f}"
+        return obs
 
     try:
         run_pygame_app(

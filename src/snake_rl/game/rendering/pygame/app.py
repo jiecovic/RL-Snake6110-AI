@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover
 
 pygame: Any = _pygame
 
-StepFn = Callable[[int | None], None]
+StepFn = Callable[[int | None], Any | None]
 
 
 @dataclass(slots=True)
@@ -182,10 +182,12 @@ def run_pygame_app(
                 if step_once:
                     if step_fn is not None:
                         if cfg.enable_human_input and queued_turn is not None:
-                            step_fn(int(queued_turn))
+                            obs = step_fn(int(queued_turn))
                             queued_turn = None
                         else:
-                            step_fn(None)
+                            obs = step_fn(None)
+                        if obs is not None:
+                            ctx.agent_obs = obs
                     else:
                         if game.running:
                             if cfg.enable_human_input:
@@ -224,7 +226,9 @@ def run_pygame_app(
                 while accumulator >= step_dt and steps < int(cfg.max_steps_per_frame):
                     if step_fn is not None:
                         # RL-consistent mode: caller owns stepping (env.step()).
-                        step_fn(None)
+                        obs = step_fn(None)
+                        if obs is not None:
+                            ctx.agent_obs = obs
                     else:
                         # Human mode: pygame loop steps the game directly.
                         if game.running:
