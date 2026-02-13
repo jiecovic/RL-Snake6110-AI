@@ -69,7 +69,6 @@ class RustVecEnv(VecEnv):
         self.max_snake_length = int(self._max_playable)
         self.tiny_reward = float(self.reward.step_penalty_scale) / float(self.max_steps)
 
-        self.current_step_since_last_food = np.zeros((self.num_envs,), dtype=np.int32)
         self.initial_snake_length = np.zeros((self.num_envs,), dtype=np.int32)
 
         self._actions: np.ndarray | None = None
@@ -95,7 +94,6 @@ class RustVecEnv(VecEnv):
             seeds = None
 
         self._vec_game.reset(seeds=seeds)
-        self.current_step_since_last_food.fill(0)
         self.initial_snake_length = np.asarray(self._vec_game.snake_lens(), dtype=np.int32)
         obs = self._build_obs()
         return obs
@@ -115,7 +113,7 @@ class RustVecEnv(VecEnv):
 
         obs = self._build_obs()
 
-        self.current_step_since_last_food += 1
+        steps_since_food = self._steps_since_foods()
         is_win = (masks & int(core.MOVE_WIN)) > 0
         is_food = (masks & int(core.MOVE_FOOD)) > 0
         is_fatal = (
@@ -136,18 +134,15 @@ class RustVecEnv(VecEnv):
 
         if np.any(is_food & ~is_win):
             food_bonus = float(self.reward.food_speed_bonus) * (
-                1.0 - (self.current_step_since_last_food / float(self.max_steps))
+                1.0 - (steps_since_food.astype(np.float32) / float(self.max_steps))
             )
             reward[is_food] += float(self.reward.food_reward)
             reward[is_food] += food_bonus[is_food]
-            self.current_step_since_last_food[is_food] = 0
 
         if np.any(is_fatal):
             reward[is_fatal] -= float(self.reward.fatal_penalty)
 
-        is_truncated = (
-            (self.current_step_since_last_food >= int(self.max_steps)) & (~is_fatal) & (~is_win)
-        )
+        is_truncated = (steps_since_food >= int(self.max_steps)) & (~is_fatal) & (~is_win)
         if np.any(is_truncated):
             reward[is_truncated] -= float(self.reward.timeout_penalty)
 
@@ -170,7 +165,6 @@ class RustVecEnv(VecEnv):
             terminal_obs = _index_obs(obs, np.where(dones)[0])
             for i, idx in enumerate(np.where(dones)[0]):
                 self._vec_game.reset_one(int(idx), seed=None)
-                self.current_step_since_last_food[int(idx)] = 0
                 infos[int(idx)]["terminal_observation"] = terminal_obs[i]
 
             self.initial_snake_length = np.asarray(self._vec_game.snake_lens(), dtype=np.int32)
@@ -210,7 +204,6 @@ class RustVecEnv(VecEnv):
         for i in idxs:
             seed = method_kwargs.get("seed")
             self._vec_game.reset_one(int(i), seed=None if seed is None else int(seed))
-            self.current_step_since_last_food[int(i)] = 0
             self.initial_snake_length = np.asarray(self._vec_game.snake_lens(), dtype=np.int32)
             obs = self._build_obs()
             obs_i = _index_obs(obs, np.asarray([int(i)]))[0]
@@ -234,6 +227,14 @@ class RustVecEnv(VecEnv):
             tile_size=int(self.tile_size),
             max_steps=int(self.max_steps),
         )
+
+    def _steps_since_foods(self) -> np.ndarray:
+        fn = getattr(self._vec_game, "steps_since_foods", None)
+        if fn is None:
+            raise RuntimeError(
+                "Rust core does not expose steps_since_foods (rebuild the extension)."
+            )
+        return np.asarray(fn(), dtype=np.int32)
 
 
 def _index_obs(obs, indices: np.ndarray):

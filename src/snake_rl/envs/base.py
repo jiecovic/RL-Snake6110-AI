@@ -89,8 +89,6 @@ class BaseSnakeEnv(gym.Env, ABC):
 
         self.tiny_reward: float = float(self.reward.step_penalty_scale) / float(self.max_steps)
 
-        self.current_step_since_last_food: int = 0
-
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
         super().reset(seed=seed, options=options)
 
@@ -98,8 +96,6 @@ class BaseSnakeEnv(gym.Env, ABC):
         # consistent with Gymnasium/SB3 behavior (per-env streams).
         self.game.reset(seed=seed)
         self.initial_snake_length = int(self.game.snake_len)
-
-        self.current_step_since_last_food = 0
 
         obs = self.get_obs()
         return obs, {}
@@ -119,33 +115,28 @@ class BaseSnakeEnv(gym.Env, ABC):
         results = self.action_spec.step(self.game, action_i)
         obs = self.get_obs()
 
-        self.current_step_since_last_food += 1
+        steps_since_food = int(self.game.steps_since_food)
 
         is_win = bool(results & core.MOVE_WIN)
         is_fatal = bool(results & self.FATAL_MASK)
         is_food = bool(results & core.MOVE_FOOD)
-        is_truncated = self.current_step_since_last_food >= self.max_steps
-
         if is_win:
             reward += float(self.reward.win_reward)
             terminated = True
             truncated = False
-
-            if is_food:
-                self.current_step_since_last_food = 0
         else:
             reward -= self.tiny_reward
 
             if is_food:
                 reward += float(self.reward.food_reward)
                 reward += float(self.reward.food_speed_bonus) * (
-                    1.0 - (self.current_step_since_last_food / self.max_steps)
+                    1.0 - (steps_since_food / self.max_steps)
                 )
-                self.current_step_since_last_food = 0
 
             if is_fatal:
                 reward -= float(self.reward.fatal_penalty)
 
+            is_truncated = steps_since_food >= self.max_steps
             terminated = is_fatal
             truncated = not terminated and is_truncated
             if truncated:
