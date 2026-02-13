@@ -66,11 +66,20 @@ def draw_hud_box(
         ctx.screen.blit(ctx.label_font.render(line, True, TEXT), (x, y + i * dy))
 
 
-def draw_hud_controls(*, ctx: PygameRenderContext, text: str) -> None:
+def draw_hud_controls(*, ctx: PygameRenderContext, text: str | list[str]) -> None:
     hud = ctx.hud_panel
     x = int(hud.x + ctx.layout.hud_padding_x)
-    y = int(hud.y + hud.h - ctx.layout.hud_padding_y - ctx.label_font.get_height())
-    ctx.screen.blit(ctx.label_font.render(text, True, MUTED), (x, y))
+    if isinstance(text, str):
+        lines = [line for line in text.splitlines() if line.strip()]
+    else:
+        lines = [str(line) for line in text if str(line).strip()]
+    if not lines:
+        return
+    line_h = ctx.label_font.get_height()
+    total_h = line_h * len(lines)
+    y0 = int(hud.y + hud.h - ctx.layout.hud_padding_y - total_h)
+    for i, line in enumerate(lines):
+        ctx.screen.blit(ctx.label_font.render(line, True, MUTED), (x, y0 + i * line_h))
 
 
 def categorical_to_gray_pixels(

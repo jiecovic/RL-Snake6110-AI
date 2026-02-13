@@ -212,7 +212,10 @@ class PygameRenderer:
         else:
             ctx.hud_row_heights = None
 
-        controls = "[ ] speed  P pause  N step  R reset  A/D or Left/Right turn  Esc/Q quit"
+        controls = [
+            "[ ] speed  P pause  N step  R reset",
+            "A/D or Left/Right turn  Esc/Q quit",
+        ]
 
         boxes = hud_layout(ctx)
         col_gap = int(ctx.layout.hud_col_gap)
