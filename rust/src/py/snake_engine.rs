@@ -26,12 +26,23 @@ fn apply_lut(data: &mut [u8], lut: &[u8]) {
 #[pymethods]
 impl PySnakeEngine {
     #[new]
-    #[pyo3(signature = (board, food_count, seed = None, frame_stack_n = 1))]
+    #[pyo3(signature = (
+        board,
+        food_count,
+        seed = None,
+        frame_stack_n = 1,
+        enable_pixel_grid = true,
+        enable_world_tile_stack = true,
+        enable_world_pixel_stack = true
+    ))]
     fn new(
         board: &PyBoard,
         food_count: usize,
         seed: Option<u64>,
         frame_stack_n: usize,
+        enable_pixel_grid: bool,
+        enable_world_tile_stack: bool,
+        enable_world_pixel_stack: bool,
     ) -> PyResult<Self> {
         let game = EngineSnakeEngine::new(
             board.inner.width(),
@@ -39,6 +50,9 @@ impl PySnakeEngine {
             food_count,
             seed,
             frame_stack_n,
+            enable_pixel_grid,
+            enable_world_tile_stack,
+            enable_world_pixel_stack,
         )
         .map_err(map_engine_err)?;
         Ok(Self { inner: game })

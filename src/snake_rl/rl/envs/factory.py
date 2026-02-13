@@ -96,10 +96,20 @@ def make_single_env(*, cfg: Any, seed: int, frame_stack_n: int) -> Callable[[], 
         )
         max_playable = int(board.max_playable_tiles)
         max_steps = max(1, int(max_playable * float(reward_cfg.max_steps_factor)))
+
+        obs_kind = obs_spec.kind_norm()
+        obs_view = obs_spec.view_norm()
+        enable_pixel_grid = obs_kind == "pixel"
+        enable_world_tile_stack = obs_kind == "categorical" and obs_view == "world"
+        enable_world_pixel_stack = obs_kind == "pixel" and obs_view == "world"
+
         game = SnakeEngine(
             board=board,
             food_count=int(board_cfg["food_count"]),
             frame_stack_n=int(frame_stack_n),
+            enable_pixel_grid=bool(enable_pixel_grid),
+            enable_world_tile_stack=bool(enable_world_tile_stack),
+            enable_world_pixel_stack=bool(enable_world_pixel_stack),
         )
         game.set_max_steps(int(max_steps))
         # Construct the Gymnasium environment

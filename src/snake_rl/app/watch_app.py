@@ -31,12 +31,22 @@ from snake_rl.utils.runs.checkpoints import pick_checkpoint
 from snake_rl.utils.runs.paths import relpath, repo_root, resolve_run_dir
 
 
-def _make_engine_from_board_params(board: dict[str, int], frame_stack_n: int) -> SnakeEngine:
+def _make_engine_from_board_params(
+    board: dict[str, int],
+    frame_stack_n: int,
+    *,
+    enable_pixel_grid: bool = True,
+    enable_world_tile_stack: bool = True,
+    enable_world_pixel_stack: bool = True,
+) -> SnakeEngine:
     core_board = core.Board(width=int(board["width"]), height=int(board["height"]))
     return SnakeEngine(
         board=core_board,
         food_count=int(board["food_count"]),
         frame_stack_n=int(frame_stack_n),
+        enable_pixel_grid=bool(enable_pixel_grid),
+        enable_world_tile_stack=bool(enable_world_tile_stack),
+        enable_world_pixel_stack=bool(enable_world_pixel_stack),
     )
 
 
@@ -250,10 +260,6 @@ def main() -> None:
         label="watch",
     )
 
-    n_stack = int(get_frame_stack_n(cfg))
-    board = get_board_params(cfg)
-    game = _make_engine_from_board_params(board, frame_stack_n=int(n_stack))
-
     obs_cfg = dict(get_env_obs(cfg))
     obs_spec = ObservationSpec(
         kind=str(obs_cfg.get("kind")),
@@ -261,9 +267,21 @@ def main() -> None:
         params=dict(obs_cfg.get("params", {})),
         features=dict(obs_cfg.get("features", {})),
     )
-    obs_spec.kind_norm()
-    obs_spec.view_norm()
+    obs_kind = obs_spec.kind_norm()
+    obs_view = obs_spec.view_norm()
     action_spec = ActionSpec(type=str(get_env_action(cfg)))
+
+    n_stack = int(get_frame_stack_n(cfg))
+    board = get_board_params(cfg)
+    enable_world_tile_stack = obs_kind == "categorical" and obs_view == "world"
+    enable_world_pixel_stack = obs_kind == "pixel" and obs_view == "world"
+    game = _make_engine_from_board_params(
+        board,
+        frame_stack_n=int(n_stack),
+        enable_pixel_grid=True,
+        enable_world_tile_stack=bool(enable_world_tile_stack),
+        enable_world_pixel_stack=bool(enable_world_pixel_stack),
+    )
 
     base_env = SnakeEnv(
         game,

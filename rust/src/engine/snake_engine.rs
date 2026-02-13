@@ -17,6 +17,7 @@ pub enum EngineError {
     InvalidGridLen,
     SpawnFailed,
     DirectionNone,
+    PixelGridDisabled,
 }
 
 impl std::fmt::Display for EngineError {
@@ -27,6 +28,7 @@ impl std::fmt::Display for EngineError {
             }
             EngineError::SpawnFailed => write!(f, "could not find a valid snake spawn"),
             EngineError::DirectionNone => write!(f, "direction is None"),
+            EngineError::PixelGridDisabled => write!(f, "pixel grid disabled"),
         }
     }
 }
@@ -69,6 +71,7 @@ pub struct SnakeEngine {
 
     tile_grid: Vec<u8>,
     pixel_grid: Vec<u8>,
+    pixel_grid_enabled: bool,
     tile_cache: Vec<Vec<u8>>,
 
     world_tile_stack: Option<FrameStacker>,
@@ -85,6 +88,9 @@ impl SnakeEngine {
         food_count: usize,
         seed: Option<u64>,
         frame_stack_n: usize,
+        enable_pixel_grid: bool,
+        enable_world_tile_stack: bool,
+        enable_world_pixel_stack: bool,
     ) -> Result<Self, EngineError> {
         if width == 0 || height == 0 {
             return Err(EngineError::InvalidGridLen);
@@ -132,6 +138,12 @@ impl SnakeEngine {
             spawnable.push(i);
         }
 
+        let pixel_grid = if enable_pixel_grid {
+            vec![0u8; width * height * tile_size * tile_size]
+        } else {
+            Vec::new()
+        };
+
         Ok(Self {
             width,
             height,
@@ -160,10 +172,19 @@ impl SnakeEngine {
             max_steps: None,
             initial_snake_len: 0,
             tile_grid: vec![0u8; width * height],
-            pixel_grid: vec![0u8; width * height * tile_size * tile_size],
+            pixel_grid,
+            pixel_grid_enabled: enable_pixel_grid,
             tile_cache,
-            world_tile_stack: if n_stack > 1 { Some(FrameStacker::new(n_stack)) } else { None },
-            world_pixel_stack: if n_stack > 1 { Some(FrameStacker::new(n_stack)) } else { None },
+            world_tile_stack: if n_stack > 1 && enable_world_tile_stack {
+                Some(FrameStacker::new(n_stack))
+            } else {
+                None
+            },
+            world_pixel_stack: if n_stack > 1 && enable_pixel_grid && enable_world_pixel_stack {
+                Some(FrameStacker::new(n_stack))
+            } else {
+                None
+            },
             head_tile_stack: if n_stack > 1 { Some(HeadStacker::new(n_stack)) } else { None },
             head_pixel_stack: if n_stack > 1 { Some(HeadStacker::new(n_stack)) } else { None },
             head_pixel_valid_stack: if n_stack > 1 { Some(HeadStacker::new(n_stack)) } else { None },
@@ -315,6 +336,9 @@ impl SnakeEngine {
         rotate_to_head: bool,
         oob_fill_value: u8,
     ) -> Result<(Vec<u8>, Vec<bool>, usize, usize), EngineError> {
+        if !self.pixel_grid_enabled {
+            return Err(EngineError::PixelGridDisabled);
+        }
         let ry = view_radius_y.max(0);
         let rx = view_radius_x.max(0);
         let vy = (2 * ry + 1) as usize;
@@ -945,7 +969,9 @@ impl SnakeEngine {
             }
         }
 
-        self.rebuild_pixels();
+        if self.pixel_grid_enabled {
+            self.rebuild_pixels();
+        }
     }
 
     fn update_tiles_after_step(
@@ -954,10 +980,17 @@ impl SnakeEngine {
         old_tail_idx: Option<usize>,
         spawned_food: &[usize],
     ) {
-        let mut dirty = Vec::with_capacity(4 + spawned_food.len());
+        let track_pixels = self.pixel_grid_enabled;
+        let mut dirty = if track_pixels {
+            Vec::with_capacity(4 + spawned_food.len())
+        } else {
+            Vec::new()
+        };
         if let Some(tail_idx) = old_tail_idx {
             self.tile_grid[tail_idx] = self.static_grid[tail_idx];
-            dirty.push(tail_idx);
+            if track_pixels {
+                dirty.push(tail_idx);
+            }
         }
 
         if self.snake.is_empty() {
@@ -966,7 +999,9 @@ impl SnakeEngine {
 
         let head_idx = self.snake[0];
         self.tile_grid[head_idx] = head_tile(new_dir);
-        dirty.push(head_idx);
+        if track_pixels {
+            dirty.push(head_idx);
+        }
 
         let len = self.snake.len();
         if len >= 2 {
@@ -979,7 +1014,9 @@ impl SnakeEngine {
                     idx_to_point(curr, self.width),
                     idx_to_point(next, self.width),
                 );
-                dirty.push(curr);
+                if track_pixels {
+                    dirty.push(curr);
+                }
             }
             let tail_idx = self.snake[len - 1];
             let prev_idx = self.snake[len - 2];
@@ -987,18 +1024,27 @@ impl SnakeEngine {
                 idx_to_point(prev_idx, self.width),
                 idx_to_point(tail_idx, self.width),
             );
-            dirty.push(tail_idx);
+            if track_pixels {
+                dirty.push(tail_idx);
+            }
         }
 
         for &idx in spawned_food {
             self.tile_grid[idx] = TILE_FOOD;
-            dirty.push(idx);
+            if track_pixels {
+                dirty.push(idx);
+            }
         }
 
-        self.update_pixels_for_tiles(&dirty);
+        if track_pixels {
+            self.update_pixels_for_tiles(&dirty);
+        }
     }
 
     fn rebuild_pixels(&mut self) {
+        if !self.pixel_grid_enabled {
+            return;
+        }
         let ts = self.tile_size;
         let pw = self.width * ts;
         let ph = self.height * ts;
@@ -1022,6 +1068,9 @@ impl SnakeEngine {
     }
 
     fn update_pixels_for_tiles(&mut self, indices: &[usize]) {
+        if !self.pixel_grid_enabled {
+            return;
+        }
         let ts = self.tile_size;
         let pw = self.width * ts;
         for &idx in indices {
@@ -1052,11 +1101,13 @@ impl SnakeEngine {
                 stack.push(&self.tile_grid);
             }
         }
-        if let Some(stack) = self.world_pixel_stack.as_mut() {
-            if reset {
-                stack.reset_with(&self.pixel_grid);
-            } else {
-                stack.push(&self.pixel_grid);
+        if self.pixel_grid_enabled {
+            if let Some(stack) = self.world_pixel_stack.as_mut() {
+                if reset {
+                    stack.reset_with(&self.pixel_grid);
+                } else {
+                    stack.push(&self.pixel_grid);
+                }
             }
         }
     }

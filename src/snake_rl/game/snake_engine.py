@@ -38,6 +38,9 @@ class SnakeEngine:
         seed: int | None = None,
         frame_stack_n: int = 1,
         max_steps: int | None = None,
+        enable_pixel_grid: bool | None = None,
+        enable_world_tile_stack: bool | None = None,
+        enable_world_pixel_stack: bool | None = None,
     ):
         if food_count is None:
             raise ValueError("food_count must be provided (board does not encode food).")
@@ -45,11 +48,22 @@ class SnakeEngine:
         core = ensure_rust_core()
         if not isinstance(board, core.Board):
             raise TypeError("board must be a snake_rl._core.Board instance")
+        pixel_enabled = True if enable_pixel_grid is None else bool(enable_pixel_grid)
+        world_tile_stack = (
+            True if enable_world_tile_stack is None else bool(enable_world_tile_stack)
+        )
+        world_pixel_stack = (
+            True if enable_world_pixel_stack is None else bool(enable_world_pixel_stack)
+        )
+
         self._core = core.SnakeEngine(
             board=board,
             food_count=int(food_count),
             seed=None,
             frame_stack_n=int(frame_stack_n),
+            enable_pixel_grid=pixel_enabled,
+            enable_world_tile_stack=world_tile_stack,
+            enable_world_pixel_stack=world_pixel_stack,
         )
 
         self._core.reset(None if seed is None else int(seed))

@@ -58,12 +58,22 @@ class RustVecEnv(VecEnv):
 
         self._max_playable = int(self.board.max_playable_tiles)
         self.max_steps = max(1, int(self._max_playable * float(self.reward.max_steps_factor)))
+
+        obs_kind = self.obs_spec.kind_norm()
+        obs_view = self.obs_spec.view_norm()
+        enable_pixel_grid = obs_kind == "pixel"
+        enable_world_tile_stack = obs_kind == "categorical" and obs_view == "world"
+        enable_world_pixel_stack = obs_kind == "pixel" and obs_view == "world"
+
         self._vec_game = ext.VecSnakeEngine(
             n=int(self.num_envs),
             board=self.board,
             food_count=int(food_count),
             seeds=seed_list,
             frame_stack_n=int(self.frame_stack_n),
+            enable_pixel_grid=bool(enable_pixel_grid),
+            enable_world_tile_stack=bool(enable_world_tile_stack),
+            enable_world_pixel_stack=bool(enable_world_pixel_stack),
         )
         self._set_max_steps(int(self.max_steps))
 
