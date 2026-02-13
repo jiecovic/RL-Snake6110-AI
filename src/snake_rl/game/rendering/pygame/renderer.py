@@ -15,6 +15,7 @@ from snake_rl.game.rendering.pygame.draw import (
 from snake_rl.game.rendering.pygame.hud import (
     feature_flags_from_spec,
     feature_items,
+    format_pairs,
     hud_feature_flags,
     info_pairs,
 )
@@ -102,21 +103,42 @@ class PygameRenderer:
         paused = bool(ctx.paused)
         running = bool(game.running)
         wins = self.hud_info.get("wins")
+        episodes = self.hud_info.get("episodes")
+        win_rate = self.hud_info.get("win_rate")
         reward = self.hud_info.get("reward")
         ep_return = self.hud_info.get("ep_return")
+        avg_return = self.hud_info.get("avg_return")
+        avg_length = self.hud_info.get("avg_length")
+        avg_score = self.hud_info.get("avg_score")
+        avg_reward_step = self.hud_info.get("avg_reward_step")
+        ep_steps = self.hud_info.get("ep_steps")
+        ep_score = self.hud_info.get("ep_score")
+        last_reward = self.hud_info.get("last_reward")
+        since_food = self.hud_info.get("since_food")
+
+        layout_mode = str(ctx.layout.hud_layout).strip().lower()
+        show_stats = layout_mode in {"extended", "grid2", "grid2_right", "right_grid2"}
+        show_episode = show_stats
 
         status_pairs = [
             ("Score", f"{int(game.score)}"),
             ("Len", f"{int(game.snake_len)}"),
             ("Steps", steps_label),
         ]
-        if since_food_label is not None:
+        if since_food_label is not None and not show_episode:
             status_pairs.append(("SinceFood", since_food_label))
-        if wins is not None:
-            status_pairs.append(("Wins", str(wins)))
-        if reward is not None:
+        if wins is not None and not show_stats:
+            win_label = str(wins)
+            if win_rate is not None and str(win_rate).strip():
+                win_label = f"{wins} ({win_rate})"
+            status_pairs.append(("Wins", win_label))
+        if episodes is not None and not show_stats:
+            status_pairs.append(("Episodes", str(episodes)))
+        if win_rate is not None and not show_stats:
+            status_pairs.append(("Win%", str(win_rate)))
+        if reward is not None and not show_episode:
             status_pairs.append(("Reward", str(reward)))
-        if ep_return is not None:
+        if ep_return is not None and not show_episode:
             status_pairs.append(("Return", str(ep_return)))
         status_pairs.extend(
             [
@@ -134,6 +156,61 @@ class PygameRenderer:
             flags = feature_flags_from_spec(self.agent_view_spec)
         feature_pairs = feature_items(game=game, flags=flags, include_snake_progress=True)
         info_items = info_pairs(hud_info=self.hud_info, agent_view_spec=self.agent_view_spec)
+
+        stats_pairs: list[tuple[str, str]] = []
+        if show_stats:
+            if episodes is not None:
+                stats_pairs.append(("Episodes", str(episodes)))
+            if wins is not None:
+                win_label = str(wins)
+                if win_rate is not None and str(win_rate).strip():
+                    win_label = f"{wins} ({win_rate})"
+                stats_pairs.append(("Wins", win_label))
+            if avg_return is not None:
+                stats_pairs.append(("AvgRet", str(avg_return)))
+            if avg_length is not None:
+                stats_pairs.append(("AvgLen", str(avg_length)))
+            if avg_score is not None:
+                stats_pairs.append(("AvgScore", str(avg_score)))
+            if avg_reward_step is not None:
+                stats_pairs.append(("Ret/Step", str(avg_reward_step)))
+
+        ep_pairs: list[tuple[str, str]] = []
+        if show_episode:
+            if ep_steps is not None:
+                ep_pairs.append(("Steps", str(ep_steps)))
+            if ep_score is not None:
+                ep_pairs.append(("Score", str(ep_score)))
+            if ep_return is not None:
+                ep_pairs.append(("Return", str(ep_return)))
+            if last_reward is not None:
+                ep_pairs.append(("Last", str(last_reward)))
+            if since_food is not None:
+                ep_pairs.append(("SinceFood", str(since_food)))
+
+        if layout_mode in {"grid2", "grid2_right", "right_grid2"}:
+            line_h = ctx.label_font.get_height() + 4
+            title_h = 24
+            pad = 4
+
+            def _box_h(pairs: list[tuple[str, str]], empty_text: str | None) -> int:
+                lines = len(format_pairs(pairs, empty_text=empty_text, key_pad=0))
+                return int(title_h + lines * line_h + pad)
+
+            h_status = _box_h(status_pairs, None)
+            h_perf = _box_h(perf_pairs, None)
+            h_info = _box_h(info_items, "n/a")
+            h_stats = _box_h(stats_pairs, "n/a")
+            h_episode = _box_h(ep_pairs, "n/a")
+            h_features = _box_h(feature_pairs, "none")
+
+            ctx.hud_row_heights = (
+                max(h_status, h_perf),
+                max(h_info, h_stats),
+                max(h_episode, h_features),
+            )
+        else:
+            ctx.hud_row_heights = None
 
         controls = "[ ] speed  P pause  N step  R reset  A/D or Left/Right turn  Esc/Q quit"
 
@@ -163,6 +240,24 @@ class PygameRenderer:
             empty_text="n/a",
             border_mask=full_border if not no_inner_borders else {"top", "bottom"},
         )
+        if "stats" in boxes:
+            draw_hud_box(
+                ctx=ctx,
+                box=boxes["stats"],
+                title="STATS",
+                pairs=stats_pairs,
+                empty_text="n/a",
+                border_mask=full_border if not no_inner_borders else {"top", "bottom"},
+            )
+        if "episode" in boxes:
+            draw_hud_box(
+                ctx=ctx,
+                box=boxes["episode"],
+                title="EPISODE",
+                pairs=ep_pairs,
+                empty_text="n/a",
+                border_mask=full_border if not no_inner_borders else {"top", "bottom"},
+            )
         draw_hud_box(
             ctx=ctx,
             box=boxes["features"],

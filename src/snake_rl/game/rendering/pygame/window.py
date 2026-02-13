@@ -30,16 +30,20 @@ class LayoutConfig:
     panel_gap: int = 8
     panel_padding: int = 10
     panel_label_height: int = 20
-    hud_height: int = 260
-    hud_min_width: int = 1040
+    hud_height: int = 280
+    hud_min_width: int = 1240
     hud_padding_x: int = 10
     hud_padding_y: int = 10
     hud_col_gap: int = 0
-    hud_col_w_status: int = 180
-    hud_col_w_perf: int = 200
-    hud_col_w_info: int = 320
-    hud_col_min: int = 160
-    hud_col_last_min: int = 220
+    hud_layout: str = "default"  # "default" | "extended" | "grid2" | "grid2_right"
+    hud_col_w_status: int = 210
+    hud_col_w_perf: int = 220
+    hud_col_w_info: int = 360
+    hud_col_w_stats: int = 240
+    hud_col_w_episode: int = 240
+    hud_col_min: int = 180
+    hud_col_last_min: int = 240
+    hud_row_gap: int = 0
     font_name: str = "Consolas"
     font_size: int = 18
     label_font_size: int = 16
@@ -59,6 +63,7 @@ class PygameRenderContext:
     hud_panel: Rect
 
     layout: LayoutConfig
+    hud_row_heights: tuple[int, int, int] | None = None
     sim_fps: float = 0.0
     sim_steps: int = 0
     paused: bool = False
@@ -93,7 +98,9 @@ def create_pygame_context(
     margin = int(cfg.margin)
 
     world_panel_w = world_w + 2 * panel_pad
-    if int(cfg.hud_min_width) > 0:
+    layout_mode = str(cfg.hud_layout).strip().lower()
+    hud_right = layout_mode in {"grid2_right", "right_grid2", "right"}
+    if int(cfg.hud_min_width) > 0 and not hud_right:
         world_panel_w = max(world_panel_w, int(cfg.hud_min_width))
     world_panel_h = world_h + 2 * panel_pad + label_h
 
@@ -109,10 +116,20 @@ def create_pygame_context(
 
     hud_h = int(cfg.hud_height)
     hud_gap = gap if hud_h > 0 else 0
-    world_column_h = world_panel_h + hud_gap + hud_h
+    world_column_h = world_panel_h + (0 if hud_right else hud_gap + hud_h)
+
+    hud_panel_w = 0
+    hud_panel_h = 0
+    if hud_right and hud_h > 0:
+        left_w = max(int(cfg.hud_col_w_status), int(cfg.hud_col_w_info), int(cfg.hud_col_w_episode))
+        right_w = max(int(cfg.hud_col_w_perf), int(cfg.hud_col_w_stats), int(cfg.hud_col_last_min))
+        hud_panel_w = int(cfg.hud_padding_x) * 2 + left_w + right_w + int(cfg.hud_col_gap)
+        hud_panel_h = max(world_panel_h, int(cfg.hud_height))
 
     win_w = margin * 2 + world_panel_w + (gap + agent_panel_w if agent_panel_w else 0)
-    win_h = margin * 2 + max(world_column_h, agent_panel_h)
+    if hud_right and hud_panel_w > 0:
+        win_w += gap + hud_panel_w
+    win_h = margin * 2 + max(world_column_h, agent_panel_h, hud_panel_h)
 
     screen = pygame.display.set_mode((int(win_w), int(win_h)))
     clock = pygame.time.Clock()
@@ -143,12 +160,24 @@ def create_pygame_context(
             h=agent_view_h,
         )
 
-    hud_panel = Rect(
-        x=world_panel.x,
-        y=margin + world_panel_h + hud_gap,
-        w=world_panel_w,
-        h=hud_h,
-    )
+    if hud_right and hud_panel_w > 0:
+        if agent_panel_w and not agent_on_left:
+            hud_x = agent_panel.x + agent_panel.w + gap  # type: ignore[union-attr]
+        else:
+            hud_x = world_panel.x + world_panel.w + gap
+        hud_panel = Rect(
+            x=hud_x,
+            y=margin,
+            w=hud_panel_w,
+            h=hud_panel_h,
+        )
+    else:
+        hud_panel = Rect(
+            x=world_panel.x,
+            y=margin + world_panel_h + hud_gap,
+            w=world_panel_w,
+            h=hud_h,
+        )
 
     return PygameRenderContext(
         screen=screen,

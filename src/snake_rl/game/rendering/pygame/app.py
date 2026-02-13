@@ -26,6 +26,7 @@ except Exception:  # pragma: no cover
 pygame: Any = _pygame
 
 StepFn = Callable[[int | None], Any | None]
+ResetFn = Callable[[], None]
 
 
 @dataclass(slots=True)
@@ -36,6 +37,7 @@ class AppConfig:
     caption: str = "Snake"
     reset_on_done: bool = True
     max_steps_per_frame: int = 5
+    on_reset: ResetFn | None = None
     # Human input (optional)
     enable_human_input: bool = False
     turn_keys: tuple[int, int] | None = None  # left, right
@@ -150,9 +152,12 @@ def run_pygame_app(
                         if not paused:
                             queued_turn = None
                     elif event.key == pygame.K_r:
-                        # NOTE: In step_fn mode, resetting only the game can desync env state.
-                        # We keep this for legacy/human mode. For watch, don't press R.
-                        game.reset()
+                        if cfg.on_reset is not None:
+                            cfg.on_reset()
+                        else:
+                            # NOTE: In step_fn mode, resetting only the game can desync env state.
+                            # We keep this for legacy/human mode. For watch, don't press R.
+                            game.reset()
                         paused = False
                         queued_turn = None
                     elif event.key == pygame.K_n:

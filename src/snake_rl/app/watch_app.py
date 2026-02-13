@@ -24,6 +24,7 @@ from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.snake_env import SnakeEnv
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
+from snake_rl.game.rendering.pygame.window import LayoutConfig
 from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.rl.reporting import log_ppo_params
 from snake_rl.utils.logging import setup_logger
@@ -109,7 +110,8 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "Optional config path. If omitted, uses runs/<run>/config_snapshot.yaml. "
+            "Optional config path. If omitted, uses runs/<run>/config_snapshot.yaml "
+            "(full validated config). "
             "If path is under configs/, Hydra defaults + overrides are applied."
         ),
     )
@@ -150,6 +152,12 @@ class WatchController:
         self.last_reload_check = 0.0
         self.last_reload_at = time.time()
         self.win_count = 0
+        self.episode_count = 0
+        self.episode_steps = 0
+        self.total_return = 0.0
+        self.total_steps = 0
+        self.total_score = 0
+        self.total_score_count = 0
         self.episode_return = 0.0
         self.last_reward = 0.0
 
@@ -205,6 +213,7 @@ class WatchController:
         reward0 = float(np.asarray(reward).reshape((-1,))[0])
         self.last_reward = reward0
         self.episode_return += reward0
+        self.episode_steps += 1
 
         info0 = None
         if isinstance(infos, (list, tuple)) and infos:
@@ -223,14 +232,40 @@ class WatchController:
                             self.win_count += 1
                     except Exception:
                         pass
+        final_score = None
+        if isinstance(info0, dict) and "final_score" in info0:
+            try:
+                final_score = int(info0["final_score"])
+            except Exception:
+                final_score = None
 
         if done0:
+            self.episode_count += 1
+            self.total_return += float(self.episode_return)
+            self.total_steps += int(self.episode_steps)
+            if final_score is not None:
+                self.total_score += int(final_score)
+                self.total_score_count += 1
             self.obs = self.vec_env.reset()
             self.episode_return = 0.0
+            self.episode_steps = 0
         else:
             self.obs = obs_next
 
         return self.obs
+
+    def reset(self, *, clear_stats: bool = True) -> None:
+        self.obs = self.vec_env.reset()
+        self.episode_return = 0.0
+        self.last_reward = 0.0
+        self.episode_steps = 0
+        if clear_stats:
+            self.win_count = 0
+            self.episode_count = 0
+            self.total_return = 0.0
+            self.total_steps = 0
+            self.total_score = 0
+            self.total_score_count = 0
 
 
 def main() -> None:
@@ -340,15 +375,75 @@ def main() -> None:
         "obs": f"{obs_spec.kind_norm()}/{obs_spec.view_norm()}",
         "action": str(action_spec.type),
         "max_steps": int(max_steps),
+        "wins": "0",
+        "episodes": "0",
+        "win_rate": "0.0%",
+        "avg_return": "0.000",
+        "avg_length": "0.0",
+        "avg_score": "0.0",
+        "avg_reward_step": "0.000",
+        "ep_steps": "0",
+        "ep_score": "0",
+        "since_food": "0/0",
+        "last_reward": f"{0.0:+.3f}",
     }
 
     def _controller_step(action_override: int | None = None):
         obs = controller.step(action_override)
         hud_info["reload"] = f"{controller.reload_age_seconds():.1f}s"
         hud_info["wins"] = str(controller.win_count)
+        hud_info["episodes"] = str(controller.episode_count)
+        if controller.episode_count > 0:
+            win_rate = 100.0 * (float(controller.win_count) / float(controller.episode_count))
+        else:
+            win_rate = 0.0
+        hud_info["win_rate"] = f"{win_rate:.1f}%"
         hud_info["reward"] = f"{controller.last_reward:+.3f}"
         hud_info["ep_return"] = f"{controller.episode_return:.3f}"
+        hud_info["ep_steps"] = str(int(controller.episode_steps))
+        hud_info["ep_score"] = str(int(game.score))
+        hud_info["last_reward"] = f"{controller.last_reward:+.3f}"
+        if int(max_steps) > 0:
+            hud_info["since_food"] = f"{int(game.steps_since_food)}/{int(max_steps)}"
+        else:
+            hud_info["since_food"] = f"{int(game.steps_since_food)}"
+
+        if controller.episode_count > 0:
+            avg_return = float(controller.total_return) / float(controller.episode_count)
+            avg_length = float(controller.total_steps) / float(controller.episode_count)
+        else:
+            avg_return = 0.0
+            avg_length = 0.0
+        if controller.total_steps > 0:
+            avg_reward_step = float(controller.total_return) / float(controller.total_steps)
+        else:
+            avg_reward_step = 0.0
+        if controller.total_score_count > 0:
+            avg_score = float(controller.total_score) / float(controller.total_score_count)
+        else:
+            avg_score = 0.0
+
+        hud_info["avg_return"] = f"{avg_return:.3f}"
+        hud_info["avg_length"] = f"{avg_length:.1f}"
+        hud_info["avg_reward_step"] = f"{avg_reward_step:.3f}"
+        hud_info["avg_score"] = f"{avg_score:.1f}"
         return obs
+
+    def _on_reset():
+        controller.reset(clear_stats=True)
+        hud_info["wins"] = "0"
+        hud_info["episodes"] = "0"
+        hud_info["win_rate"] = "0.0%"
+        hud_info["avg_return"] = "0.000"
+        hud_info["avg_length"] = "0.0"
+        hud_info["avg_score"] = "0.0"
+        hud_info["avg_reward_step"] = "0.000"
+        hud_info["ep_steps"] = "0"
+        hud_info["ep_score"] = "0"
+        hud_info["since_food"] = "0/0"
+        hud_info["last_reward"] = f"{0.0:+.3f}"
+        hud_info["reward"] = f"{0.0:+.3f}"
+        hud_info["ep_return"] = f"{0.0:.3f}"
 
     try:
         run_pygame_app(
@@ -366,6 +461,8 @@ def main() -> None:
                 hud_mode="selected",
                 hud_features=obs_spec.features,
                 hud_info=hud_info,
+                layout=LayoutConfig(hud_layout="grid2_right", hud_height=520),
+                on_reset=_on_reset,
             ),
             step_fn=_controller_step,
         )
