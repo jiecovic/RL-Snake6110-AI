@@ -62,6 +62,7 @@ pub struct SnakeEngine {
     score: i32,
     running: bool,
     steps_since_food: usize,
+    max_steps: Option<usize>,
     initial_snake_len: usize,
 
     tile_grid: Vec<u8>,
@@ -143,6 +144,7 @@ impl SnakeEngine {
             score: 0,
             running: true,
             steps_since_food: 0,
+            max_steps: None,
             initial_snake_len: 0,
             tile_grid: vec![0u8; width * height],
             pixel_grid: vec![0u8; width * height * tile_size * tile_size],
@@ -621,6 +623,10 @@ impl SnakeEngine {
         self.steps_since_food
     }
 
+    pub fn set_max_steps(&mut self, max_steps: Option<usize>) {
+        self.max_steps = max_steps;
+    }
+
     pub fn collision_flags(&self) -> (bool, bool, bool) {
         let dir = match self.direction {
             Some(d) => d,
@@ -860,6 +866,14 @@ impl SnakeEngine {
             self.steps_since_food = 0;
         } else {
             self.steps_since_food = self.steps_since_food.saturating_add(1);
+        }
+        if self.running {
+            if let Some(limit) = self.max_steps {
+                if limit > 0 && self.steps_since_food >= limit {
+                    self.running = false;
+                    result |= MOVE_TIMEOUT;
+                }
+            }
         }
         self.update_world_stacks(false);
         Ok(result)

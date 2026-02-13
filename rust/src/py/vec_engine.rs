@@ -451,6 +451,12 @@ impl PyVecSnakeEngine {
         self.games.iter().map(|g| g.steps_since_food()).collect()
     }
 
+    fn set_max_steps(&mut self, max_steps: Option<usize>) {
+        for g in self.games.iter_mut() {
+            g.set_max_steps(max_steps);
+        }
+    }
+
     fn time_since_foods_norm(&self, max_steps: usize) -> Vec<f32> {
         self.games
             .iter()

@@ -286,6 +286,10 @@ impl PySnakeEngine {
         self.inner.steps_since_food()
     }
 
+    fn set_max_steps(&mut self, max_steps: Option<usize>) {
+        self.inner.set_max_steps(max_steps);
+    }
+
     fn collision_flags(&self) -> (bool, bool, bool) {
         self.inner.collision_flags()
     }
