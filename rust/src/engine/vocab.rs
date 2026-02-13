@@ -411,7 +411,7 @@ fn vocab_err_unknown(name: &str) -> String {
 }
 
 fn tile_id_for_name(name: &str) -> Option<u8> {
-    let names = crate::engine::tileset::tileset_tile_names_raw();
+    let names = crate::engine::tiles::tileset_tile_names_raw();
     for (i, n) in names.iter().enumerate() {
         if *n == name {
             return Some(i as u8);
@@ -421,7 +421,7 @@ fn tile_id_for_name(name: &str) -> Option<u8> {
 }
 
 fn build_lut(def: &VocabDef) -> Result<Vec<u8>, String> {
-    let raw_size = crate::engine::tileset::tileset_tile_count();
+    let raw_size = crate::engine::tiles::tileset_tile_count();
     let class_count = def.classes.len();
     if class_count > u8::MAX as usize {
         return Err("tile_vocab has too many classes for u8 ids".to_string());
@@ -434,7 +434,7 @@ fn build_lut(def: &VocabDef) -> Result<Vec<u8>, String> {
         let cid = class_id as u8;
         for member in class_def.members.iter() {
             let tid = tile_id_for_name(member).ok_or_else(|| {
-                let valid = crate::engine::tileset::tileset_tile_names()
+                let valid = crate::engine::tiles::tileset_tile_names()
                     .join(", ");
                 format!(
                     "Unknown tile name {:?} in class {:?}. Valid tiles: {}",
@@ -456,7 +456,7 @@ fn build_lut(def: &VocabDef) -> Result<Vec<u8>, String> {
     let mut missing: Vec<&'static str> = Vec::new();
     for (i, seen_i) in seen.iter().enumerate() {
         if !*seen_i {
-            let name = crate::engine::tileset::tileset_tile_names_raw()[i];
+            let name = crate::engine::tiles::tileset_tile_names_raw()[i];
             missing.push(name);
         }
     }

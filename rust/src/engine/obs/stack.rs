@@ -1,5 +1,4 @@
-// rust/src/engine/obs_stack.rs
-// rust/src/engine/obs_stack.rs
+// rust/src/engine/obs/stack.rs
 
 #[derive(Debug)]
 pub struct FrameStacker {

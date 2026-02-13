@@ -1,4 +1,4 @@
-// rust/src/engine/tileset.rs
+// rust/src/engine/tiles/tileset.rs
 const TILE_SIZE: usize = 4;
 const TILE_COUNT: usize = 27;
 // Use O/X to keep the 2D tile literals aligned and readable.

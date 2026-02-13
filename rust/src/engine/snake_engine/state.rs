@@ -2,7 +2,7 @@
 
 use rand_chacha::ChaCha8Rng;
 
-use crate::engine::obs_stack::{FrameStacker, HeadStacker};
+use crate::engine::obs::{FrameStacker, HeadStacker};
 
 #[derive(Debug)]
 pub enum EngineError {

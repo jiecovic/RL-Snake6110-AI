@@ -4,7 +4,7 @@ use rand::seq::index::sample;
 use rand::Rng;
 
 use crate::engine::constants::*;
-use crate::engine::geometry::{
+use crate::engine::spatial::{
     Point, compute_spawn_cells, dir_turn_left, dir_turn_right, dir_vec, idx, idx_to_point,
     is_straight_spawn_valid,
 };

@@ -1,8 +1,8 @@
 // rust/src/engine/snake_engine/obs.rs
 
 use crate::engine::constants::TILE_OOB;
-use crate::engine::geometry::idx;
-use crate::engine::obs_stack::HeadViewKey;
+use crate::engine::obs::HeadViewKey;
+use crate::engine::spatial::idx;
 
 use super::state::{EngineError, SnakeEngine};
 

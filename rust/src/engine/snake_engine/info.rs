@@ -1,6 +1,6 @@
 // rust/src/engine/snake_engine/info.rs
 
-use crate::engine::geometry::{dir_turn_left, dir_turn_right};
+use crate::engine::spatial::{dir_turn_left, dir_turn_right};
 
 use super::state::SnakeEngine;
 

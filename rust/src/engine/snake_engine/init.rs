@@ -4,9 +4,9 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::engine::constants::*;
-use crate::engine::geometry::{dir_turn_left, dir_turn_right, idx};
-use crate::engine::obs_stack::{FrameStacker, HeadStacker};
-use crate::engine::tileset::{tileset_tile_size, tileset_tiles};
+use crate::engine::obs::{FrameStacker, HeadStacker};
+use crate::engine::spatial::{dir_turn_left, dir_turn_right, idx};
+use crate::engine::tiles::{tileset_tile_size, tileset_tiles};
 
 use super::state::{EngineError, SnakeEngine};
 

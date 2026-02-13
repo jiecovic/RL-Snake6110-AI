@@ -1,4 +1,4 @@
-// rust/src/engine/geometry.rs
+// rust/src/engine/spatial/geometry.rs
 #[derive(Clone, Copy, Debug)]
 pub struct Point {
     pub x: i32,
