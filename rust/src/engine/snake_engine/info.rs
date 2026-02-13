@@ -221,6 +221,10 @@ impl SnakeEngine {
         self.max_steps = max_steps;
     }
 
+    pub fn set_spawn_random_dir(&mut self, enabled: bool) {
+        self.spawn_random_dir = enabled;
+    }
+
     pub fn collision_flags(&self) -> (bool, bool, bool) {
         let dir = match self.direction {
             Some(d) => d,

@@ -473,6 +473,12 @@ impl PyVecSnakeEngine {
         }
     }
 
+    fn set_spawn_random_dir(&mut self, enabled: bool) {
+        for g in self.games.iter_mut() {
+            g.set_spawn_random_dir(enabled);
+        }
+    }
+
     fn time_since_foods_norm(&self, max_steps: usize) -> Vec<f32> {
         self.games
             .iter()

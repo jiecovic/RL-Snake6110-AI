@@ -305,6 +305,10 @@ impl PySnakeEngine {
         self.inner.set_max_steps(max_steps);
     }
 
+    fn set_spawn_random_dir(&mut self, enabled: bool) {
+        self.inner.set_spawn_random_dir(enabled);
+    }
+
     fn collision_flags(&self) -> (bool, bool, bool) {
         self.inner.collision_flags()
     }
