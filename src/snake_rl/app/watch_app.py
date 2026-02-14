@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import time
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -92,6 +93,23 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--pixel-size", type=int, default=5)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="auto")
+    p.add_argument(
+        "--visualize-cnn",
+        action="store_true",
+        help="Show CNN activations/kernels in a separate window (pixel obs only).",
+    )
+    p.add_argument(
+        "--cnn-viz-k",
+        type=int,
+        default=16,
+        help="Number of channels/filters to show per layer (default: 16).",
+    )
+    p.add_argument(
+        "--cnn-viz-every",
+        type=int,
+        default=1,
+        help="Update CNN visualization every N steps (default: 1).",
+    )
 
     p.add_argument(
         "--no-rich",
@@ -138,6 +156,8 @@ class WatchController:
         initial_ckpt: Path,
         logger,
         repo: Path,
+        on_predict: Callable[[], None] | None = None,
+        on_model_reload: Callable[[PPO], None] | None = None,
     ):
         self.vec_env = vec_env
         self.model = model
@@ -163,6 +183,8 @@ class WatchController:
 
         self.logger = logger
         self.repo = repo
+        self.on_predict = on_predict
+        self.on_model_reload = on_model_reload
 
         self.obs = self.vec_env.reset()
 
@@ -183,6 +205,8 @@ class WatchController:
                 self.current_ckpt = chosen
                 self.current_mtime = mtime
                 self.last_reload_at = time.time()
+                if self.on_model_reload is not None:
+                    self.on_model_reload(self.model)
                 rel = relpath(chosen, base=self.repo)
                 self.logger.debug(f"reloaded checkpoint: {rel} (mtime={int(mtime)})")
         except Exception:
@@ -197,6 +221,8 @@ class WatchController:
         if action_override is None:
             obs_for_model = sanitize_observation(self.obs)
             action, _ = self.model.predict(obs_for_model, deterministic=True)
+            if self.on_predict is not None:
+                self.on_predict()
 
             if np.isscalar(action):
                 if isinstance(action, (bool, int, np.integer, np.floating)):
@@ -321,6 +347,25 @@ def main() -> None:
     obs_kind = obs_spec.kind_norm()
     obs_view = obs_spec.view_norm()
     action_spec = ActionSpec(type=str(get_env_action(cfg)))
+    cnn_viz = None
+    if bool(args.visualize_cnn):
+        if obs_kind != "pixel":
+            logger.info("cnn viz disabled (obs kind is not pixel)")
+        else:
+            try:
+                from snake_rl.vis.cnn_viz import CnnVisualizer, CnnVizConfig
+
+                cnn_viz = CnnVisualizer(
+                    model=model,
+                    config=CnnVizConfig(
+                        k=int(args.cnn_viz_k),
+                        update_every=int(args.cnn_viz_every),
+                    ),
+                    logger=logger,
+                )
+                logger.info("cnn viz enabled (separate window)")
+            except Exception:
+                logger.exception("cnn viz init failed; continuing without it")
 
     n_stack = int(get_frame_stack_n(cfg))
     board = get_board_params(cfg)
@@ -365,6 +410,8 @@ def main() -> None:
         initial_ckpt=ckpt,
         logger=logger,
         repo=repo,
+        on_predict=cnn_viz.update if cnn_viz is not None else None,
+        on_model_reload=cnn_viz.set_model if cnn_viz is not None else None,
     )
 
     hud_info = {
@@ -468,6 +515,8 @@ def main() -> None:
         )
     finally:
         vec_env.close()
+        if cnn_viz is not None:
+            cnn_viz.close()
 
 
 if __name__ == "__main__":
