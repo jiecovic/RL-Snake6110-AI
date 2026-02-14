@@ -1,7 +1,30 @@
-max_steps_factor: 1.3    # Max steps = max playable tiles * factor.
-win_reward: 25.0          # Reward added on win.
-food_reward: 3.0         # Reward added per food eaten.
-food_speed_bonus: 1.0    # Bonus for eating quickly (scaled by time since last food).
-fatal_penalty: 5.0       # Penalty on fatal termination (wall/self/boundary).
-step_penalty_scale: 1.0  # Per-step penalty scale (normalized by max steps).
-timeout_penalty: 0.0     # Penalty when timeout truncation happens.
+# Reward shaping:
+#   tiny = step_penalty_scale / max_steps
+#
+#   step reward (applied only on non-win steps):
+#     step = (1-w)*(-tiny) + w*shaped(p,pivot)
+#     shaped(p,pivot) =
+#       -tiny * (pivot - p) / pivot         if p < pivot
+#       +tiny * (p - pivot) / (1 - pivot)   if p >= pivot
+#     p = snake_progress in [0,1]
+#         p = clamp01((snake_len - initial_snake_len) / (max_playable_tiles - initial_snake_len))
+#     pivot and p are clamped to [0,1]
+#
+#   termination rules:
+#     win step: reward = +win_reward only
+#              (no step penalty, no food reward, no fatal/timeout penalty)
+#     non-win step: reward starts with step (above), then:
+#       fatal   -> subtract fatal_penalty
+#       timeout -> subtract timeout_penalty
+#
+#   food reward (non-win only):
+#     food = +food_reward + food_speed_bonus * (1 - steps_since_food / max_steps)
+max_steps_factor: 1.3      # Max steps = max playable tiles * factor.
+win_reward: 25.0           # Reward added on win.
+food_reward: 3.0           # Reward added per food eaten.
+food_speed_bonus: 1.0      # Bonus for eating quickly (scaled by time since last food).
+fatal_penalty: 5.0         # Penalty on fatal termination (wall/self/boundary).
+step_penalty_scale: 1.0    # Per-step penalty scale (normalized by max steps).
+timeout_penalty: 0.0       # Penalty when timeout truncation happens.
+step_progress_pivot: 0.8   # Progress pivot where step reward crosses 0.
+step_progress_weight: 0.0  # w in [0,1]; 0=constant penalty, 1=fully progress-shaped.
