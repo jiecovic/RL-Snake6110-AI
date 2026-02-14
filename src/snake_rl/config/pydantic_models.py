@@ -34,14 +34,14 @@ class RunConfigModel(_BaseConfigModel):
     vec: str = "dummy"
     checkpoint: "CheckpointConfigModel" = Field(default_factory=lambda: CheckpointConfigModel())
     total_timesteps: int
-    resume_checkpoint: str | None = None
 
     @model_validator(mode="before")
     @classmethod
     def _drop_legacy_resume_progress(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "resume_progress" in data:
+        if isinstance(data, dict):
             data = dict(data)
             data.pop("resume_progress", None)
+            data.pop("resume_checkpoint", None)
         return data
 
     @model_validator(mode="before")
@@ -290,7 +290,6 @@ class TrainConfigModel(_BaseConfigModel):
                     ),
                 ),
                 total_timesteps=int(self.run.total_timesteps),
-                resume_checkpoint=self.run.resume_checkpoint,
             ),
             board=BoardConfig(
                 height=int(self.board.height),

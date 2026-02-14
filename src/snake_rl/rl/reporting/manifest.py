@@ -109,9 +109,6 @@ def _to_summary_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
         },
     }
 
-    if cfg.run.resume_checkpoint is not None:
-        d["run"]["resume_checkpoint"] = str(cfg.run.resume_checkpoint)
-
     return d
 
 

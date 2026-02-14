@@ -156,7 +156,6 @@ class RunConfig:
     vec: str
     total_timesteps: int
     checkpoint: CheckpointConfig = field(default_factory=lambda: CheckpointConfig())
-    resume_checkpoint: str | None = None
 
 
 # ---------------------------------------------------------------------------

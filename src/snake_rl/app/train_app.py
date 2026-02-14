@@ -35,20 +35,17 @@ def _apply_resume_override(
     cfg: Any,
     model: TrainConfigModel,
     raw_yaml: str | None,
-    resume_override: str | None,
     resume_total_steps: int | None,
     resume_add_steps: int | None,
 ) -> tuple[Any, TrainConfigModel, str | None]:
     if resume_total_steps is not None and resume_add_steps is not None:
         raise ValueError("Use only one of --resume-total-steps or --resume-add-steps.")
 
-    if not resume_override and resume_total_steps is None and resume_add_steps is None:
+    if resume_total_steps is None and resume_add_steps is None:
         return cfg, model, raw_yaml
 
     raw = model.model_dump(mode="python")
     run = dict(raw.get("run") or {})
-    if resume_override:
-        run["resume_checkpoint"] = str(resume_override)
     if resume_total_steps is not None:
         if int(resume_total_steps) <= 0:
             raise ValueError("--resume-total-steps must be > 0")
@@ -96,7 +93,6 @@ def _apply_refine_override(
         new_name = "_".join(p for p in parts if p)
     run["name"] = new_name
     run["total_timesteps"] = int(refine_steps)
-    run["resume_checkpoint"] = None
     raw["run"] = run
 
     if refine_lr is not None or refine_ent is not None:
@@ -136,7 +132,6 @@ def run_from_config_path(
         cfg=cfg,
         model=model,
         raw_yaml=raw_yaml,
-        resume_override=resume_override,
         resume_total_steps=resume_total_steps,
         resume_add_steps=resume_add_steps,
     )
@@ -151,9 +146,9 @@ def run_from_config_path(
 
     resume_path = None
     resume_run_dir = None
-    if cfg.run.resume_checkpoint:
+    if resume_override:
         resume_ctx = resolve_resume_context(
-            str(cfg.run.resume_checkpoint),
+            str(resume_override),
             runs_root=runs_root(),
             legacy_root=repo_root() / "experiments",
         )
@@ -257,27 +252,12 @@ def main(cfg: DictConfig) -> None:
     no_rich = bool(logging_cfg.get("no_rich", False))
     log_level = str(logging_cfg.get("level", "INFO"))
 
-    resume_path = None
-    resume_run_dir = None
-    if train_cfg.run.resume_checkpoint:
-        resume_ctx = resolve_resume_context(
-            str(train_cfg.run.resume_checkpoint),
-            runs_root=runs_root(),
-            legacy_root=repo_root() / "experiments",
-        )
-        resume_path = resume_ctx.checkpoint_path
-        resume_run_dir = resume_ctx.run_dir
-
-    paths = (
-        run_paths_from_dir(run_dir=resume_run_dir)
-        if resume_run_dir is not None
-        else make_run_paths(run_name=str(train_cfg.run.name))
-    )
+    paths = make_run_paths(run_name=str(train_cfg.run.name))
 
     train(
         cfg=train_cfg,
         paths=paths,
-        resume_path=resume_path,
+        resume_path=None,
         use_rich=not no_rich,
         log_level=log_level,
         config_hydra_yaml=raw_yaml,
