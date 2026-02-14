@@ -61,6 +61,8 @@ class CnnVizConfig:
     k: int = 16
     update_every: int = 1
     ncols: int = 8
+    backend: str = "cv2"  # cv2|mpl
+    scale: int = 8
 
 
 class CnnVisualizer:
@@ -87,15 +89,34 @@ class CnnVisualizer:
         self._last_act: np.ndarray | None = None
         self._kernel_grid: np.ndarray | None = None
 
+        self._backend = str(self._config.backend).strip().lower()
+        self._cv2 = None
         self._plt = None
         self._fig = None
         self._axes = None
         self._im_first = None
         self._im_last = None
         self._im_kernel = None
+        self._window_titles = (
+            "CNN conv1 activations",
+            "CNN conv_last activations",
+            "CNN conv1 kernels",
+        )
 
-        self._init_mpl()
+        self._init_backend()
         self.set_model(model)
+
+    def _init_backend(self) -> None:
+        if self._backend == "cv2":
+            try:
+                import importlib
+
+                self._cv2 = importlib.import_module("cv2")
+                return
+            except Exception:
+                self._cv2 = None
+                self._backend = "mpl"
+        self._init_mpl()
 
     def _init_mpl(self) -> None:
         try:
@@ -257,17 +278,47 @@ class CnnVisualizer:
         with torch.no_grad():
             _ = self._model.policy.extract_features(obs_tensor)
 
+    def _to_uint8(self, img: np.ndarray) -> np.ndarray:
+        x = np.clip(img * 255.0, 0.0, 255.0).astype(np.uint8)
+        return x
+
+    def _show_cv2(self, title: str, img: np.ndarray) -> None:
+        if self._cv2 is None:
+            return
+        x = self._to_uint8(img)
+        if x.ndim == 2:
+            x = self._cv2.applyColorMap(x, self._cv2.COLORMAP_VIRIDIS)
+        scale = max(1, int(self._config.scale))
+        if scale != 1:
+            x = self._cv2.resize(
+                x,
+                (int(x.shape[1] * scale), int(x.shape[0] * scale)),
+                interpolation=self._cv2.INTER_NEAREST,
+            )
+        self._cv2.imshow(title, x)
+
     def update(self, obs: Any) -> None:
         self._step += 1
         if self._step % max(1, int(self._config.update_every)) != 0:
-            return
-        if self._plt is None or self._fig is None:
             return
         self._capture(obs)
 
         first_grid = self._make_act_grid(self._first_act)
         last_grid = self._make_act_grid(self._last_act)
 
+        if self._backend == "cv2" and self._cv2 is not None:
+            if first_grid is not None:
+                self._show_cv2(self._window_titles[0], first_grid)
+            if last_grid is not None:
+                self._show_cv2(self._window_titles[1], last_grid)
+            if self._kernel_grid is not None:
+                self._show_cv2(self._window_titles[2], self._kernel_grid)
+            with suppress(Exception):
+                self._cv2.waitKey(1)
+            return
+
+        if self._plt is None or self._fig is None:
+            return
         if self._im_first is not None and first_grid is not None:
             self._im_first.set_data(first_grid)
             self._im_first.set_clim(0.0, 1.0)
@@ -284,6 +335,11 @@ class CnnVisualizer:
 
     def close(self) -> None:
         self._detach_hooks()
+        if self._backend == "cv2" and self._cv2 is not None:
+            with suppress(Exception):
+                for title in self._window_titles:
+                    self._cv2.destroyWindow(title)
+            return
         if self._plt is not None and self._fig is not None:
             with suppress(Exception):
                 self._plt.close(self._fig)

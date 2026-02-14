@@ -110,6 +110,19 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Update CNN visualization every N steps (default: 1).",
     )
+    p.add_argument(
+        "--cnn-viz-backend",
+        type=str,
+        default="cv2",
+        choices=["cv2", "mpl"],
+        help="CNN viz backend (cv2 or mpl). Default: cv2.",
+    )
+    p.add_argument(
+        "--cnn-viz-scale",
+        type=int,
+        default=8,
+        help="Scale factor for cv2 CNN viz windows (default: 8).",
+    )
 
     p.add_argument(
         "--no-rich",
@@ -361,6 +374,8 @@ def main() -> None:
                     config=CnnVizConfig(
                         k=int(args.cnn_viz_k),
                         update_every=int(args.cnn_viz_every),
+                        backend=str(args.cnn_viz_backend),
+                        scale=int(args.cnn_viz_scale),
                     ),
                     logger=logger,
                 )
