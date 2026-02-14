@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--fps", type=int, default=0, help="Render FPS cap (0 = uncapped).")
     p.add_argument("--sim-hz", type=int, default=25, help="Simulation steps per second.")
-    p.add_argument("--pixel-size", type=int, default=8)
+    p.add_argument("--pixel-size", type=int, default=5)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="auto")
 
