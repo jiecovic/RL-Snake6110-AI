@@ -61,6 +61,7 @@ class CnnVisualizer:
         self._config = config
         self._step = 0
 
+        self._model: Any | None = None
         self._first_conv = None
         self._last_conv = None
         self._hook_handles: list[Any] = []
@@ -158,6 +159,7 @@ class CnnVisualizer:
             self._last_act = None
 
     def set_model(self, model: Any) -> None:
+        self._model = model
         self._detach_hooks()
         convs = self._find_convs(model)
         if not convs:
@@ -203,12 +205,27 @@ class CnnVisualizer:
         tiles = [_normalize(x[i]) for i in idx]
         return _tile_images(tiles, ncols=self._config.ncols)
 
-    def update(self) -> None:
+    def _capture(self, obs: Any) -> None:
+        if self._model is None:
+            return
+        try:
+            import torch
+        except Exception:
+            return
+        try:
+            obs_tensor, _ = self._model.policy.obs_to_tensor(obs)
+        except Exception:
+            return
+        with torch.no_grad():
+            _ = self._model.policy.extract_features(obs_tensor)
+
+    def update(self, obs: Any) -> None:
         self._step += 1
         if self._step % max(1, int(self._config.update_every)) != 0:
             return
         if self._plt is None or self._fig is None:
             return
+        self._capture(obs)
 
         first_grid = self._make_act_grid(self._first_act)
         last_grid = self._make_act_grid(self._last_act)

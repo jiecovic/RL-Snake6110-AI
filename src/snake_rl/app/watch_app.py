@@ -156,7 +156,7 @@ class WatchController:
         initial_ckpt: Path,
         logger,
         repo: Path,
-        on_predict: Callable[[], None] | None = None,
+        on_predict: Callable[[Any], None] | None = None,
         on_model_reload: Callable[[PPO], None] | None = None,
     ):
         self.vec_env = vec_env
@@ -218,11 +218,12 @@ class WatchController:
     def step(self, action_override: int | None = None):
         self.maybe_reload()
 
+        obs_for_model = sanitize_observation(self.obs)
+        if self.on_predict is not None:
+            self.on_predict(obs_for_model)
+
         if action_override is None:
-            obs_for_model = sanitize_observation(self.obs)
             action, _ = self.model.predict(obs_for_model, deterministic=True)
-            if self.on_predict is not None:
-                self.on_predict()
 
             if np.isscalar(action):
                 if isinstance(action, (bool, int, np.integer, np.floating)):
