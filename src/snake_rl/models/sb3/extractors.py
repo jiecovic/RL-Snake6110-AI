@@ -63,6 +63,7 @@ class SnakeExtractor(BaseFeaturesExtractor):
         feature_tokens: list[list[str]] | None = None,
         flatten_mlp_hidden: int | list[int] | None = None,
         flatten_mlp_hidden_dim: int | None = None,
+        head_layernorm: bool = True,
         head_activation: str = "gelu",
         post_mlp_hidden: list[int] | None = None,
         post_mlp_dropout: float = 0.0,
@@ -182,6 +183,7 @@ class SnakeExtractor(BaseFeaturesExtractor):
             dropout=float(post_mlp_dropout),
             flatten_hidden=flatten_mlp_hidden,
             use_flatten=(self.pooling == "flatten"),
+            use_layernorm=bool(head_layernorm),
             activation=str(head_activation),
         )
 
@@ -284,6 +286,7 @@ class SnakeExtractor(BaseFeaturesExtractor):
         dropout: float,
         flatten_hidden: int | list[int] | None,
         use_flatten: bool,
+        use_layernorm: bool,
         activation: str,
     ) -> nn.Module:
         act_name = str(activation).strip().lower()
@@ -305,7 +308,9 @@ class SnakeExtractor(BaseFeaturesExtractor):
         if use_flatten:
             flat_hidden = _normalize_hidden(flatten_hidden)
             if flat_hidden is not None:
-                layers: list[nn.Module] = [nn.LayerNorm(int(in_dim))]
+                layers: list[nn.Module] = []
+                if use_layernorm:
+                    layers.append(nn.LayerNorm(int(in_dim)))
                 d = int(in_dim)
                 for h in flat_hidden:
                     layers.append(nn.Linear(d, int(h)))
