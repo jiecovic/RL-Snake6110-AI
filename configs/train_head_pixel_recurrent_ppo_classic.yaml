@@ -5,6 +5,7 @@ defaults:                               # Hydra defaults: select config groups f
   - env: head_pixel_small               # Environment + observation spec.
   - feature_extractor: snake_pixel_cnn_head_pomdp_v2  # Feature extractor architecture.
   - algo: recurrent_ppo                 # Algorithm config.
+  - metrics: default                    # Metrics logging config.
   - logging: default                    # Logging config.
   - _self_                              # Include this file's top-level keys.
 

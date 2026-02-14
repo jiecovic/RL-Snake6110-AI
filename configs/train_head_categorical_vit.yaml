@@ -5,6 +5,7 @@ defaults:                                     # Hydra defaults: select config gr
   - env: head_categorical                     # Environment + observation spec.
   - feature_extractor: snake_categorical_vit  # Feature extractor architecture.
   - algo: ppo                                 # Algorithm config.
+  - metrics: default                          # Metrics logging config.
   - logging: default                          # Logging config.
   - _self_                                    # Include this file's top-level keys.
 
