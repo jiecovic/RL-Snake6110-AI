@@ -62,7 +62,7 @@ _COLS: list[tuple[str, int]] = [
 @dataclass(slots=True)
 class EvalTablePrinter:
     header_every: int = 20
-    header_every_s: float = 300.0
+    header_every_s: float = 0.0
     _rows: int = 0
     _last_header_t: float = field(default_factory=perf_counter)
 
