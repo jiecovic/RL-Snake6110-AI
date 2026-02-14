@@ -195,6 +195,9 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Local config overrides
+configs/local/
+
 # PyPI configuration file
 .pypirc
 
