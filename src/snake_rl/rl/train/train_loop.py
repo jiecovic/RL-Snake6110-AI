@@ -29,6 +29,7 @@ def train(
     paths: RunPaths,
     resume_path: Path | None = None,
     use_rich: bool = True,
+    resume_mode: str = "remaining",
     log_level: str = "INFO",
     config_hydra_yaml: str | None = None,
     config_validated: dict[str, Any] | None = None,
@@ -95,7 +96,10 @@ def train(
             callbacks = CallbackList([callbacks, SnakeProgressBarCallback()])
 
         learn_timesteps = int(cfg.run.total_timesteps)
-        if resume_path is not None:
+        resume_mode_norm = str(resume_mode).strip().lower()
+        if resume_mode_norm not in {"remaining", "fixed"}:
+            raise ValueError("resume_mode must be 'remaining' or 'fixed'")
+        if resume_path is not None and resume_mode_norm == "remaining":
             try:
                 current_steps = int(getattr(model, "num_timesteps", 0))
             except Exception:
@@ -119,7 +123,7 @@ def train(
                     )
                     learn_timesteps = remaining
 
-        if resume_path is not None and learn_timesteps <= 0:
+        if resume_path is not None and resume_mode_norm == "remaining" and learn_timesteps <= 0:
             logger.info("[train] resume: no remaining timesteps; skipping learn.")
             finished_ok = True
             return paths
@@ -129,7 +133,7 @@ def train(
             progress_bar=False,
             callback=callbacks,
             tb_log_name="ppo",
-            reset_num_timesteps=resume_path is None,
+            reset_num_timesteps=resume_path is None or resume_mode_norm == "fixed",
         )
 
         final_path = paths.checkpoint_dir / "final.zip"

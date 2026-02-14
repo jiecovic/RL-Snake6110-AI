@@ -15,6 +15,7 @@ from snake_rl.config.loader import (
 from snake_rl.config.pydantic_models import TrainConfigModel
 from snake_rl.rl.train.train_loop import train
 from snake_rl.utils.runs.paths import repo_root, runs_root
+from snake_rl.utils.runs.refine import resolve_refine_context
 from snake_rl.utils.runs.resume import resolve_resume_context
 from snake_rl.utils.runs.run_paths import make_run_paths, run_paths_from_dir
 
@@ -63,6 +64,56 @@ def _apply_resume_override(
     model = TrainConfigModel.model_validate(raw)
     cfg = model.to_dataclass()
     return cfg, model, raw_yaml
+
+
+def _apply_refine_override(
+    *,
+    cfg: Any,
+    model: TrainConfigModel,
+    raw_yaml: str | None,
+    refine_steps: int,
+    refine_lr: float | None,
+    refine_ent: float | None,
+    base_name: str,
+    source_label: str,
+    refine_suffix: str | None,
+    refine_name: str | None,
+) -> tuple[Any, TrainConfigModel, str | None, str]:
+    if int(refine_steps) <= 0:
+        raise ValueError("--refine-steps must be > 0")
+
+    raw = model.model_dump(mode="python")
+    run = dict(raw.get("run") or {})
+    if refine_name:
+        new_name = str(refine_name).strip()
+    else:
+        suffix = str(refine_suffix or "refined").strip()
+        parts = [str(base_name).strip()]
+        if source_label:
+            parts.append(str(source_label).strip())
+        if suffix:
+            parts.append(suffix)
+        new_name = "_".join(p for p in parts if p)
+    run["name"] = new_name
+    run["total_timesteps"] = int(refine_steps)
+    run["resume_checkpoint"] = None
+    raw["run"] = run
+
+    if refine_lr is not None or refine_ent is not None:
+        train = dict(raw.get("train") or {})
+        algo = dict(train.get("algo") or {})
+        params = dict(algo.get("params") or {})
+        if refine_lr is not None:
+            params["learning_rate"] = float(refine_lr)
+        if refine_ent is not None:
+            params["ent_coef"] = float(refine_ent)
+        algo["params"] = params
+        train["algo"] = algo
+        raw["train"] = train
+
+    model = TrainConfigModel.model_validate(raw)
+    cfg = model.to_dataclass()
+    return cfg, model, raw_yaml, new_name
 
 
 def run_from_config_path(
@@ -119,6 +170,78 @@ def run_from_config_path(
         cfg=cfg,
         paths=paths,
         resume_path=resume_path,
+        use_rich=use_rich,
+        log_level=effective_log_level,
+        config_hydra_yaml=config_hydra_yaml,
+        config_validated=model.model_dump(mode="python"),
+    )
+
+
+def run_refine(
+    *,
+    refine: str,
+    refine_from: str | None,
+    refine_steps: int,
+    refine_lr: float | None,
+    refine_ent: float | None,
+    refine_suffix: str | None,
+    refine_name: str | None,
+    config_path: Path | None,
+    overrides: list[str] | None = None,
+    no_rich: bool | None = None,
+    log_level: str | None = None,
+) -> None:
+    ctx = resolve_refine_context(
+        refine,
+        refine_from=refine_from,
+        runs_root=runs_root(),
+        legacy_root=repo_root() / "experiments",
+    )
+
+    cfg_path = Path(config_path) if config_path is not None else None
+    if cfg_path is None:
+        if ctx.config_path is None:
+            raise FileNotFoundError(
+                "Could not infer config from --refine. Pass --config explicitly."
+            )
+        cfg_path = ctx.config_path
+
+    cfg, logging_cfg, model, raw_yaml = load_train_config_from_path(
+        config_path=cfg_path,
+        config_root=CONFIG_DIR,
+        overrides=list(overrides or []),
+    )
+
+    base_name = ctx.run_dir.name if ctx.run_dir is not None else cfg.run.name
+    cfg, model, raw_yaml, run_name = _apply_refine_override(
+        cfg=cfg,
+        model=model,
+        raw_yaml=raw_yaml,
+        refine_steps=int(refine_steps),
+        refine_lr=refine_lr,
+        refine_ent=refine_ent,
+        base_name=str(base_name),
+        source_label=str(ctx.source_label),
+        refine_suffix=refine_suffix,
+        refine_name=refine_name,
+    )
+
+    config_hydra_yaml = raw_yaml if _is_under_config_root(cfg_path) else None
+
+    cfg_no_rich = bool(logging_cfg.get("no_rich", False))
+    cfg_log_level = str(logging_cfg.get("level", "INFO"))
+    use_rich = not cfg_no_rich
+    if no_rich is True:
+        use_rich = False
+    effective_log_level = cfg_log_level if log_level is None else str(log_level)
+
+    paths = make_run_paths(run_name=str(run_name))
+
+    train(
+        cfg=cfg,
+        paths=paths,
+        resume_path=ctx.checkpoint_path,
+        resume_mode="fixed",
         use_rich=use_rich,
         log_level=effective_log_level,
         config_hydra_yaml=config_hydra_yaml,
