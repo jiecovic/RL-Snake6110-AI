@@ -177,7 +177,10 @@ class RustVecEnv(VecEnv):
         # Apply step reward only on non-win, non-food steps.
         step_mask = (~is_win) & (~is_food)
         if np.any(step_mask):
-            reward[step_mask] += step_reward
+            if isinstance(step_reward, np.ndarray):
+                reward[step_mask] += step_reward[step_mask]
+            else:
+                reward[step_mask] += float(step_reward)
 
         if np.any(is_fatal):
             reward[is_fatal] -= float(self.reward.fatal_penalty)
