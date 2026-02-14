@@ -123,6 +123,18 @@ def parse_args() -> argparse.Namespace:
         default=8,
         help="Scale factor for cv2 CNN viz windows (default: 8).",
     )
+    p.add_argument(
+        "--cnn-viz-gap",
+        type=int,
+        default=1,
+        help="Gap (in pixels) between feature map tiles (default: 1).",
+    )
+    p.add_argument(
+        "--cnn-viz-kernel-gap",
+        type=int,
+        default=2,
+        help="Gap (in pixels) between kernel tiles (default: 2).",
+    )
 
     p.add_argument(
         "--no-rich",
@@ -376,6 +388,8 @@ def main() -> None:
                         update_every=int(args.cnn_viz_every),
                         backend=str(args.cnn_viz_backend),
                         scale=int(args.cnn_viz_scale),
+                        tile_gap=int(args.cnn_viz_gap),
+                        kernel_gap=int(args.cnn_viz_kernel_gap),
                     ),
                     logger=logger,
                 )

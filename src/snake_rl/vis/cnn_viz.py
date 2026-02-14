@@ -17,7 +17,13 @@ def _normalize(img: np.ndarray) -> np.ndarray:
     return ((img - vmin) / (vmax - vmin)).astype(np.float32)
 
 
-def _tile_images(images: list[np.ndarray], *, ncols: int, square_tiles: bool = False) -> np.ndarray:
+def _tile_images(
+    images: list[np.ndarray],
+    *,
+    ncols: int,
+    square_tiles: bool = False,
+    gap: int = 0,
+) -> np.ndarray:
     if not images:
         return np.zeros((1, 1), dtype=np.float32)
     h, w = images[0].shape[:2]
@@ -41,11 +47,16 @@ def _tile_images(images: list[np.ndarray], *, ncols: int, square_tiles: bool = F
     ncols = max(1, int(ncols))
     ncols = min(ncols, len(images))
     nrows = int(ceil(len(images) / float(ncols)))
-    grid = np.zeros((nrows * h, ncols * w), dtype=np.float32)
+    gap = max(0, int(gap))
+    grid_h = nrows * h + (nrows - 1) * gap
+    grid_w = ncols * w + (ncols - 1) * gap
+    grid = np.zeros((grid_h, grid_w), dtype=np.float32)
     for idx, img in enumerate(images):
         r = idx // ncols
         c = idx % ncols
-        grid[r * h : (r + 1) * h, c * w : (c + 1) * w] = img
+        y0 = r * (h + gap)
+        x0 = c * (w + gap)
+        grid[y0 : y0 + h, x0 : x0 + w] = img
     return grid
 
 
@@ -63,6 +74,8 @@ class CnnVizConfig:
     ncols: int = 8
     backend: str = "cv2"  # cv2|mpl
     scale: int = 8
+    tile_gap: int = 1
+    kernel_gap: int = 2
 
 
 class CnnVisualizer:
@@ -251,7 +264,12 @@ class CnnVisualizer:
         scores = np.mean(np.abs(filt), axis=(1, 2))
         idx = _topk_indices(scores, self._config.k)
         tiles = [_normalize(filt[i]) for i in idx]
-        return _tile_images(tiles, ncols=self._config.ncols, square_tiles=True)
+        return _tile_images(
+            tiles,
+            ncols=self._config.ncols,
+            square_tiles=True,
+            gap=int(self._config.kernel_gap),
+        )
 
     def _make_act_grid(self, act: np.ndarray | None) -> np.ndarray | None:
         if act is None or act.ndim < 3:
@@ -262,7 +280,12 @@ class CnnVisualizer:
         scores = np.mean(np.abs(x), axis=(1, 2))
         idx = _topk_indices(scores, self._config.k)
         tiles = [_normalize(x[i]) for i in idx]
-        return _tile_images(tiles, ncols=self._config.ncols, square_tiles=True)
+        return _tile_images(
+            tiles,
+            ncols=self._config.ncols,
+            square_tiles=True,
+            gap=int(self._config.tile_gap),
+        )
 
     def _capture(self, obs: Any) -> None:
         if self._model is None:
