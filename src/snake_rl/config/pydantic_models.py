@@ -38,6 +38,14 @@ class RunConfigModel(_BaseConfigModel):
 
     @model_validator(mode="before")
     @classmethod
+    def _drop_legacy_resume_progress(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "resume_progress" in data:
+            data = dict(data)
+            data.pop("resume_progress", None)
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
     def _lift_legacy_checkpoint_fields(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data

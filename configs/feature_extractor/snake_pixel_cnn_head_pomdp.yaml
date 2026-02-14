@@ -6,10 +6,11 @@ params:                                             # Unified extractor paramete
     params:                                         # Stem-specific parameters.
       d_model: 64                                  # Token embedding dimension.
       layers:                                       # CNN layers (list of conv specs).
-        - { out: 32, k: 8, s: 4, p: 0, act: relu }  # Each layer: out channels, kernel, stride, padding, activation.
-        - { out: 64, k: 4, s: 2, p: 0, act: relu }
+        - { out: 54, k: 4, s: 4, p: 0, act: relu }  # Each layer: out channels, kernel, stride, padding, activation.
         - { out: 64, k: 3, s: 1, p: 0, act: relu }
+        - { out: 128, k: 3, s: 1, p: 0, act: relu }
         - { out: 64, k: 1, s: 1, p: 0, act: relu }
+        - { out: 64, k: 2, s: 2, p: 0, act: relu}
 #        - { out: 128, k: 3, s: 1, p: 0, act: relu } # pool : { type: avg, k: 2, s: 2, p: 0} }
 #        - { out: 128, k: 2, s: 2, p: 0, act: relu}
 #        - { out: 64, k: 3, s: 1, p: 1, act: relu }
@@ -22,5 +23,5 @@ params:                                             # Unified extractor paramete
   pooling: flatten                                  # Pooling mode: cls|mean|max|cls_mean|meanmax|flatten.
   use_cls_token: false                              # Add CLS token (required for pooling=cls|cls_mean).
   use_frame_embed: false                            # Add frame embedding for stacked frames.
-  flatten_mlp_hidden: []                           # Hidden dims for flatten + MLP head (pooling=flatten only).
+  flatten_mlp_hidden: [1024]                           # Hidden dims for flatten + MLP head (pooling=flatten only).
   head_activation: gelu                             # Head MLP activation: gelu|relu|elu|leaky_relu|silu|swish|tanh.

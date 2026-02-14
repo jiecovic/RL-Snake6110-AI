@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from stable_baselines3.common.callbacks import CallbackList
 from stable_baselines3.common.utils import set_random_seed
 
 from snake_rl.config.schema import TrainConfig
 from snake_rl.rl.callbacks.factory import make_callbacks
+from snake_rl.rl.callbacks.progress_bar import SnakeProgressBarCallback
 from snake_rl.rl.envs.factory import make_vec_env
 from snake_rl.rl.eval.eval_utils import evaluate_model
 from snake_rl.rl.metrics import Metrics
@@ -85,7 +87,12 @@ def train(
 
         log_ppo_params(model=model, cfg=cfg, paths=paths, logger=logger, label="train")
 
-        callbacks = make_callbacks(cfg=cfg, checkpoint_dir=paths.checkpoint_dir)
+        callbacks = make_callbacks(
+            cfg=cfg,
+            checkpoint_dir=paths.checkpoint_dir,
+        )
+        if use_rich:
+            callbacks = CallbackList([callbacks, SnakeProgressBarCallback()])
 
         learn_timesteps = int(cfg.run.total_timesteps)
         if resume_path is not None:
@@ -119,7 +126,7 @@ def train(
 
         model.learn(
             total_timesteps=int(learn_timesteps),
-            progress_bar=bool(use_rich),
+            progress_bar=False,
             callback=callbacks,
             tb_log_name="ppo",
             reset_num_timesteps=resume_path is None,

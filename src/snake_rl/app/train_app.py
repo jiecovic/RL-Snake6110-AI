@@ -35,13 +35,29 @@ def _apply_resume_override(
     model: TrainConfigModel,
     raw_yaml: str | None,
     resume_override: str | None,
+    resume_total_steps: int | None,
+    resume_add_steps: int | None,
 ) -> tuple[Any, TrainConfigModel, str | None]:
-    if not resume_override:
+    if resume_total_steps is not None and resume_add_steps is not None:
+        raise ValueError("Use only one of --resume-total-steps or --resume-add-steps.")
+
+    if not resume_override and resume_total_steps is None and resume_add_steps is None:
         return cfg, model, raw_yaml
 
     raw = model.model_dump(mode="python")
     run = dict(raw.get("run") or {})
-    run["resume_checkpoint"] = str(resume_override)
+    if resume_override:
+        run["resume_checkpoint"] = str(resume_override)
+    if resume_total_steps is not None:
+        if int(resume_total_steps) <= 0:
+            raise ValueError("--resume-total-steps must be > 0")
+        run["total_timesteps"] = int(resume_total_steps)
+    if resume_add_steps is not None:
+        extra = int(resume_add_steps)
+        if extra <= 0:
+            raise ValueError("--resume-add-steps must be > 0")
+        base = int(run.get("total_timesteps", 0))
+        run["total_timesteps"] = base + extra
     raw["run"] = run
 
     model = TrainConfigModel.model_validate(raw)
@@ -56,6 +72,8 @@ def run_from_config_path(
     no_rich: bool | None = None,
     log_level: str | None = None,
     resume_override: str | None = None,
+    resume_total_steps: int | None = None,
+    resume_add_steps: int | None = None,
 ) -> None:
     cfg_path = Path(config_path)
     cfg, logging_cfg, model, raw_yaml = load_train_config_from_path(
@@ -64,7 +82,12 @@ def run_from_config_path(
         overrides=list(overrides or []),
     )
     cfg, model, raw_yaml = _apply_resume_override(
-        cfg=cfg, model=model, raw_yaml=raw_yaml, resume_override=resume_override
+        cfg=cfg,
+        model=model,
+        raw_yaml=raw_yaml,
+        resume_override=resume_override,
+        resume_total_steps=resume_total_steps,
+        resume_add_steps=resume_add_steps,
     )
     config_hydra_yaml = raw_yaml if _is_under_config_root(cfg_path) else None
 

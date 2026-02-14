@@ -35,6 +35,18 @@ def _parse_args() -> argparse.Namespace:
             "If --config is omitted, tries to load runs/<run>/config_snapshot.yaml."
         ),
     )
+    p.add_argument(
+        "--resume-total-steps",
+        type=int,
+        default=None,
+        help="Override run.total_timesteps when resuming (absolute).",
+    )
+    p.add_argument(
+        "--resume-add-steps",
+        type=int,
+        default=None,
+        help="Add N steps to run.total_timesteps when resuming (relative).",
+    )
     p.add_argument("--no-rich", action="store_true", help="Disable Rich logging.")
     p.add_argument("--log-level", type=str, default=None, help="Override logging level.")
     return p.parse_args()
@@ -58,6 +70,8 @@ def main() -> None:
         no_rich=bool(args.no_rich),
         log_level=args.log_level,
         resume_override=args.resume,
+        resume_total_steps=args.resume_total_steps,
+        resume_add_steps=args.resume_add_steps,
     )
 
 
