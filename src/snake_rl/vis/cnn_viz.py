@@ -17,10 +17,27 @@ def _normalize(img: np.ndarray) -> np.ndarray:
     return ((img - vmin) / (vmax - vmin)).astype(np.float32)
 
 
-def _tile_images(images: list[np.ndarray], *, ncols: int) -> np.ndarray:
+def _tile_images(images: list[np.ndarray], *, ncols: int, square_tiles: bool = False) -> np.ndarray:
     if not images:
         return np.zeros((1, 1), dtype=np.float32)
     h, w = images[0].shape[:2]
+    if square_tiles:
+        size = max(h, w)
+        padded: list[np.ndarray] = []
+        for img in images:
+            ph, pw = img.shape[:2]
+            pad_h = size - ph
+            pad_w = size - pw
+            if pad_h or pad_w:
+                img = np.pad(
+                    img,
+                    ((0, pad_h), (0, pad_w)),
+                    mode="constant",
+                    constant_values=0.0,
+                )
+            padded.append(img)
+        images = padded
+        h = w = size
     ncols = max(1, int(ncols))
     ncols = min(ncols, len(images))
     nrows = int(ceil(len(images) / float(ncols)))
@@ -211,7 +228,7 @@ class CnnVisualizer:
         scores = np.mean(np.abs(filt), axis=(1, 2))
         idx = _topk_indices(scores, self._config.k)
         tiles = [_normalize(filt[i]) for i in idx]
-        return _tile_images(tiles, ncols=self._config.ncols)
+        return _tile_images(tiles, ncols=self._config.ncols, square_tiles=True)
 
     def _make_act_grid(self, act: np.ndarray | None) -> np.ndarray | None:
         if act is None or act.ndim < 3:
@@ -222,7 +239,7 @@ class CnnVisualizer:
         scores = np.mean(np.abs(x), axis=(1, 2))
         idx = _topk_indices(scores, self._config.k)
         tiles = [_normalize(x[i]) for i in idx]
-        return _tile_images(tiles, ncols=self._config.ncols)
+        return _tile_images(tiles, ncols=self._config.ncols, square_tiles=True)
 
     def _capture(self, obs: Any) -> None:
         if self._model is None:
