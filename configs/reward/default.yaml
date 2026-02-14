@@ -1,7 +1,7 @@
 # Reward shaping:
 #   tiny = step_penalty_scale / max_steps
 #
-#   step reward (applied only on non-win steps):
+#   step reward (applied only on non-win, non-food steps):
 #     step = (1-w)*(-tiny) + w*shaped(p,pivot)
 #     shaped(p,pivot) =
 #       -tiny * (pivot - p) / pivot         if p < pivot
@@ -17,8 +17,8 @@
 #       fatal   -> subtract fatal_penalty
 #       timeout -> subtract timeout_penalty
 #
-#   food reward (non-win only):
-#     food = +food_reward + food_speed_bonus * (1 - steps_since_food / max_steps)
+#   food reward (non-win only, excludes step reward):
+#     food = +food_reward + food_speed_bonus * (1 - pre_steps_since_food / max_steps)
 max_steps_factor: 1.3      # Max steps = max playable tiles * factor.
 win_reward: 25.0           # Reward added on win.
 food_reward: 3.0           # Reward added per food eaten.

@@ -127,7 +127,8 @@ class RustVecEnv(VecEnv):
 
         obs = self._build_obs()
 
-        steps_since_food = self._steps_since_foods()
+        # Capture pre-step steps_since_food so food bonus reflects time-to-food.
+        pre_steps_since_food = self._steps_since_foods()
         is_win = (masks & int(core.MOVE_WIN)) > 0
         is_food = (masks & int(core.MOVE_FOOD)) > 0
         is_timeout = (masks & int(core.MOVE_TIMEOUT)) > 0
@@ -165,15 +166,18 @@ class RustVecEnv(VecEnv):
                 ).astype(np.float32)
             step_reward = (1.0 - weight) * base_step + (weight * shaped)
 
-        reward[~is_win] += step_reward
-
         if np.any(is_food & ~is_win):
             food_bonus = float(self.reward.food_speed_bonus) * (
-                1.0 - (steps_since_food.astype(np.float32) / float(self.max_steps))
+                1.0 - (pre_steps_since_food.astype(np.float32) / float(self.max_steps))
             )
             food_mask = is_food & ~is_win
             reward[food_mask] += float(self.reward.food_reward)
             reward[food_mask] += food_bonus[food_mask]
+
+        # Apply step reward only on non-win, non-food steps.
+        step_mask = (~is_win) & (~is_food)
+        if np.any(step_mask):
+            reward[step_mask] += step_reward
 
         if np.any(is_fatal):
             reward[is_fatal] -= float(self.reward.fatal_penalty)

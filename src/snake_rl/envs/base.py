@@ -119,10 +119,10 @@ class BaseSnakeEnv(gym.Env, ABC):
         reward = 0.0
         action_i = int(action)
         self.action_spec.validate_action(action_i)
+        # Capture pre-step steps_since_food so food bonus reflects time-to-food.
+        pre_steps_since_food = int(self.game.steps_since_food)
         results = self.action_spec.step(self.game, action_i)
         obs = self.get_obs()
-
-        steps_since_food = int(self.game.steps_since_food)
 
         is_win = bool(results & core.MOVE_WIN)
         is_fatal = bool(results & self.FATAL_MASK)
@@ -151,13 +151,14 @@ class BaseSnakeEnv(gym.Env, ABC):
                     shaped = self.tiny_reward * (progress - pivot) / (1.0 - pivot)
                 step_reward = (1.0 - weight) * base_step + (weight * shaped)
 
-            reward += step_reward
-
             if is_food:
+                # Food reward is not affected by per-step penalty/bonus.
                 reward += float(self.reward.food_reward)
                 reward += float(self.reward.food_speed_bonus) * (
-                    1.0 - (steps_since_food / self.max_steps)
+                    1.0 - (pre_steps_since_food / self.max_steps)
                 )
+            else:
+                reward += step_reward
 
             if is_fatal:
                 reward -= float(self.reward.fatal_penalty)
