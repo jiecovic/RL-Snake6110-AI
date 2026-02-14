@@ -49,25 +49,23 @@ class TerminationCauseLogger(BaseCallback):
 
         if resolve_log_termination(self.cfg, group="train", default=True):
             for cause, count in self.cause_counts.items():
-                self.logger.record(f"train/{Metrics.TERM_PREFIX}{cause}_count", count)
-                self.logger.record(
-                    f"train/{Metrics.TERM_PREFIX}{cause}_rate", count / self.episode_count
-                )
+                self.logger.record(f"{Metrics.TERM_PREFIX}{cause}_count", count)
+                self.logger.record(f"{Metrics.TERM_PREFIX}{cause}_rate", count / self.episode_count)
 
         if self.final_scores:
             mean_score = sum(self.final_scores) / len(self.final_scores)
             if Metrics.EP_SCORE_MEAN in log_keys:
-                self.logger.record(f"train/{Metrics.EP_SCORE_MEAN}", mean_score)
+                self.logger.record(f"{Metrics.EP_SCORE_MEAN}", mean_score)
             if Metrics.EP_SCORE_MAX in log_keys:
-                self.logger.record(f"train/{Metrics.EP_SCORE_MAX}", max(self.final_scores))
+                self.logger.record(f"{Metrics.EP_SCORE_MAX}", max(self.final_scores))
             if Metrics.EP_SCORE_MIN in log_keys:
-                self.logger.record(f"train/{Metrics.EP_SCORE_MIN}", min(self.final_scores))
+                self.logger.record(f"{Metrics.EP_SCORE_MIN}", min(self.final_scores))
 
         wins = int(self.cause_counts.get("win", 0))
         if Metrics.EP_WINS in log_keys:
-            self.logger.record(f"train/{Metrics.EP_WINS}", wins)
+            self.logger.record(f"{Metrics.EP_WINS}", wins)
         if Metrics.EP_WIN_RATE in log_keys:
-            self.logger.record(f"train/{Metrics.EP_WIN_RATE}", wins / self.episode_count)
+            self.logger.record(f"{Metrics.EP_WIN_RATE}", wins / self.episode_count)
 
         self.cause_counts.clear()
         self.episode_count = 0
