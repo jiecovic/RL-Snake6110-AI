@@ -25,6 +25,8 @@ class RewardConfig:
       - fatal_penalty: subtracted on death
       - step_penalty_scale: scaled by 1/max_steps and subtracted each step
       - timeout_penalty: subtracted on timeout truncation
+      - step_progress_pivot: progress pivot for step shaping (0..1)
+      - step_progress_weight: blend weight (0=constant penalty, 1=fully shaped)
       - max_steps_factor: multiplier for max_steps = max_playable_tiles * factor
     """
 
@@ -35,6 +37,8 @@ class RewardConfig:
     fatal_penalty: float = 5.0
     step_penalty_scale: float = 1.0
     timeout_penalty: float = 0.0
+    step_progress_pivot: float = 0.8
+    step_progress_weight: float = 0.0
 
 
 @dataclass(frozen=True)

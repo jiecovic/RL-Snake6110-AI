@@ -133,7 +133,25 @@ class BaseSnakeEnv(gym.Env, ABC):
             terminated = True
             truncated = False
         else:
-            reward -= self.tiny_reward
+            base_step = -self.tiny_reward
+            step_reward = base_step
+            weight = float(self.reward.step_progress_weight)
+            if weight != 0.0:
+                pivot = float(self.reward.step_progress_pivot)
+                pivot = min(max(pivot, 0.0), 1.0)
+                progress = float(self.game.snake_progress)
+                progress = min(max(progress, 0.0), 1.0)
+                if pivot <= 0.0:
+                    shaped = self.tiny_reward
+                elif pivot >= 1.0:
+                    shaped = -self.tiny_reward
+                elif progress < pivot:
+                    shaped = -self.tiny_reward * (pivot - progress) / pivot
+                else:
+                    shaped = self.tiny_reward * (progress - pivot) / (1.0 - pivot)
+                step_reward = (1.0 - weight) * base_step + (weight * shaped)
+
+            reward += step_reward
 
             if is_food:
                 reward += float(self.reward.food_reward)

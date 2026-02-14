@@ -145,14 +145,35 @@ class RustVecEnv(VecEnv):
 
         # Win overrides normal per-step penalty
         reward[is_win] += float(self.reward.win_reward)
-        reward[~is_win] -= float(self.tiny_reward)
+        base_step = -float(self.tiny_reward)
+        step_reward = base_step
+        weight = float(self.reward.step_progress_weight)
+        if weight != 0.0:
+            pivot = float(self.reward.step_progress_pivot)
+            pivot = float(min(max(pivot, 0.0), 1.0))
+            progress = np.asarray(self._vec_game.snake_progresses(), dtype=np.float32)
+            progress = np.clip(progress, 0.0, 1.0)
+            if pivot <= 0.0:
+                shaped = np.full(progress.shape, float(self.tiny_reward), dtype=np.float32)
+            elif pivot >= 1.0:
+                shaped = np.full(progress.shape, -float(self.tiny_reward), dtype=np.float32)
+            else:
+                shaped = np.where(
+                    progress < pivot,
+                    -float(self.tiny_reward) * (pivot - progress) / pivot,
+                    float(self.tiny_reward) * (progress - pivot) / (1.0 - pivot),
+                ).astype(np.float32)
+            step_reward = (1.0 - weight) * base_step + (weight * shaped)
+
+        reward[~is_win] += step_reward
 
         if np.any(is_food & ~is_win):
             food_bonus = float(self.reward.food_speed_bonus) * (
                 1.0 - (steps_since_food.astype(np.float32) / float(self.max_steps))
             )
-            reward[is_food] += float(self.reward.food_reward)
-            reward[is_food] += food_bonus[is_food]
+            food_mask = is_food & ~is_win
+            reward[food_mask] += float(self.reward.food_reward)
+            reward[food_mask] += food_bonus[food_mask]
 
         if np.any(is_fatal):
             reward[is_fatal] -= float(self.reward.fatal_penalty)

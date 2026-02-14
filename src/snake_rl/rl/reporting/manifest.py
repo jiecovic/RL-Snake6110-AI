@@ -71,6 +71,8 @@ def _to_summary_yaml_dict(cfg: TrainConfig) -> dict[str, Any]:
             "fatal_penalty": float(cfg.reward.fatal_penalty),
             "step_penalty_scale": float(cfg.reward.step_penalty_scale),
             "timeout_penalty": float(cfg.reward.timeout_penalty),
+            "step_progress_pivot": float(cfg.reward.step_progress_pivot),
+            "step_progress_weight": float(cfg.reward.step_progress_weight),
         },
         "env": {
             "action": {"type": str(cfg.env.action.type)},

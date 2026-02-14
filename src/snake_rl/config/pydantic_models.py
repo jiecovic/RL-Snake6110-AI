@@ -85,6 +85,8 @@ class RewardConfigModel(_BaseConfigModel):
     fatal_penalty: float = 5.0
     step_penalty_scale: float = 1.0
     timeout_penalty: float = 0.0
+    step_progress_pivot: float = 0.8
+    step_progress_weight: float = 0.0
 
 
 class ActionConfigModel(_BaseConfigModel):
@@ -304,6 +306,8 @@ class TrainConfigModel(_BaseConfigModel):
                 fatal_penalty=float(self.reward.fatal_penalty),
                 step_penalty_scale=float(self.reward.step_penalty_scale),
                 timeout_penalty=float(self.reward.timeout_penalty),
+                step_progress_pivot=float(self.reward.step_progress_pivot),
+                step_progress_weight=float(self.reward.step_progress_weight),
             ),
             env=EnvConfig(
                 action=ActionConfig(
