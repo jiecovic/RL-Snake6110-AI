@@ -99,9 +99,27 @@ class CnnVisualizer:
             ax.axis("off")
         self._fig = fig
         self._axes = axes
-        self._im_first = axes[0].imshow(np.zeros((1, 1)), cmap="viridis", interpolation="nearest")
-        self._im_last = axes[1].imshow(np.zeros((1, 1)), cmap="viridis", interpolation="nearest")
-        self._im_kernel = axes[2].imshow(np.zeros((1, 1)), cmap="viridis", interpolation="nearest")
+        self._im_first = axes[0].imshow(
+            np.zeros((1, 1)),
+            cmap="viridis",
+            interpolation="nearest",
+            vmin=0.0,
+            vmax=1.0,
+        )
+        self._im_last = axes[1].imshow(
+            np.zeros((1, 1)),
+            cmap="viridis",
+            interpolation="nearest",
+            vmin=0.0,
+            vmax=1.0,
+        )
+        self._im_kernel = axes[2].imshow(
+            np.zeros((1, 1)),
+            cmap="viridis",
+            interpolation="nearest",
+            vmin=0.0,
+            vmax=1.0,
+        )
         with suppress(Exception):
             manager = getattr(fig.canvas, "manager", None)
             if manager is not None:
@@ -232,10 +250,13 @@ class CnnVisualizer:
 
         if self._im_first is not None and first_grid is not None:
             self._im_first.set_data(first_grid)
+            self._im_first.set_clim(0.0, 1.0)
         if self._im_last is not None and last_grid is not None:
             self._im_last.set_data(last_grid)
+            self._im_last.set_clim(0.0, 1.0)
         if self._im_kernel is not None and self._kernel_grid is not None:
             self._im_kernel.set_data(self._kernel_grid)
+            self._im_kernel.set_clim(0.0, 1.0)
 
         with suppress(Exception):
             self._fig.canvas.draw_idle()
