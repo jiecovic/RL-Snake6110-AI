@@ -114,6 +114,8 @@ class CnnVisualizer:
         ):
             ax.set_title(title)
             ax.set_aspect("equal", adjustable="box")
+            with suppress(Exception):
+                ax.set_box_aspect(1)
             ax.axis("off")
         self._fig = fig
         self._axes = axes
