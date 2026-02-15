@@ -2,7 +2,7 @@ name: snake_run               # Run name (used for run folder naming).
 seed: 42                      # RNG seed for training.
 num_envs: 64                  # Number of parallel environments.
 vec: rust                     # Vectorization: dummy|subproc|rust (subproc currently aliases dummy).
-total_timesteps: 100_000_000  # Total training timesteps.
+total_timesteps: 900_000_000  # Total training timesteps.
 checkpoint:                   # Checkpointing + periodic eval (runner settings, not SB3 params).
   freq: 1_000_000                # Save checkpoint + eval every N steps.
   eval:                       # Periodic evaluation configuration.
