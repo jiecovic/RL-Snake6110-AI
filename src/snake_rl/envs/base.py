@@ -92,7 +92,7 @@ class BaseSnakeEnv(gym.Env, ABC):
 
         # Keep Rust timeout logic in sync with env config.
         # Non-Rust engines or custom engines may not expose this.
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(AttributeError, TypeError):
             self.game.set_max_steps(int(self.max_steps))
 
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):

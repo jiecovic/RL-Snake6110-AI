@@ -197,7 +197,7 @@ def evaluate_model(
                     termination_counts[key] = termination_counts.get(key, 0) + 1
 
                 if "final_score" in info_i:
-                    with suppress(Exception):
+                    with suppress(TypeError, ValueError):
                         scores_by_ep[ep_idx] = float(info_i["final_score"])
 
                 finished += 1
@@ -210,10 +210,10 @@ def evaluate_model(
                     next_ep += 1
 
                     ret = vec_env.env_method("reset", seed=int(new_seed), indices=i)
-                    try:
-                        obs_i = ret[0][0] if isinstance(ret[0], tuple) else ret[0]
-                    except Exception:
-                        obs_i = ret[0] if ret else None
+                    obs_i = None
+                    if ret:
+                        first = ret[0]
+                        obs_i = first[0] if isinstance(first, tuple) else first
                     if obs_i is not None:
                         obs = _obs_set(obs, i, obs_i)
 
@@ -248,7 +248,7 @@ def evaluate_model(
         Metrics.ENV_VEC: str(get_run_vec(cfg)),
     }
 
-    with suppress(Exception):
+    with suppress(KeyError, TypeError):
         out["env_obs"] = dict(get_env_obs(cfg))
 
     if termination_counts:

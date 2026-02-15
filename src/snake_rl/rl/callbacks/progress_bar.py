@@ -7,7 +7,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 try:
     from stable_baselines3.common.callbacks import tqdm as sb3_tqdm  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     sb3_tqdm = None
 
 

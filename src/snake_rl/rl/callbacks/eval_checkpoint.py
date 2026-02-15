@@ -84,7 +84,7 @@ class EvalCheckpointCallback(BaseCallback):
     def _rel(self, p: Path) -> str:
         try:
             return str(p.relative_to(Path.cwd()))
-        except Exception:
+        except ValueError:
             return str(p)
 
     def _init_callback(self) -> None:
@@ -102,7 +102,7 @@ class EvalCheckpointCallback(BaseCallback):
                         continue
                     try:
                         self._best_values[key] = float(v)
-                    except Exception:
+                    except (TypeError, ValueError):
                         self._best_values[key] = None
         if self.checkpoint_freq_steps > 0:
             current = int(self.num_timesteps)
@@ -151,7 +151,7 @@ class EvalCheckpointCallback(BaseCallback):
         for key in (*ordered, *extras):
             if key not in log_keys or key not in metrics:
                 continue
-            with suppress(Exception):
+            with suppress(AttributeError, TypeError, ValueError):
                 if key == Metrics.EP_WINS:
                     self.logger.record(f"eval/{key}", int(metrics[key]))
                 else:
@@ -161,7 +161,7 @@ class EvalCheckpointCallback(BaseCallback):
             for key, value in metrics.items():
                 if not is_termination_metric(key):
                     continue
-                with suppress(Exception):
+                with suppress(AttributeError, TypeError, ValueError):
                     self.logger.record(f"eval/{key}", float(value))
 
     def _metric_value(self, metrics: dict[str, Any], *, key: str) -> float | None:
@@ -232,7 +232,7 @@ class EvalCheckpointCallback(BaseCallback):
                 from stable_baselines3.common.callbacks import tqdm as sb3_tqdm  # type: ignore
 
                 pbar = sb3_tqdm(total=int(episodes), desc="eval", leave=False)
-            except Exception:
+            except ImportError:
                 pbar = None
 
         on_episode_cb: Callable[[int, int, float | None, int | None], None] | None = None
@@ -273,7 +273,7 @@ class EvalCheckpointCallback(BaseCallback):
         try:
             try:
                 eval_num_envs = int(get_run_num_envs(self.cfg))
-            except Exception:
+            except (KeyError, TypeError, ValueError):
                 eval_num_envs = 1
             eval_num_envs = max(1, min(int(eval_num_envs), int(episodes)))
 

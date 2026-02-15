@@ -46,7 +46,7 @@ def _is_under(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
         return True
-    except Exception:
+    except ValueError:
         return False
 
 

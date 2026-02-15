@@ -126,7 +126,7 @@ class CnnVisualizer:
 
                 self._cv2 = importlib.import_module("cv2")
                 return
-            except Exception:
+            except (ImportError, OSError):
                 self._cv2 = None
                 self._backend = "mpl"
         self._init_mpl()
@@ -134,7 +134,7 @@ class CnnVisualizer:
     def _init_mpl(self) -> None:
         try:
             import matplotlib.pyplot as plt
-        except Exception as exc:
+        except (ImportError, RuntimeError) as exc:
             raise RuntimeError("matplotlib is required for CNN visualization") from exc
 
         self._plt = plt
@@ -148,7 +148,7 @@ class CnnVisualizer:
         ):
             ax.set_title(title)
             ax.set_aspect("equal", adjustable="box")
-            with suppress(Exception):
+            with suppress(AttributeError, ValueError):
                 ax.set_box_aspect(1)
             ax.axis("off")
         self._fig = fig
@@ -174,7 +174,7 @@ class CnnVisualizer:
             vmin=0.0,
             vmax=1.0,
         )
-        with suppress(Exception):
+        with suppress(AttributeError):
             manager = getattr(fig.canvas, "manager", None)
             if manager is not None:
                 manager.set_window_title("Snake CNN Visualizer")
@@ -186,14 +186,14 @@ class CnnVisualizer:
 
     def _detach_hooks(self) -> None:
         for h in self._hook_handles:
-            with suppress(Exception):
+            with suppress(AttributeError, RuntimeError):
                 h.remove()
         self._hook_handles.clear()
 
     def _find_convs(self, model: Any) -> list[Any]:
         try:
             import torch.nn as nn
-        except Exception as exc:
+        except ImportError as exc:
             raise RuntimeError("torch is required for CNN visualization") from exc
 
         policy = getattr(model, "policy", None)
@@ -210,7 +210,7 @@ class CnnVisualizer:
         out = output[0] if isinstance(output, (tuple, list)) and output else output
         try:
             import torch
-        except Exception:
+        except ImportError:
             self._first_act = None
             return
         if torch.is_tensor(out):
@@ -222,7 +222,7 @@ class CnnVisualizer:
         out = output[0] if isinstance(output, (tuple, list)) and output else output
         try:
             import torch
-        except Exception:
+        except ImportError:
             self._last_act = None
             return
         if torch.is_tensor(out):
@@ -255,7 +255,7 @@ class CnnVisualizer:
             return None
         try:
             weight = self._first_conv.weight.detach().float().cpu().numpy()
-        except Exception:
+        except (AttributeError, RuntimeError, TypeError):
             return None
         if weight.ndim != 4:
             return None
@@ -292,14 +292,17 @@ class CnnVisualizer:
             return
         try:
             import torch
-        except Exception:
+        except ImportError:
             return
         try:
             obs_tensor, _ = self._model.policy.obs_to_tensor(obs)
-        except Exception:
+        except (AttributeError, TypeError, ValueError, RuntimeError):
             return
         with torch.no_grad():
-            _ = self._model.policy.extract_features(obs_tensor)
+            try:
+                _ = self._model.policy.extract_features(obs_tensor)
+            except (RuntimeError, TypeError, ValueError):
+                return
 
     def _to_uint8(self, img: np.ndarray) -> np.ndarray:
         x = np.clip(img * 255.0, 0.0, 255.0).astype(np.uint8)
@@ -336,7 +339,11 @@ class CnnVisualizer:
                 self._show_cv2(self._window_titles[1], last_grid)
             if self._kernel_grid is not None:
                 self._show_cv2(self._window_titles[2], self._kernel_grid)
-            with suppress(Exception):
+            cv2_err = getattr(self._cv2, "error", None)
+            exc_types = (AttributeError, RuntimeError)
+            if isinstance(cv2_err, type) and issubclass(cv2_err, Exception):
+                exc_types = exc_types + (cv2_err,)
+            with suppress(*exc_types):
                 self._cv2.waitKey(1)
             return
 
@@ -352,17 +359,21 @@ class CnnVisualizer:
             self._im_kernel.set_data(self._kernel_grid)
             self._im_kernel.set_clim(0.0, 1.0)
 
-        with suppress(Exception):
+        with suppress(AttributeError, RuntimeError):
             self._fig.canvas.draw_idle()
             self._plt.pause(0.001)
 
     def close(self) -> None:
         self._detach_hooks()
         if self._backend == "cv2" and self._cv2 is not None:
-            with suppress(Exception):
+            cv2_err = getattr(self._cv2, "error", None)
+            exc_types = (AttributeError, RuntimeError)
+            if isinstance(cv2_err, type) and issubclass(cv2_err, Exception):
+                exc_types = exc_types + (cv2_err,)
+            with suppress(*exc_types):
                 for title in self._window_titles:
                     self._cv2.destroyWindow(title)
             return
         if self._plt is not None and self._fig is not None:
-            with suppress(Exception):
+            with suppress(AttributeError, RuntimeError):
                 self._plt.close(self._fig)

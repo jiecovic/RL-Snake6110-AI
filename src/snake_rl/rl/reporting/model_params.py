@@ -27,7 +27,7 @@ def _try_relpath(value: Any, *, base: Path) -> str:
     if isinstance(value, str):
         try:
             return relpath(Path(value), base=base)
-        except Exception:
+        except (OSError, TypeError, ValueError):
             return value
     return str(value)
 
@@ -54,7 +54,7 @@ def _short(value: Any, *, base: Path) -> str:
     if isinstance(value, str):
         try:
             return relpath(Path(value), base=base)
-        except Exception:
+        except (OSError, TypeError, ValueError):
             return value
     if isinstance(value, type):
         return value.__name__

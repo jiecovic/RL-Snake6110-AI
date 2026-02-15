@@ -101,8 +101,8 @@ def train(
             raise ValueError("resume_mode must be 'remaining' or 'fixed'")
         if resume_path is not None and resume_mode_norm == "remaining":
             try:
-                current_steps = int(getattr(model, "num_timesteps", 0))
-            except Exception:
+                current_steps = int(getattr(model, "num_timesteps", 0) or 0)
+            except (TypeError, ValueError):
                 current_steps = 0
             if current_steps > 0:
                 if learn_timesteps <= current_steps:
@@ -171,7 +171,7 @@ def train(
     finally:
         vec_env.close()
         # If anything fails after run dir creation, leave a minimal marker.
-        with suppress(Exception):
+        with suppress(OSError):
             (paths.run_dir / "status.txt").write_text(
                 "finished\n" if finished_ok else "failed\n",
                 encoding="utf-8",

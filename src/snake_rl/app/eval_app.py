@@ -21,7 +21,7 @@ from snake_rl.utils.runs.paths import repo_root, resolve_run_dir
 
 try:
     from stable_baselines3.common.callbacks import tqdm as sb3_tqdm  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     sb3_tqdm = None  # type: ignore[assignment]
 
 
@@ -139,7 +139,7 @@ def main() -> None:
     if args.num_envs is None:
         try:
             cfg_num_envs = int(get_run_num_envs(cfg))
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             cfg_num_envs = 1
         num_envs = max(1, min(int(cfg_num_envs), int(args.episodes)))
     else:

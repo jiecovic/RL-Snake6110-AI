@@ -8,7 +8,7 @@ from snake_rl.game.snake_engine import SnakeEngine
 
 try:
     import pygame as _pygame
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     _pygame = None
 pygame: Any = _pygame
 

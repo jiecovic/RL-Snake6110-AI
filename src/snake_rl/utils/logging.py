@@ -33,7 +33,7 @@ def setup_logger(*, name: str, use_rich: bool, level: str) -> logging.Logger:
             )
             rich_handler.setFormatter(logging.Formatter("%(message)s"))
             handler = rich_handler
-        except Exception:
+        except ImportError:
             handler = None
 
     if handler is None:

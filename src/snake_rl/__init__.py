@@ -6,7 +6,7 @@ from typing import Any
 _core: Any
 try:
     from . import _core as _core  # type: ignore
-except Exception:  # pragma: no cover
+except (ImportError, OSError):  # pragma: no cover
     _core = None  # type: ignore[assignment]
 
 __all__ = ["_core"]

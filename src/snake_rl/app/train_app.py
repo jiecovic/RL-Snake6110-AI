@@ -26,7 +26,7 @@ def _is_under_config_root(path: Path) -> bool:
     try:
         path.resolve().relative_to(CONFIG_DIR.resolve())
         return True
-    except Exception:
+    except ValueError:
         return False
 
 

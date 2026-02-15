@@ -99,7 +99,7 @@ def _select_policy_recurrent(observation_space) -> str:
 def _require_recurrent_ppo():
     try:
         from sb3_contrib import RecurrentPPO
-    except Exception as exc:  # pragma: no cover - optional dependency
+    except ImportError as exc:  # pragma: no cover - optional dependency
         raise RuntimeError(
             "sb3-contrib is required for recurrent PPO. Install with: pip install sb3-contrib"
         ) from exc
