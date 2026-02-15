@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from snake_rl.config.schema import ObservationConfig
+from snake_rl.config.schema import ObservationConfig, RewardConfig
 
 
 def cfg_get(cfg: Any, path: str, default: Any = None) -> Any:
@@ -39,7 +39,7 @@ def optional_int(cfg: Any, path: str, default: int) -> int:
         return int(default)
     try:
         return int(v)
-    except Exception:
+    except (TypeError, ValueError):
         return int(default)
 
 
@@ -78,6 +78,17 @@ def get_env_obs(cfg: Any) -> dict[str, Any]:
         }
 
     raise KeyError("Config missing env.obs")
+
+
+def get_reward_config(cfg: Any) -> RewardConfig:
+    reward = cfg_get(cfg, "reward", None)
+    if reward is None:
+        return RewardConfig()
+    if isinstance(reward, RewardConfig):
+        return reward
+    if isinstance(reward, dict):
+        return RewardConfig(**reward)
+    raise TypeError(f"cfg.reward must be a dict or RewardConfig, got {type(reward).__name__}")
 
 
 def get_feature_tokens(cfg: Any) -> list[list[str]]:

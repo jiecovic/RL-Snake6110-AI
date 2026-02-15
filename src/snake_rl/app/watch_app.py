@@ -14,14 +14,13 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 
 from snake_rl import _core as core
 from snake_rl.config.access import (
-    cfg_get,
     get_board_params,
     get_env_action,
     get_env_obs,
     get_frame_stack_n,
+    get_reward_config,
 )
 from snake_rl.config.loader import load_train_config_from_path
-from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.snake_env import SnakeEnv
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.rendering.pygame.app import AppConfig, run_pygame_app
@@ -57,17 +56,6 @@ def _make_engine_from_board_params(
     )
 
 
-def _get_reward_from_cfg(cfg: Any) -> RewardConfig:
-    reward = cfg_get(cfg, "reward", None)
-    if reward is None:
-        return RewardConfig()
-    if isinstance(reward, RewardConfig):
-        return reward
-    if isinstance(reward, dict):
-        return RewardConfig(**reward)
-    raise TypeError(f"cfg.reward must be a dict or RewardConfig, got {type(reward).__name__}")
-
-
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Watch a trained PPO agent play Snake (pygame).")
     p.add_argument(
@@ -79,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--which",
         type=str,
-        default="latest",
+        default="auto",
         choices=["auto", "latest", "best", "best_reward", "best_score", "best_win", "final"],
     )
     p.add_argument(
@@ -234,7 +222,7 @@ class WatchController:
                     self.on_model_reload(self.model)
                 rel = relpath(chosen, base=self.repo)
                 self.logger.debug(f"reloaded checkpoint: {rel} (mtime={int(mtime)})")
-        except Exception:
+        except (FileNotFoundError, OSError, RuntimeError, ValueError):
             self.logger.exception("reload error")
 
     def reload_age_seconds(self) -> float:
@@ -282,13 +270,15 @@ class WatchController:
                     try:
                         if int(move_results) & int(core.MOVE_WIN):
                             self.win_count += 1
-                    except Exception:
+                    except (TypeError, ValueError):
                         pass
         final_score = None
-        if isinstance(info0, dict) and "final_score" in info0:
+        score_val = info0.get("final_score") if isinstance(info0, dict) else None
+
+        if score_val is not None:
             try:
-                final_score = int(info0["final_score"])
-            except Exception:
+                final_score = int(score_val)
+            except (TypeError, ValueError):
                 final_score = None
 
         if done0:
@@ -394,13 +384,13 @@ def main() -> None:
                     logger=logger,
                 )
                 logger.info("cnn viz enabled (separate window)")
-            except Exception:
+            except (ImportError, RuntimeError, ValueError):
                 logger.exception("cnn viz init failed; continuing without it")
 
     n_stack = int(get_frame_stack_n(cfg))
     board = get_board_params(cfg)
     spawn_random_dir = bool(board.get("spawn_random_dir", False))
-    reward_cfg = _get_reward_from_cfg(cfg)
+    reward_cfg = get_reward_config(cfg)
     max_playable = max(0, int(board["width"]) - 2) * max(0, int(board["height"]) - 2)
     max_steps = max(1, int(max_playable * float(reward_cfg.max_steps_factor)))
     enable_world_tile_stack = obs_kind == "categorical" and obs_view == "world"

@@ -10,33 +10,21 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
 from snake_rl import _core as core
 from snake_rl.config.access import (
-    cfg_get,
     get_board_params,
     get_env_action,
     get_env_obs,
     get_feature_options,
     get_feature_tokens,
     get_frame_stack_n,
+    get_reward_config,
     get_run_num_envs,
     get_run_vec,
     require_int,
 )
-from snake_rl.config.schema import RewardConfig
 from snake_rl.envs.snake_env import SnakeEnv
 from snake_rl.envs.specs import ActionSpec, ObservationSpec
 from snake_rl.game.snake_engine import SnakeEngine
 from snake_rl.rl.envs.rust_vec_env import RustVecEnv
-
-
-def _get_reward_from_cfg(cfg: Any) -> RewardConfig:
-    reward = cfg_get(cfg, "reward", None)
-    if reward is None:
-        return RewardConfig()
-    if isinstance(reward, RewardConfig):
-        return reward
-    if isinstance(reward, dict):
-        return RewardConfig(**reward)
-    raise TypeError(f"cfg.reward must be a dict or RewardConfig, got {type(reward).__name__}")
 
 
 def _obs_spec_from_cfg(cfg: Any) -> ObservationSpec:
@@ -89,7 +77,7 @@ def make_single_env(*, cfg: Any, seed: int, frame_stack_n: int) -> Callable[[], 
         # Create engine WITHOUT a seed.
         # RNG will be injected from the env's np_random during reset().
         board_cfg = get_board_params(cfg)
-        reward_cfg = _get_reward_from_cfg(cfg)
+        reward_cfg = get_reward_config(cfg)
         board = core.Board(
             width=int(board_cfg["width"]),
             height=int(board_cfg["height"]),
@@ -156,7 +144,7 @@ def make_vec_env(*, cfg: Any):
     n_stack = get_frame_stack_n(cfg)
 
     if vec_kind == "rust":
-        reward_cfg = _get_reward_from_cfg(cfg)
+        reward_cfg = get_reward_config(cfg)
         board_cfg = get_board_params(cfg)
         board = core.Board(
             width=int(board_cfg["width"]),
