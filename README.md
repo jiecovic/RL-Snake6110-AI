@@ -58,10 +58,15 @@ Evaluate a trained run:
 snake-eval --run snake_ppo_001
 ```
 
-Watch a trained run (live reload optional):
+Watch a trained run:
 ```
 snake-watch --run snake_ppo_001
 snake-watch --run snake_ppo_001 --reload 30
+```
+
+Watch the included example checkpoint:
+```
+snake-watch --run examples/head_pixel_ppo_classic_005 --which best_win
 ```
 
 Play as a human:
@@ -91,13 +96,18 @@ Notes:
 ```
 runs/
   snake_ppo_001/
+    config_summary.yaml
     config_snapshot.yaml
     config_hydra.yaml
     config_validated.yaml
     checkpoints/
       latest.zip
-      best.zip
+      best_reward.zip
+      best_score.zip
+      best_win.zip
       final.zip
+      eval_history.jsonl
+      state.json
     tb/
     eval_final.json
     status.txt
