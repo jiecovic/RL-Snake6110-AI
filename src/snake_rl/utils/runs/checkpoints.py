@@ -42,7 +42,7 @@ def pick_checkpoint(*, run_dir: Path, which: str) -> Path:
     Supported:
       - latest/final -> <run_dir>/checkpoints/{name}.zip
       - best/best_reward/best_score/best_win -> named best checkpoint
-      - auto -> prefer best_reward, then legacy best, then latest
+      - auto -> prefer latest, then best_reward, best_score, best_win
     """
     ckpt_dir = run_dir / "checkpoints"
 
@@ -63,21 +63,6 @@ def pick_checkpoint(*, run_dir: Path, which: str) -> Path:
 
     if which == "auto":
         state = read_json(ckpt_dir / "state.json") or {}
-        best = state.get("best")
-        if isinstance(best, dict):
-            reward = best.get("reward")
-            if isinstance(reward, dict):
-                path = reward.get("path")
-                if isinstance(path, str):
-                    p = run_dir / path
-                    if p.is_file():
-                        return p
-            legacy = best.get("path")
-            if isinstance(legacy, str):
-                p = run_dir / legacy
-                if p.is_file():
-                    return p
-
         latest = state.get("latest", {})
         if isinstance(latest, dict):
             path = latest.get("path")
@@ -90,6 +75,28 @@ def pick_checkpoint(*, run_dir: Path, which: str) -> Path:
         if p.is_file():
             return p
 
+        best = state.get("best")
+        if isinstance(best, dict):
+            for key in ("reward", "score", "win"):
+                entry = best.get(key)
+                if not isinstance(entry, dict):
+                    continue
+                path = entry.get("path")
+                if isinstance(path, str):
+                    p = run_dir / path
+                    if p.is_file():
+                        return p
+            legacy = best.get("path")
+            if isinstance(legacy, str):
+                p = run_dir / legacy
+                if p.is_file():
+                    return p
+
+        for name in ("best_reward.zip", "best_score.zip", "best_win.zip", "best.zip"):
+            p = ckpt_dir / name
+            if p.is_file():
+                return p
+
         raise FileNotFoundError(f"No checkpoints found in: {ckpt_dir}")
 
     if which == "best":
@@ -98,7 +105,9 @@ def pick_checkpoint(*, run_dir: Path, which: str) -> Path:
             return legacy
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_dir / 'best_reward.zip'}")
 
-    raise ValueError("which must be one of: auto, latest, best, best_reward, best_score, best_win, final")
+    raise ValueError(
+        "which must be one of: auto, latest, best, best_reward, best_score, best_win, final"
+    )
 
 
 def atomic_save_zip(
