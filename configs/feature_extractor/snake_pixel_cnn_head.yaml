@@ -1,0 +1,23 @@
+type: snake_unified                              # Feature extractor type.
+features_dim: 512                                # Final feature dimension for policy.
+params:
+  stem:
+    type: px_cnn                                 # Stem type: px_cnn|cat_identity|cat_patch.
+    params:
+      d_model: 32                                # Stem embedding dimension.
+      layers:
+        - { out: 16, k: 4, s: 4, p: 0, act: relu }
+        - { out: 32, k: 3, s: 1, p: 0, act: relu }
+        - { out: 64, k: 3, s: 1, p: 0, act: relu }
+        - { out: 32, k: 1, s: 1, p: 0, act: relu, pool: { type: avg, k: 2, s: 2, p: 0 } }
+      frame_mode: stacked                        # stacked|per_frame.
+      frame_base_channels: 1                     # Channels per frame (per_frame only).
+  mixer:
+    type: identity                               # identity|transformer.
+  pos_mode: none                                 # none|abs_2d.
+  pooling: flatten                               # cls|mean|max|cls_mean|meanmax|flatten.
+  use_cls_token: false                           # Required for cls/cls_mean pooling.
+  use_frame_embed: false                         # Add frame embeddings for stacked frames.
+  flatten_mlp_hidden: [512]                      # Flatten head hidden dims.
+  head_layernorm: false                          # Enable LayerNorm in head.
+  head_activation: relu                          # gelu|relu|elu|leaky_relu|silu|swish|tanh.

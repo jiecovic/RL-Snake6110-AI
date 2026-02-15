@@ -3,7 +3,6 @@ defaults:                               # Hydra defaults: select config groups.
   - board: default                      # Board size and food count.
   - reward: default                     # Reward shaping parameters.
   - env: default                        # Environment + observation spec.
-  - feature_extractor: default          # Feature extractor architecture.
   - algo: default                       # Algorithm config.
   - metrics: default                    # Metrics logging config.
   - logging: default                    # Logging config.

@@ -1,0 +1,20 @@
+defaults:                                    # Hydra defaults for this preset.
+  - run: default
+  - board: default
+  - reward: default
+  - env: default
+  - feature_extractor: snake_pixel_cnn_head
+  - algo: default
+  - metrics: default
+  - logging: default
+  - _self_
+
+run:
+  name: head_pixel_ppo_classic_pomdp           # Run id (folder name).
+
+board:
+  spawn_random_dir: true                       # Randomize spawn direction on reset.
+
+reward:
+  step_progress_pivot: 0.6                     # Progress pivot where step reward crosses 0.
+  step_progress_weight: 1.0                    # Fully progress-shaped step reward.
