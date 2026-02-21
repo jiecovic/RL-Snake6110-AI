@@ -1,3 +1,5 @@
+![Snake Demo Full Clear](snake_demo_full_clear.gif)
+
 # Snake RL
 
 Snake RL playground with a Rust core engine and Python training/eval/watch tooling.

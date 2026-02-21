@@ -264,3 +264,6 @@ runs/**/checkpoints/
 runs/**/checkpoints/**
 experiments/**/checkpoints/
 experiments/**/checkpoints/**
+
+# Local agent notes
+AGENT.md
